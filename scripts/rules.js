@@ -6,7 +6,7 @@
  * disadvantage, which cancel each other out. A creature at 0 HP makes death saves; three successes stabilize it,
  * three failures kill it, and taking damage while down counts as a failure (two on a critical).
  */
-import { DOWNED_MODELS, STATUS, rollD20 } from "./core.js";
+import { DOWNED_MODELS, STATUS, rollD20, bestReactionStrike } from "./core.js";
 
 /** Proficiency bonus for a level or challenge rating. */
 export function proficiency(level) {
@@ -39,12 +39,15 @@ export const dnd5eRules = {
   /* Turn ------------------------------------------------------------------ */
   mainPool: "action",
   movement: "feet",
+  /** An action, a bonus action, your movement, and one spell slot: a turn spends at most one slot on a spell. */
   turn(u) {
-    return { action: 1, bonus: 1, move: u.spec.speeds?.walk ?? Math.max(0, ...Object.values(u.spec.speeds ?? { walk: 30 })) };
+    return { action: 1, bonus: 1, move: u.spec.speeds?.walk ?? Math.max(0, ...Object.values(u.spec.speeds ?? { walk: 30 })), slot: 1 };
   },
-  /** An action, unless it's a bonus action (Healing Word, an off-hand attack ...). */
+  /** An action, unless it's a bonus action (Healing Word, an off-hand attack ...); a spell slot too, if it takes one. */
   costOf(action) {
-    return action.economy === "bonus" ? { bonus: 1 } : { action: 1 };
+    const cost = action.economy === "bonus" ? { bonus: 1 } : { action: 1 };
+    if ( /^(?:slots:|pact$)/.test(action.resource ?? "") ) cost.slot = 1;
+    return cost;
   },
   basicAction: { action: 1 },
   talkCost: { action: 1 },
@@ -52,6 +55,21 @@ export const dnd5eRules = {
   stealCost: { action: 1 },
   /** Stealing in the open: the feint is part of the same action. */
   feintCost: {},
+  /**
+   * Opportunity attacks: anyone with a melee attack swings once (its reaction) at a foe leaving its reach. Disengage
+   * lets you leave safely; rogues (Cunning Action) and goblins (Nimble Escape) do it as a bonus action.
+   */
+  reactions() {
+    return 1;
+  },
+  opportunity(reactor) {
+    const c = reactor.conds ?? {};
+    if ( c.incapacitated || c.paralyzed || c.stunned || c.unconscious || c.petrified ) return null;
+    return bestReactionStrike(reactor);
+  },
+  disengage(u) {
+    return { cost: u.spec.flags?.nimble ? { bonus: 1 } : { action: 1 }, label: "takes the Disengage action" };
+  },
   /** Standing up costs half your movement. */
   standCost(u) {
     return { move: Math.ceil((u.spec.speeds?.walk ?? 30) / 2) };

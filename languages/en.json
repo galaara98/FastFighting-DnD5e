@@ -5,6 +5,13 @@
     "SpellSlot": "Level {level} spell slot",
     "PactSlot": "Pact slot",
     "Surrendered": "Surrendered",
-    "SurrenderedHint": "Laid down arms during a FastFighting battle and is at the victors' mercy."
+    "SurrenderedHint": "Laid down arms during a FastFighting battle and is at the victors' mercy.",
+    "Difficulty": {
+      "BelowLow": "Below Low",
+      "Low": "Low",
+      "Moderate": "Moderate",
+      "High": "High",
+      "BeyondHigh": "Beyond High"
+    }
   }
 }

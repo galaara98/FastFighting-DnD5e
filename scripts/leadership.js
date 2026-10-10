@@ -4,7 +4,8 @@
  */
 import { proficiency } from "./rules.js";
 
-const LEADER_FEATURE = /(leadership|rally|rallying|commander|inspir|battle cry|warlord|captain|tactic)/i;
+// ("Pack Tactics" is how wolves hunt, not command.)
+const LEADER_FEATURE = /(leadership|rally|rallying|commander|inspir|battle cry|warlord|captain|(?<!pack )tactic)/i;
 
 /**
  * @param {object[]} entries  [{id, level, skills: {persuasion, intimidation}, features: string[]}]

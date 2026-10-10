@@ -4,8 +4,8 @@
  */
 import { SystemAdapter, parseFormula } from "./core.js";
 import { dnd5eRules, proficiency } from "./rules.js";
-import { deriveDnd5eTraits } from "./traits.js";
-import { parseMultiattack } from "./multiattack.js";
+import { deriveDnd5eTraits, isMindless } from "./traits.js";
+import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
 import { commitDnd5eOutcome, describeDnd5eOutcome, commitDnd5eConcession } from "./commit.js";
 
@@ -29,6 +29,13 @@ const STATUS_CONDITIONS = {
   charmed: { charmed: 1 }
 };
 
+/**
+ * The engine counts in feet. dnd5e can be set to metric, and ranges can be in miles: convert (a metre the table
+ * way, 1.5 m to a 5-foot square).
+ */
+const FEET = { ft: 1, m: 10 / 3, mi: 5280, km: 10000 / 3 };
+const inFeet = (value, units) => (Number(value) || 0) * (FEET[units] ?? 1);
+
 const asArray = v => (v instanceof Set ? [...v] : Array.isArray(v) ? v : v ? [v] : []);
 const numberOf = v => {
   const n = Number(String(v ?? "").replace(/\s+/g, ""));
@@ -42,16 +49,52 @@ function copperValue(price) {
 }
 
 /** Rough number of enemies an area catches. */
-function areaTargets(item) {
-  const t = item.system.target ?? {};
+function areaTargets(target) {
+  const t = target ?? {};
   const count = Number(t.affects?.count);
   if ( count > 1 ) return count;
-  const size = Number(t.template?.size) || 0;
+  const size = inFeet(t.template?.size, t.template?.units ?? "ft");
   if ( !t.template?.type ) return 1;
   if ( t.template.type === "line" ) return size >= 60 ? 3 : 2;
   if ( t.template.type === "cone" ) return size >= 30 ? 3 : 2;
   return size >= 20 ? 4 : size >= 10 ? 3 : 2;
 }
+
+const COUNT_WORDS = { two: 2, three: 3, four: 4, five: 5, six: 6 };
+const PROJECTILES = "darts?|rays?|beams?|bolts?|motes?|missiles?";
+
+/**
+ * How many darts, rays or beams a spell makes: Magic Missile's three darts, Scorching Ray's three rays, and
+ * Eldritch Blast's extra beams at levels 5, 11 and 17.
+ */
+export function projectileCount(description, level) {
+  const text = String(description ?? "").replace(/<[^>]+>/g, " ");
+  let count = 0;
+  const byLevel = new RegExp(`\\b(${Object.keys(COUNT_WORDS).join("|")})\\s+(?:${PROJECTILES})\\s+(?:at|when you reach)\\s+(?:level\\s+)?(\\d+)`, "gi");
+  for ( const m of text.matchAll(byLevel) ) {
+    count ||= 1;
+    if ( level >= Number(m[2]) ) count = Math.max(count, COUNT_WORDS[m[1].toLowerCase()]);
+  }
+  if ( count ) return count;
+  const base = new RegExp(`\\b(${Object.keys(COUNT_WORDS).join("|")})\\s+(?:[a-z-]+\\s+){0,2}?(?:${PROJECTILES})\\b(?!\\s+at\\b)`, "i");
+  const m = text.match(base);
+  return m ? COUNT_WORDS[m[1].toLowerCase()] : 1;
+}
+
+/**
+ * The words of an HTML description, with dnd5e's enrichers read: [[/item .id]]{label} (or the item's own name),
+ * [[lookup @name]]{label}, @UUID[...]{label}.
+ */
+export function plainText(html, actor = null) {
+  return String(html ?? "")
+    .replace(/\[\[\/item\s+\.?([^\]\s]+)\]\](?:\{([^}]*)\})?/g, (m, ref, label) => label ?? actor?.items?.get(ref.split(".").pop())?.name ?? actor?.items?.getName?.(ref)?.name ?? "")
+    .replace(/\[\[[^\]]*\]\](?:\{([^}]*)\})?/g, (m, label) => label ?? "")
+    .replace(/@\w+\[[^\]]*\](?:\{([^}]*)\})?/g, (m, label) => label ?? "")
+    .replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** Consumables nobody spends in a fight (torches, rations, candles ...). */
+const IDLE_CONSUMABLES = new Set(["trinket", "food"]);
 
 export class Dnd5eAdapter extends SystemAdapter {
   static systemId = "dnd5e";
@@ -81,7 +124,7 @@ export class Dnd5eAdapter extends SystemAdapter {
 
     const speeds = {};
     for ( const mode of MODES ) {
-      const v = Number(sys.attributes?.movement?.[mode]);
+      const v = inFeet(sys.attributes?.movement?.[mode], sys.attributes?.movement?.units);
       if ( v > 0 ) speeds[mode] = v;
     }
     if ( !Object.keys(speeds).length ) speeds.walk = 30;
@@ -110,6 +153,8 @@ export class Dnd5eAdapter extends SystemAdapter {
       img: tokenDoc.texture?.src ?? actor.img,
       kind: actor.type === "character" ? "pc" : "npc",
       level,
+      // What it's worth in an encounter budget (the system works it out from the challenge rating).
+      xp: actor.type === "npc" ? (Number(sys.details?.xp?.value) || CONFIG.DND5E?.CR_EXP_LEVELS?.[Math.max(0, Math.floor(level))] || 0) : 0,
       hp: { value: hp.value ?? 0, max: hp.max ?? 1, temp: hp.temp ?? 0 },
       defenses,
       shield: null, // a 5e shield is already in the AC
@@ -128,7 +173,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       deathSaves: { success: sys.attributes?.death?.success ?? 0, failure: sys.attributes?.death?.failure ?? 0 },
       conditions: this.#conditions(actor),
       perception: skillMod("prc") ?? 0,
-      darkvision: Number(sys.attributes?.senses?.ranges?.darkvision ?? sys.attributes?.senses?.darkvision) > 0,
+      darkvision: Number(sys.attributes?.senses?.ranges?.darkvision ?? sys.attributes?.senses?.darkvision) > 0, // any range will do
       // Anyone can try to stabilize the dying with a DC 10 Wisdom (Medicine) check.
       firstAid: (actor.type === "character" || creature === "humanoid") && skillMod("med") !== null ? { mod: skillMod("med") } : null,
       theft: skillMod("slt") !== null ? { skill: skill("slt")?.label ?? "Sleight of Hand", mod: skillMod("slt") } : null,
@@ -148,7 +193,7 @@ export class Dnd5eAdapter extends SystemAdapter {
         },
         resolve: (defenses.wis ?? 0) - (proficiency(level) + 1),
         languages: asArray(sys.traits?.languages?.value),
-        mindless: (sys.abilities?.int?.value ?? 10) <= 3
+        mindless: isMindless(sys.abilities?.int?.value, creature)
       },
       valuables: this.#valuables(actor),
       leadership: this.#leadershipEntry(actor, tokenDoc.id, level, features)
@@ -202,10 +247,16 @@ export class Dnd5eAdapter extends SystemAdapter {
       if ( item.type === "spell" && !this.#spellReady(actor, item) ) continue;
       // A character only fights with the weapons it has equipped.
       if ( actor.type === "character" && item.type === "weapon" && !item.system.equipped ) continue;
+      if ( item.type === "consumable" && IDLE_CONSUMABLES.has(item.system.type?.value) ) continue;
+      const riders = [];
+      const mine = [];
       for ( const activity of item.system.activities ?? [] ) {
         const action = this.#fromActivity(actor, item, activity);
-        if ( action ) out.push(action);
+        if ( action?.riderFor ) riders.push(action.rider);
+        else if ( action ) mine.push(action);
       }
+      for ( const a of mine ) if ( riders.length && a.kind !== "heal" ) a.effects = [...(a.effects ?? []), ...riders];
+      out.push(...mine);
     }
     this.#sneakAttack(actor, level, features, out);
     // Characters with Extra Attack make several weapon attacks with the Attack action.
@@ -220,13 +271,18 @@ export class Dnd5eAdapter extends SystemAdapter {
     // NPCs' Multiattack: the strikes it makes in one action.
     const multi = actor.items.find(i => i.type === "feat" && /multiattack/i.test(i.name));
     if ( multi ) {
-      const strikes = out.filter(a => a.kind === "strike" && a.economy !== "bonus").sort((a, b) => (b.bonus ?? 0) - (a.bonus ?? 0));
-      const names = parseMultiattack(multi.system.description?.value, strikes.map(s => s.name));
-      if ( names?.length > 1 ) {
-        const sequence = names.map((n, i) => ({ ...strikes.find(s => s.name === n), id: `${multi.id}.${i}` }));
-        const first = sequence[0];
-        out.push({ ...first, id: `${actor.id}.multiattack`, name: multi.name, sequence, uses: undefined, resource: undefined });
-      }
+      // Its everyday attacks, best first (limited uses such as a breath weapon aren't part of a Multiattack).
+      const mean = a => (a.damage ?? []).reduce((s, p) => s + p.flat + p.dice.reduce((t, d) => t + d.n * (d.faces + 1) / 2, 0), 0);
+      const strikes = out.filter(a => ["strike", "spell-attack", "save"].includes(a.kind) && a.economy !== "bonus" && a.uses === undefined && !a.resource)
+        .sort((a, b) => ((b.bonus ?? 0) + mean(b)) - ((a.bonus ?? 0) + mean(a)));
+      const options = parseMultiattackOptions(plainText(multi.system.description?.value, actor), strikes.map(s => ({ name: s.name, melee: !!s.melee })))
+        .filter(names => names.length > 1);
+      // Several ways to make it ("Scimitar or Pistol in any combination"): one action each, and the simulation picks.
+      options.forEach((names, k) => {
+        const sequence = names.map((n, i) => ({ ...strikes.find(s => s.name === n), id: `${multi.id}.${k}.${i}` }));
+        const label = options.length > 1 ? `${multi.name} (${[...new Set(names)].join(", ")})` : multi.name;
+        out.push({ ...sequence[0], id: `${actor.id}.multiattack${k ? `.${k}` : ""}`, name: label, sequence, uses: undefined, resource: undefined });
+      });
     }
     return out;
   }
@@ -258,18 +314,48 @@ export class Dnd5eAdapter extends SystemAdapter {
     return parts;
   }
 
-  /** Conditions an activity's effects impose, and for how long. */
+  /**
+   * Conditions an activity imposes, and for how long: from its effects' statuses, or failing that from the words of a
+   * save ("... or be knocked prone", "... or have the Frightened condition"). Grappled becomes the engine's grab.
+   */
   #effects(item, activity) {
-    const conditions = {};
-    let rounds = 10;
+    const statuses = new Set();
+    let rounds = 0;
+    const finite = v => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
     for ( const ref of activity.effects ?? [] ) {
       const effect = ref.effect ?? item.effects?.get(ref._id ?? ref.id);
       if ( !effect ) continue;
-      for ( const status of effect.statuses ?? [] ) Object.assign(conditions, STATUS_CONDITIONS[status] ?? {});
+      for ( const status of effect.statuses ?? [] ) if ( STATUS_CONDITIONS[status] ) statuses.add(status);
       const d = effect.duration ?? {};
-      rounds = d.rounds || (d.seconds ? Math.ceil(d.seconds / 6) : 0) || d.turns || rounds;
+      const byUnits = finite(d.value) ? ({ rounds: 1, turns: 1, seconds: 1 / 6, minutes: 10, hours: 600 }[d.units] ?? 0) * finite(d.value) : 0;
+      rounds = finite(d.rounds) || Math.ceil(finite(d.seconds) / 6) || finite(d.turns) || Math.ceil(byUnits) || rounds;
     }
-    return Object.keys(conditions).length ? { conditions, rounds, label: Object.keys(conditions).filter(k => k !== "immobilized" || !conditions.restrained).join(", ") } : null;
+    if ( !statuses.size && activity.type === "save" ) {
+      const text = plainText(item.system.description?.value).toLowerCase();
+      const words = Object.keys(STATUS_CONDITIONS).join("|");
+      const m = new RegExp(`saving throw[^.]*?\\bor (?:be(?:come)? |be knocked |is knocked |have the |has the )?(${words})\\b`).exec(text)
+        ?? new RegExp(`\\b(${words})\\b`).exec(String(activity.name ?? "").toLowerCase());
+      if ( m ) {
+        statuses.add(m[1]);
+        const minutes = /for 1 minute|for one minute/.test(text) ? 10 : 0;
+        rounds = minutes || (/until the end of (?:its|your|the \w+'s) next turn/.test(text) ? 1 : 0) || rounds;
+      }
+    }
+    if ( !statuses.size ) return null;
+    const grab = statuses.delete("grappled");
+    const conditions = {};
+    for ( const s of statuses ) Object.assign(conditions, STATUS_CONDITIONS[s]);
+    const label = [...statuses].join(", ");
+    return { conditions: Object.keys(conditions).length ? conditions : null, grab, rounds: rounds || 10, label: label || "grappled" };
+  }
+
+  /** The riders an attack carries: its conditions, a grab, and a save its target must make on a hit. */
+  #riders(control) {
+    if ( !control ) return [];
+    const out = [];
+    if ( control.grab ) out.push({ kind: "grabbed" });
+    if ( control.conditions ) out.push({ kind: "condition", conditions: control.conditions, rounds: control.rounds, label: control.label, critOnly: false });
+    return out;
   }
 
   /** What one use of an item costs from the creature's pools. */
@@ -289,30 +375,61 @@ export class Dnd5eAdapter extends SystemAdapter {
     return {};
   }
 
+  /** A save beside an attack on the same item (a wolf's bite, a spider's venom) happens on a hit: a rider. */
+  #saveRider(actor, item, activity) {
+    const save = {
+      type: asArray(activity.save?.ability)[0] ?? "con",
+      dc: activity.save?.dc?.value ?? (8 + proficiency(actor.system.details?.level ?? 1) + 3),
+      basic: activity.damage?.onSave !== "none"
+    };
+    const damage = this.#parts(activity);
+    const control = this.#effects(item, activity);
+    if ( !damage.length && !control?.conditions ) return null;
+    return {
+      riderFor: item.id,
+      rider: { kind: "save", save, damage: damage.length ? damage : undefined, conditions: control?.conditions ?? undefined, rounds: control?.rounds, label: control?.label ?? item.name }
+    };
+  }
+
   #fromActivity(actor, item, activity) {
+    if ( activity.type === "save" && (item.system.activities?.contents ?? []).some(a => a.type === "attack") ) return this.#saveRider(actor, item, activity);
     const activation = activity.activation?.type ?? "action";
     if ( !["action", "bonus"].includes(activation) ) return null;
     const economy = activation === "bonus" ? "bonus" : undefined;
+    // The activity's own range (dnd5e 4+), else the item's; a cone or line from yourself reaches as far as it is long.
     const range = item.system.range ?? {};
-    const rangeFeet = Number(range.value) || null;
+    const own = activity.range ?? {};
+    const units = own.units ?? range.units;
+    const template = activity.target?.template ?? item.system.target?.template ?? {};
+    // (A weapon's activity range is its long range; the item keeps the normal one.)
+    const rangeFeet = (own.override && inFeet(own.value, own.units)) || inFeet(range.value, range.units) || inFeet(own.value, own.units)
+      || (units === "self" && inFeet(template.size, template.units ?? "ft")) || (units === "touch" ? 5 : null);
+    const longFeet = inFeet(range.long, range.units) || inFeet(own.long, own.units);
+    const several = (item.system.activities?.size ?? 1) > 1 && activity.type !== "attack";
     const base = {
-      id: `${actor.id}.${item.id}.${activity.id}`, name: activity.name && activity.name !== item.name && activity.type !== "attack" ? `${item.name}: ${activity.name}` : item.name,
+      id: `${actor.id}.${item.id}.${activity.id}`, name: several && activity.name && activity.name !== item.name ? `${item.name}: ${activity.name}` : item.name,
       cost: 1, economy, itemId: item.id, traits: [], rank: item.type === "spell" ? item.system.level : undefined, ...this.#resource(actor, item)
     };
-    const reachOf = () => Number(range.reach) || 5;
+    const reachOf = () => inFeet(range.reach, range.units) || 5;
+    const casterLevel = actor.type === "character" ? (actor.system.details?.level ?? 1) : (actor.system.attributes?.spell?.level ?? actor.system.details?.spellLevel ?? 1);
+    const projectiles = item.type === "spell" ? projectileCount(item.system.description?.value, casterLevel) : 1;
+    const targets = areaTargets(activity.target ?? item.system.target);
 
     if ( activity.type === "attack" ) {
       const damage = this.#parts(activity);
       if ( !damage.length ) return null;
       const melee = activity.attack?.type?.value !== "ranged";
       const bonus = numberOf(activity.labels?.modifier) ?? numberOf(activity.labels?.toHit) ?? 0;
-      const control = this.#effects(item, activity);
-      return {
+      const riders = this.#riders(this.#effects(item, activity));
+      const attack = {
         ...base, kind: item.type === "spell" ? "spell-attack" : "strike", weapon: item.type === "weapon", bonus, melee,
         reach: melee ? reachOf() : undefined,
-        range: melee ? null : { increment: rangeFeet ?? 30, max: Number(range.long) || rangeFeet || 30 },
-        damage, effects: control ? [{ kind: "condition", ...control, critOnly: false }] : undefined
+        range: melee ? null : { increment: rangeFeet ?? 30, max: longFeet || rangeFeet || 30 },
+        damage, effects: riders.length ? riders : undefined
       };
+      // Scorching Ray, Eldritch Blast at higher levels: one attack roll per ray, all with the one action.
+      if ( projectiles > 1 ) attack.sequence = Array.from({ length: projectiles }, (_, i) => ({ ...attack, id: `${attack.id}.${i}` }));
+      return attack;
     }
 
     if ( activity.type === "save" ) {
@@ -320,31 +437,37 @@ export class Dnd5eAdapter extends SystemAdapter {
       const dc = activity.save?.dc?.value ?? (8 + proficiency(actor.system.details?.level ?? 1) + 3);
       const damage = this.#parts(activity);
       const control = this.#effects(item, activity);
+      const save = { type, dc, basic: activity.damage?.onSave !== "none" };
       const common = {
         ...base, melee: false, range: { increment: rangeFeet ?? 30, max: rangeFeet ?? 30, noPenalty: true },
-        area: areaTargets(item) > 1 ? { targets: areaTargets(item) } : undefined
+        area: targets > 1 ? { targets } : undefined
       };
       if ( damage.length ) {
-        return {
-          ...common, kind: "save", damage, save: { type, dc, basic: activity.damage?.onSave !== "none" },
-          effects: control ? [{ kind: "condition", ...control, critOnly: false }] : undefined
-        };
+        const riders = control?.conditions ? [{ kind: "condition", conditions: control.conditions, rounds: control.rounds, label: control.label, critOnly: false }] : [];
+        return { ...common, kind: "save", damage, save, effects: riders.length ? riders : undefined };
       }
       // No damage: crowd control on a failed save.
-      if ( !control ) return null;
-      return { ...common, kind: "control", save: { type, dc, basic: false }, onSave: [control, control, null, null] };
+      if ( !control?.conditions ) return null;
+      const outcome = { conditions: control.conditions, rounds: control.rounds, label: control.label };
+      return { ...common, kind: "control", save: { type, dc, basic: false }, onSave: [outcome, outcome, null, null] };
     }
 
     if ( activity.type === "damage" ) {
-      const damage = this.#parts(activity);
-      return damage.length ? { ...base, kind: "auto", damage, melee: false, range: { increment: rangeFeet ?? 120, max: rangeFeet ?? 120, noPenalty: true } } : null;
+      // Magic Missile's darts all land: three darts deal three times a dart's damage.
+      const damage = this.#parts(activity).map(p => projectiles > 1 ? { ...p, dice: p.dice.map(d => ({ ...d, n: d.n * projectiles })), flat: p.flat * projectiles } : p);
+      return damage.length ? {
+        ...base, kind: "auto", damage, melee: false, range: { increment: rangeFeet ?? 120, max: rangeFeet ?? 120, noPenalty: true },
+        area: targets > 1 ? { targets } : undefined
+      } : null;
     }
 
     if ( activity.type === "heal" ) {
       const heal = this.#parts(activity, true).map(p => ({ ...p, type: "healing" }));
       if ( !heal.length ) return null;
-      const self = item.type === "consumable" || range.units === "self";
-      return { ...base, kind: "heal", heal, selfOnly: self };
+      const self = item.type === "consumable" || units === "self";
+      // Cure Wounds is a touch; Healing Word reaches 60 feet.
+      const reach = units === "touch" ? { reach: 5 } : rangeFeet ? { range: { increment: rangeFeet, max: rangeFeet, noPenalty: true } } : {};
+      return { ...base, kind: "heal", heal, selfOnly: self, ...(self ? {} : reach) };
     }
     return null;
   }
@@ -381,6 +504,8 @@ export class Dnd5eAdapter extends SystemAdapter {
   }
 
   #leadershipEntry(actor, id, level, features) {
+    // Animals and the mindless follow; they don't lead.
+    if ( (actor.system.abilities?.int?.value ?? 10) <= 3 ) return null;
     const skills = actor.system.skills ?? {};
     return {
       id,
@@ -394,26 +519,22 @@ export class Dnd5eAdapter extends SystemAdapter {
     return rankLeaders(specs.map(s => s.leadership).filter(Boolean));
   }
 
-  /** The 2014 encounter thresholds: easy, medium, hard, deadly, for the party's levels against the foes' XP. */
+  /**
+   * The system's own encounter budget (dnd5e ships the free rules' XP budget per character: low, moderate, high),
+   * for the party's levels against the foes' XP. Well past high is beyond what the budget plans for.
+   */
   difficultyCrossCheck(friendly, hostile) {
     const pcs = friendly.filter(s => s.kind === "pc");
-    if ( !pcs.length || !hostile.length ) return null;
-    const THRESHOLDS = [[25, 50, 75, 100], [50, 100, 150, 200], [75, 150, 225, 400], [125, 250, 375, 500], [250, 500, 750, 1100],
-      [300, 600, 900, 1400], [350, 750, 1100, 1700], [450, 900, 1400, 2100], [550, 1100, 1600, 2400], [600, 1200, 1900, 2800],
-      [800, 1600, 2400, 3600], [1000, 2000, 3000, 4500], [1100, 2200, 3400, 5100], [1250, 2500, 3800, 5700], [1400, 2800, 4300, 6400],
-      [1600, 3200, 4800, 7200], [2000, 3900, 5900, 8800], [2100, 4200, 6300, 9500], [2400, 4900, 7300, 10900], [2800, 5700, 8500, 12700]];
-    const XP = { 0: 10, 0.125: 25, 0.25: 50, 0.5: 100, 1: 200, 2: 450, 3: 700, 4: 1100, 5: 1800, 6: 2300, 7: 2900, 8: 3900, 9: 5000, 10: 5900,
-      11: 7200, 12: 8400, 13: 10000, 14: 11500, 15: 13000, 16: 15000, 17: 18000, 18: 20000, 19: 22000, 20: 25000, 21: 33000, 22: 41000,
-      23: 50000, 24: 62000, 25: 75000, 26: 90000, 27: 105000, 28: 120000, 29: 135000, 30: 155000 };
-    const budget = [0, 0, 0, 0];
-    for ( const pc of pcs ) THRESHOLDS[Math.min(19, Math.max(0, (pc.level ?? 1) - 1))].forEach((v, i) => { budget[i] += v; });
     const foes = hostile.filter(h => h.kind !== "hazard");
-    const raw = foes.reduce((s, h) => s + (XP[h.level] ?? XP[Math.round(h.level)] ?? 0), 0);
-    const n = foes.length;
-    const mult = n <= 1 ? 1 : n === 2 ? 1.5 : n <= 6 ? 2 : n <= 10 ? 2.5 : n <= 14 ? 3 : 4;
-    const adjusted = raw * mult;
-    const label = adjusted >= budget[3] ? "extreme" : adjusted >= budget[2] ? "severe" : adjusted >= budget[1] ? "moderate" : adjusted >= budget[0] ? "low" : "trivial";
-    return { label, xp: raw, adjustedXp: adjusted, budgets: budget };
+    const table = CONFIG.DND5E?.ENCOUNTER_DIFFICULTY;
+    if ( !pcs.length || !foes.length || !table?.length ) return null;
+    const budget = [0, 0, 0];
+    for ( const pc of pcs ) (table[Math.min(table.length - 1, Math.max(1, Math.round(pc.level ?? 1)))] ?? []).forEach((v, i) => { budget[i] += v; });
+    const xp = foes.reduce((s, h) => s + (h.xp ?? 0), 0);
+    const [low, moderate, high] = budget;
+    const [label, key] = xp >= high * 2 ? ["extreme", "BeyondHigh"] : xp >= high ? ["severe", "High"] : xp >= moderate ? ["moderate", "Moderate"]
+      : xp >= low ? ["low", "Low"] : ["trivial", "BelowLow"];
+    return { label, text: game.i18n.localize(`FFDND5E.Difficulty.${key}`), xp, budgets: budget };
   }
 
   /* -------------------------------------------- */

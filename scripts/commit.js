@@ -12,7 +12,8 @@ const LINGERING = { frightened: "frightened", poisoned: "poisoned", blinded: "bl
 
 const emptyRecord = (tokenDoc, actor) => ({
   tokenUuid: tokenDoc?.uuid ?? null, actorUuid: actor.uuid, actorUpdate: {}, itemUpdates: [], createdItems: [], deletedItems: [], createdEffects: [],
-  tokenUpdate: null, createdActors: [], createdTokens: [], deletedTokens: [], statuses: []
+  tokenUpdate: null, createdActors: [], createdTokens: [], deletedTokens: [], statuses: [],
+  statusesBefore: [...(actor.statuses ?? [])] // so Undo also lifts what dnd5e adds by itself (Prone with Unconscious)
 });
 
 /** Human-readable list of what will change, for the confirmation dialog. */
@@ -79,10 +80,8 @@ export async function commitDnd5eOutcome(tokenDoc, spec, final, options = {}) {
     if ( key === "pact" ) set("system.spells.pact.value", left);
     else if ( key.startsWith("slots:") ) set(`system.spells.spell${key.split(":")[1]}.value`, left);
   }
-  if ( Object.keys(update).length ) await actor.update(update);
-  await commitItems(actor, spec, final, undo);
-
-  // Conditions
+  // Conditions first, HP last: dnd5e reacts to an HP change by adding or removing Bloodied on its own, and on an
+  // unlinked token two changes at once can overwrite each other.
   if ( final.status === STATUS.DOWN ) {
     await setStatus(actor, "unconscious", true, undo);
     await setStatus(actor, "prone", true, undo);
@@ -117,6 +116,8 @@ export async function commitDnd5eOutcome(tokenDoc, spec, final, options = {}) {
     undo.tokenUpdate = { ...(undo.tokenUpdate ?? {}), disposition: tokenDoc.disposition };
     await tokenDoc.update({ disposition: final.side === "friendly" ? CONST.TOKEN_DISPOSITIONS.FRIENDLY : CONST.TOKEN_DISPOSITIONS.HOSTILE });
   }
+  await commitItems(actor, spec, final, undo);
+  if ( Object.keys(update).length ) await actor.update(update);
   return undo;
 }
 

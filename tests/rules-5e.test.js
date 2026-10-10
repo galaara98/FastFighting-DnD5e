@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { dnd5eRules, proficiency } from "../scripts/rules.js";
-import { parseMultiattack } from "../scripts/multiattack.js";
+import { parseMultiattack, parseMultiattackOptions } from "../scripts/multiattack.js";
 import { payFrom } from "../scripts/commit.js";
 import { deriveDnd5eTraits } from "../scripts/traits.js";
 import { degreeDistribution } from "../scripts/core.js";
@@ -105,6 +105,43 @@ describe("Multiattack", () => {
   test("any combination: the best named", () => {
     expect(parseMultiattack("The captain makes three attacks, using Scimitar or Pistol in any combination.", ["Pistol", "Scimitar"])).toEqual(["Pistol", "Pistol", "Pistol"]);
   });
+  test("2024 wording", () => {
+    expect(parseMultiattack("The monster makes one Bite attack and one Claw attack.", ["Bite", "Claw"])).toEqual(["Bite", "Claw"]);
+    expect(parseMultiattack("The dragon makes three Rend attacks. It can replace one attack with a use of Spellcasting.", ["Rend"])).toEqual(["Rend", "Rend", "Rend"]);
+    expect(parseMultiattack("The knight makes two Longsword attacks or two Longbow attacks.", ["Longsword", "Longbow"])).toEqual(["Longsword", "Longsword"]);
+  });
+  test("two with one weapon and one with another", () => {
+    expect(parseMultiattack("The monster makes three melee attacks: two with its scimitar and one with its dagger. Or the monster makes two ranged attacks with its daggers.", ["Scimitar", "Dagger"])).toEqual(["Scimitar", "Scimitar", "Dagger"]);
+  });
+  test("melee and ranged mean the right kind of weapon", () => {
+    const thug = [{ name: "Heavy Crossbow", melee: false }, { name: "Mace", melee: true }];
+    expect(parseMultiattack("The thug makes two melee attacks.", thug)).toEqual(["Mace", "Mace"]);
+    expect(parseMultiattackOptions("The scout makes two melee attacks or two ranged attacks.", [{ name: "Shortsword", melee: true }, { name: "Longbow", melee: false }]))
+      .toEqual([["Shortsword", "Shortsword"], ["Longbow", "Longbow"]]);
+  });
+  test("each way of making it is an option", () => {
+    const opts = parseMultiattackOptions("The monster makes two attacks, using Scimitar or Pistol in any combination.", ["Pistol", "Scimitar"]);
+    expect(opts).toEqual([["Pistol", "Pistol"], ["Scimitar", "Scimitar"]]);
+    expect(parseMultiattackOptions("The monster makes one Bite attack and three other attacks, using Claw or Tail in any combination.", ["Bite", "Claw", "Tail"]))
+      .toEqual([["Bite", "Claw", "Claw", "Claw"], ["Bite", "Tail", "Tail", "Tail"]]);
+    expect(parseMultiattackOptions("The medusa makes either three melee attacks - one with its snake hair and two with its shortsword - or two ranged attacks with its longbow.", ["Shortsword", "Snake Hair", "Longbow"]))
+      .toEqual([["Snake Hair", "Shortsword", "Shortsword"], ["Longbow", "Longbow"]]);
+  });
+  test("limits and conditions", () => {
+    const vampire = ["Bite (Bat or Vampire Form Only)", "Unarmed Strike (Vampire Form Only)"];
+    expect(parseMultiattack("The vampire makes two attacks, only one of which can be a bite attack.", vampire)).toEqual([vampire[1], vampire[1]]);
+    expect(parseMultiattackOptions("The monster makes two Slam attacks, or it makes three Slam attacks if it used Hasten this turn.", ["Slam"])).toEqual([["Slam", "Slam"]]);
+    expect(parseMultiattack("The monster makes three Rend attacks. It can replace one attack with a use of Spellcasting.", ["Rend"])).toEqual(["Rend", "Rend", "Rend"]);
+    expect(parseMultiattack("The monster makes three tentacle attacks, each of which it can replace with one use of Fling.", ["Tentacle"])).toEqual(["Tentacle", "Tentacle", "Tentacle"]);
+  });
+  test("stat-block oddities", () => {
+    expect(parseMultiattack("The monster two attacks: one with its bite and one with its tail.", ["Bite", "Tail"])).toEqual(["Bite", "Tail"]);
+    expect(parseMultiattack("The monster makes 1d4 rotting touch attacks.", ["Rotting Touch"])).toHaveLength(3);
+    expect(parseMultiattack("The hydra makes as many bite attacks as it has heads.", ["Bite"])).toHaveLength(5);
+    expect(parseMultiattack("The monster makes two attacks: one with its bite and one with its claws or spear.", ["Bite (Wolf or Hybrid Form Only)", "Claws (Hybrid Form Only)", "Spear"]))
+      .toEqual(["Bite (Wolf or Hybrid Form Only)", "Claws (Hybrid Form Only)"]);
+    expect(parseMultiattack("The behir makes two attacks: one with its bite and one to constrict.", ["Bite", "Constrict"])).toEqual(["Bite", "Constrict"]);
+  });
   test("attacks twice", () => {
     expect(parseMultiattack("The wolf attacks twice.", ["Bite"])).toEqual(["Bite", "Bite"]);
   });
@@ -125,5 +162,30 @@ describe("5e personality", () => {
     const zombie = deriveDnd5eTraits({ type: "npc", creature: "undead", int: 3, wis: -2, level: 0.25, features: [] });
     expect(zombie.flags.fearless).toBe(true);
     expect(deriveDnd5eTraits({ type: "npc", creature: "beast", int: 3, wis: 1, level: 0.25, features: ["pack tactics"] }).flags.packTactics).toBe(true);
+  });
+});
+
+describe("reading spell text", () => {
+  test("darts, rays and beams", async () => {
+    const { projectileCount } = await import("../scripts/adapter.js");
+    expect(projectileCount("<p>You create three glowing darts of magical force.</p>", 1)).toBe(3);
+    expect(projectileCount("You create three rays of fire and hurl them at targets within range.", 3)).toBe(3);
+    const blast = "A beam of crackling energy streaks toward a creature. The spell creates more than one beam when you reach higher levels: two beams at 5th level, three beams at 11th level, and four beams at 17th level.";
+    expect([1, 5, 11, 17].map(l => projectileCount(blast, l))).toEqual([1, 2, 3, 4]);
+    expect(projectileCount("The spell creates two beams at level 5, three beams at level 11, and four beams at level 17.", 12)).toBe(3);
+    expect(projectileCount("A flame, equivalent in brightness to a torch, springs from an object.", 1)).toBe(1);
+  });
+  test("enrichers become words", async () => {
+    const { plainText } = await import("../scripts/adapter.js");
+    const actor = { items: { get: id => ({ mmBite0000000000: { name: "Bite" } })[id], getName: () => null } };
+    expect(plainText("The [[lookup @name lowercase]]{monster} makes one [[/item .mmBite0000000000]] attack and one [[/item .x1]]{claw} attack.", actor))
+      .toBe("The monster makes one Bite attack and one claw attack.");
+  });
+  test("beasts are animals, not mindless; zombies and oozes are", async () => {
+    const { isMindless } = await import("../scripts/traits.js");
+    expect(isMindless(3, "beast")).toBe(false);
+    expect(isMindless(3, "undead")).toBe(true);
+    expect(isMindless(1, "ooze")).toBe(true);
+    expect(isMindless(6, "undead")).toBe(false);
   });
 });

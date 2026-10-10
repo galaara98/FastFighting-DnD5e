@@ -1,3 +1,8 @@
+/** Too simple to reason with: barely-thinking undead, constructs, oozes and plants. Beasts are animals, not mindless. */
+export function isMindless(int, creature) {
+  return (int ?? 10) <= 3 && !["beast", "monstrosity", "dragon"].includes(creature);
+}
+
 /**
  * D&D 5e personality defaults from an actor's data. Pure: takes plain numbers, unit-testable.
  *
@@ -20,6 +25,8 @@ export function deriveDnd5eTraits(d) {
   const has = name => features.some(f => f.includes(name));
   if ( has("pack tactics") ) flags.packTactics = true;
   if ( has("sneak attack") ) flags.sneakAttack = true;
+  // Disengage as a bonus action.
+  if ( has("cunning action") || has("nimble escape") ) flags.nimble = true;
 
   if ( d.type === "character" ) {
     return {
@@ -30,7 +37,7 @@ export function deriveDnd5eTraits(d) {
   }
 
   const intMod = Math.floor(((d.int ?? 10) - 10) / 2);
-  const mindless = (d.int ?? 10) <= 3;
+  const mindless = isMindless(d.int, d.creature);
   let tactical = clamp(35 + intMod * 8 + (d.wis ?? 0) * 2, 5, 95);
   reasons.tactical = `Intelligence ${d.int ?? 10}`;
   if ( d.creature === "beast" ) {
