@@ -136,7 +136,7 @@ describe("5e opportunity attacks", () => {
 
   test("Cunning Action: Disengage as a bonus action, then walk over and heal with the action", () => {
     const r = fight({ nimble: true });
-    const mine = r.log.filter(e => e.actorId === "healer").map(e => e.type);
+    const mine = r.log.filter(e => e.actorId === "healer" && e.type !== "thought").map(e => e.type);
     expect(mine.slice(0, 3)).toEqual(["disengage", "move", "heal"]);
     expect(r.log.some(e => e.type === "opportunity")).toBe(false);
   });

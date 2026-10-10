@@ -70,6 +70,14 @@ export const dnd5eRules = {
   disengage(u) {
     return { cost: u.spec.flags?.nimble ? { bonus: 1 } : { action: 1 }, label: "takes the Disengage action" };
   },
+  /** A wooden door (AC 15, 18 HP), locked against a DC 15 Strength check or thieves' tools. */
+  door: { ac: 15, hp: 18, threshold: 0, forceDC: 15, pickDC: 15 },
+  /** Opening a door is a free object interaction; forcing it or picking the lock takes an action. */
+  doorCosts: { open: {}, force: { action: 1 }, pick: { action: 1 } },
+  /** A damage threshold: a blow below it does nothing at all; one that meets it does it all. */
+  doorDamage(door, damage) {
+    return damage < (door.threshold ?? 0) ? 0 : damage;
+  },
   /** Standing up costs half your movement. */
   standCost(u) {
     return { move: Math.ceil((u.spec.speeds?.walk ?? 30) / 2) };

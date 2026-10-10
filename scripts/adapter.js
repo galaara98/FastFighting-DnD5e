@@ -177,6 +177,13 @@ export class Dnd5eAdapter extends SystemAdapter {
       // Anyone can try to stabilize the dying with a DC 10 Wisdom (Medicine) check.
       firstAid: (actor.type === "character" || creature === "humanoid") && skillMod("med") !== null ? { mod: skillMod("med") } : null,
       theft: skillMod("slt") !== null ? { skill: skill("slt")?.label ?? "Sleight of Hand", mod: skillMod("slt") } : null,
+      // A locked door: a Strength (Athletics) check to force it, or thieves' tools to pick it (proficiency, and the tools
+      // themselves for a character).
+      doorWork: {
+        force: { mod: skillMod("ath") ?? sys.abilities?.str?.mod ?? 0 },
+        pick: sys.tools?.thief && (actor.type !== "character" || actor.items.some(i => i.type === "tool" && i.system.type?.baseItem === "thief"))
+          ? { mod: sys.tools.thief.total ?? sys.tools.thief.mod ?? 0 } : null
+      },
       creatureTraits: [creature],
       social: {
         pitches: {

@@ -50,6 +50,7 @@ Foundry only offers this module in D&D 5e worlds. Metric worlds work too: speeds
   - attacks crit on a 20 (dice doubled, not modifiers) and miss on a 1;
   - saves and checks simply meet the DC or don't;
   - half damage on a successful save, or none when the spell says so.
+- **Doors:** a wooden door is AC 15 with 18 hit points, locked against a DC 15 Strength (Athletics) check or thieves' tools (proficiency, and the tools themselves for a character); opening one is a free object interaction, forcing or picking it takes an action.
 - **Opportunity attacks:** anyone with a melee weapon swings once (its reaction) at a foe leaving its reach. Disengage gets you out safely; rogues (Cunning Action) and goblins (Nimble Escape) do it as a bonus action.
 - **Advantage and disadvantage:** helpless, prone or restrained targets; poisoned, frightened or blinded attackers; Pack Tactics; ranged attacks at long range or in melee. They cancel out.
 - **Exhaustion:** −2 per level to d20 tests.
