@@ -8,6 +8,7 @@ import { deriveDnd5eTraits, isMindless } from "./traits.js";
 import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
 import { commitDnd5eOutcome, describeDnd5eOutcome, commitDnd5eConcession } from "./commit.js";
+import { modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "./effects.js";
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 const MODES = ["walk", "fly", "swim", "climb", "burrow"];
@@ -28,6 +29,27 @@ const STATUS_CONDITIONS = {
   incapacitated: { incapacitated: 1 },
   charmed: { charmed: 1 }
 };
+/** What a spell's effect does to its target: the same, except that a charm (or domination) turns it to its caster's side. */
+const EFFECT_CONDITIONS = { ...STATUS_CONDITIONS, charmed: { controlled: 1 } };
+/** Statuses that help their bearer, as bonuses: unseen, it attacks with advantage and is attacked at disadvantage. */
+const STATUS_MODS = { invisible: { adv: 1, defAdv: -1 } };
+/**
+ * A creature's features by identifier (dnd5e's slug, the same in the SRD and every book, whatever the language) and,
+ * failing that, by name.
+ */
+function featureKeys(actor) {
+  const out = [];
+  for ( const i of actor.items ) {
+    if ( i.type !== "feat" ) continue;
+    const id = i.identifier ?? i.system?.identifier;
+    if ( id ) out.push(String(id));
+    out.push(String(i.name ?? "").toLowerCase());
+  }
+  return out;
+}
+const hasFeature = (features, id, name) => features.includes(id) || features.some(f => f.includes(name));
+const featureItem = (actor, id, name) => actor.items.find(i => i.type === "feat" && ((i.identifier ?? i.system?.identifier) === id || String(i.name ?? "").toLowerCase() === name));
+const meanOf = parts => parts.reduce((s, p) => s + (p.flat ?? 0) + (p.dice ?? []).reduce((t, d) => t + (d.n * (d.faces + 1)) / 2, 0), 0);
 
 /**
  * The engine counts in feet. dnd5e can be set to metric, and ranges can be in miles: convert (a metre the table
@@ -87,6 +109,8 @@ export function projectileCount(description, level) {
  */
 export function plainText(html, actor = null) {
   return String(html ?? "")
+    // &Reference[prone apply=false]{Prone} (the 2024 books' condition links): the label, else the name.
+    .replace(/&(?:amp;)?Reference\[([^\]]+?)(?:\s+\w+=[^\]]*)?\](?:\{([^}]*)\})?/gi, (m, name, label) => label ?? name)
     .replace(/\[\[\/item\s+\.?([^\]\s]+)\]\](?:\{([^}]*)\})?/g, (m, ref, label) => label ?? actor?.items?.get(ref.split(".").pop())?.name ?? actor?.items?.getName?.(ref)?.name ?? "")
     .replace(/\[\[[^\]]*\]\](?:\{([^}]*)\})?/g, (m, label) => label ?? "")
     .replace(/@\w+\[[^\]]*\](?:\{([^}]*)\})?/g, (m, label) => label ?? "")
@@ -120,7 +144,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     const level = actor.type === "character" ? (sys.details?.level ?? 1) : Math.max(0, Number(sys.details?.cr) || 0);
     const hp = sys.attributes?.hp ?? {};
     const creature = String(sys.details?.type?.value ?? (actor.type === "character" ? "humanoid" : "")).toLowerCase();
-    const features = actor.items.filter(i => i.type === "feat").map(i => i.name.toLowerCase());
+    const features = featureKeys(actor);
 
     const speeds = {};
     for ( const mode of MODES ) {
@@ -203,7 +227,7 @@ export class Dnd5eAdapter extends SystemAdapter {
         mindless: isMindless(sys.abilities?.int?.value, creature)
       },
       valuables: this.#valuables(actor),
-      leadership: this.#leadershipEntry(actor, tokenDoc.id, level, features)
+      leadership: this.#leadershipEntry(actor, tokenDoc.id, level)
     };
   }
 
@@ -262,13 +286,35 @@ export class Dnd5eAdapter extends SystemAdapter {
         if ( action?.riderFor ) riders.push(action.rider);
         else if ( action ) mine.push(action);
       }
-      for ( const a of mine ) if ( riders.length && a.kind !== "heal" ) a.effects = [...(a.effects ?? []), ...riders];
-      out.push(...mine);
+      for ( const a of mine ) if ( riders.length && a.kind !== "heal" && a.kind !== "buff" ) a.effects = [...(a.effects ?? []), ...riders];
+      // One mark per spell: "Move Mark" and "Curse New Creature" are the same spell moving on.
+      const marks = mine.filter(a => a.outcome?.mark);
+      out.push(...mine.filter(a => !a.outcome?.mark || a === marks[0]));
+    }
+    // Anyone can Dodge (attacks against it have disadvantage until its next turn); characters and humanoids can Shove
+    // a foe prone (a Strength or Dexterity save against 8 + Strength + proficiency).
+    out.push({ id: `${actor.id}.dodge`, name: "Dodge", kind: "buff", targets: "self", cost: 1, traits: [], tell: "dodge", outcome: { mods: { defAdv: -1 }, rounds: 1, label: "dodging" } });
+    // Reckless Attack (barbarians): advantage on its attacks, and against it, until its next turn; no action at all.
+    const reckless = featureItem(actor, "reckless-attack", "reckless attack");
+    if ( reckless ) out.push({ id: `${actor.id}.reckless`, name: reckless.name, kind: "buff", targets: "self", economy: "free", oncePerTurn: true, traits: [], itemId: reckless.id, tell: "reckless",
+      outcome: { mods: { adv: 1, defAdv: 1 }, rounds: 1, label: "reckless" } });
+    // Action Surge (fighters): one more action, this turn, once a rest.
+    const surge = featureItem(actor, "action-surge", "action surge");
+    if ( surge ) out.push({ id: `${actor.id}.action-surge`, name: surge.name, kind: "buff", targets: "self", economy: "free", oncePerTurn: true, traits: [], itemId: surge.id, tell: "surge",
+      ...this.#resource(actor, surge), outcome: { actionsNow: 1, rounds: 1, label: "surging" } });
+    const creatureType = String(actor.system.details?.type?.value ?? "").toLowerCase();
+    if ( actor.type === "character" || creatureType === "humanoid" ) {
+      const dc = 8 + (actor.system.abilities?.str?.mod ?? 0) + proficiency(level);
+      const prone = { conditions: { prone: 1 }, rounds: 1, label: "knocked prone" };
+      out.push({ id: `${actor.id}.shove`, name: "Shove", kind: "control", cost: 1, traits: [], melee: true, reach: 5,
+        save: { type: ["str", "dex"], dc, basic: false }, onSave: [prone, prone, null, null] });
     }
     this.#sneakAttack(actor, level, features, out);
     // Characters with Extra Attack make several weapon attacks with the Attack action.
     if ( actor.type === "character" ) {
-      const extra = features.some(f => f.includes("three extra attacks")) ? 4 : features.some(f => f.includes("two extra attacks") || f.includes("extra attack (2)")) ? 3 : features.some(f => f.includes("extra attack")) ? 2 : 1;
+      const extra = hasFeature(features, "three-extra-attacks", "three extra attacks") ? 4
+        : hasFeature(features, "two-extra-attacks", "two extra attacks") || features.some(f => f.includes("extra attack (2)")) ? 3
+          : hasFeature(features, "extra-attack", "extra attack") ? 2 : 1;
       if ( extra > 1 ) {
         for ( const a of out.filter(x => x.kind === "strike" && x.weapon && x.economy !== "bonus") ) {
           out.push({ ...a, id: `${a.id}.extra`, name: `${a.name} ×${extra}`, sequence: Array.from({ length: extra }, (_, i) => ({ ...a, id: `${a.id}.${i}` })) });
@@ -276,7 +322,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       }
     }
     // NPCs' Multiattack: the strikes it makes in one action.
-    const multi = actor.items.find(i => i.type === "feat" && /multiattack/i.test(i.name));
+    const multi = actor.items.find(i => i.type === "feat" && ((i.identifier ?? i.system?.identifier) === "multiattack" || /multiattack/i.test(i.name)));
     if ( multi ) {
       // Its everyday attacks, best first (limited uses such as a breath weapon aren't part of a Multiattack).
       const mean = a => (a.damage ?? []).reduce((s, p) => s + p.flat + p.dice.reduce((t, d) => t + d.n * (d.faces + 1) / 2, 0), 0);
@@ -322,38 +368,109 @@ export class Dnd5eAdapter extends SystemAdapter {
   }
 
   /**
-   * Conditions an activity imposes, and for how long: from its effects' statuses, or failing that from the words of a
-   * save ("... or be knocked prone", "... or have the Frightened condition"). Grappled becomes the engine's grab.
+   * What an activity does to whoever it lands on, and for how long: conditions from its effects' statuses (or failing
+   * that from the words of a save: "... or be knocked prone"), bonuses and penalties from its effects' changes
+   * (Bless, Bane, Shield of Faith), and with `words`, what the spell's description adds (Faerie Fire's advantage,
+   * Haste's extra action, Hold Person's repeated save). Grappled becomes the engine's grab.
    */
-  #effects(item, activity) {
+  #effects(item, activity, { words = false } = {}) {
     const statuses = new Set();
+    const names = [];
+    const changes = [];
+    const helpful = [];
     let rounds = 0;
     const finite = v => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
+    const base = item.type === "spell" ? Number(item.system.level) || 0 : null;
+    const data = item.getRollData?.() ?? item.actor?.getRollData?.() ?? {};
     for ( const ref of activity.effects ?? [] ) {
+      // Upcast versions (Aid's +10, +15 ...) only count at their own slot levels.
+      const lv = ref.level ?? {};
+      if ( base !== null && ((Number.isFinite(lv.min) && base < lv.min) || (Number.isFinite(lv.max) && base > lv.max)) ) continue;
       const effect = ref.effect ?? item.effects?.get(ref._id ?? ref.id);
       if ( !effect ) continue;
-      for ( const status of effect.statuses ?? [] ) if ( STATUS_CONDITIONS[status] ) statuses.add(status);
+      names.push(effect.name);
+      for ( const status of effect.statuses ?? [] ) {
+        if ( EFFECT_CONDITIONS[status] ) statuses.add(status);
+        else if ( STATUS_MODS[status] ) helpful.push(STATUS_MODS[status]);
+      }
+      // (A Rage's "@scale.barbarian.rage-damage" is the character's own number.)
+      for ( const c of effect.changes ?? [] ) {
+        let value = c.value;
+        try {
+          if ( /@/.test(String(value)) ) value = Roll.replaceFormulaData(String(value), data, { missing: "0" });
+        } catch ( err ) { /* left as it is */ }
+        changes.push({ key: c.key, mode: c.mode, value });
+      }
       const d = effect.duration ?? {};
       const byUnits = finite(d.value) ? ({ rounds: 1, turns: 1, seconds: 1 / 6, minutes: 10, hours: 600 }[d.units] ?? 0) * finite(d.value) : 0;
       rounds = finite(d.rounds) || Math.ceil(finite(d.seconds) / 6) || finite(d.turns) || Math.ceil(byUnits) || rounds;
     }
-    if ( !statuses.size && activity.type === "save" ) {
+    if ( !statuses.size && !changes.length && activity.type === "save" ) {
       const text = plainText(item.system.description?.value).toLowerCase();
-      const words = Object.keys(STATUS_CONDITIONS).join("|");
-      const m = new RegExp(`saving throw[^.]*?\\bor (?:be(?:come)? |be knocked |is knocked |have the |has the )?(${words})\\b`).exec(text)
-        ?? new RegExp(`\\b(${words})\\b`).exec(String(activity.name ?? "").toLowerCase());
+      const known = Object.keys(EFFECT_CONDITIONS).join("|");
+      const m = new RegExp(`saving throw[^.]*?\\bor (?:be(?:come)? |be knocked |is knocked |have the |has the |fall |falls )?(${known})\\b`).exec(text)
+        ?? new RegExp(`\\b(${known})\\b`).exec(String(activity.name ?? "").toLowerCase());
       if ( m ) {
         statuses.add(m[1]);
         const minutes = /for 1 minute|for one minute/.test(text) ? 10 : 0;
         rounds = minutes || (/until the end of (?:its|your|the \w+'s) next turn/.test(text) ? 1 : 0) || rounds;
       }
     }
-    if ( !statuses.size ) return null;
+    const { mods, tempHp, iwr } = modsFromChanges(changes);
+    const said = words ? fromWords(plainText(item.system.description?.value), mods) : null;
+    if ( !said?.endsOnAttack ) for ( const m of helpful ) for ( const [k, v] of Object.entries(m) ) mods[k] ??= v;
+    if ( said ) Object.assign(mods, said.mods);
     const grab = statuses.delete("grappled");
     const conditions = {};
-    for ( const s of statuses ) Object.assign(conditions, STATUS_CONDITIONS[s]);
-    const label = [...statuses].join(", ");
-    return { conditions: Object.keys(conditions).length ? conditions : null, grab, rounds: rounds || 10, label: label || "grappled" };
+    for ( const s of statuses ) Object.assign(conditions, EFFECT_CONDITIONS[s]);
+    if ( said ) Object.assign(conditions, said.conditions);
+    const hasMods = Object.keys(mods).length > 0;
+    if ( !Object.keys(conditions).length && !hasMods && !tempHp && !grab && !said?.mark && !iwr ) return null;
+    const label = statuses.size || hasMods || tempHp || Object.keys(conditions).length ? effectLabel({ statuses: [...statuses], names, mods, tempHp, conditions }) : "grappled";
+    return {
+      conditions: Object.keys(conditions).length ? conditions : null, mods: hasMods ? mods : null, tempHp, grab, names, iwr,
+      // The effect's own duration first; the words only when it has none ("the next attack roll it makes").
+      rounds: rounds || said?.rounds || durationRounds(item.system.duration) || 10, label, words: said
+    };
+  }
+
+  /** The outcome an effect makes for the engine (null when it does nothing the engine plays out). */
+  #outcome(fx, save = null) {
+    if ( !fx || (!fx.conditions && !fx.mods && !fx.tempHp && !fx.iwr) ) return null;
+    return {
+      iwr: fx.iwr ?? undefined,
+      conditions: fx.conditions ?? undefined, mods: fx.mods ?? undefined, tempHp: fx.tempHp || undefined, rounds: fx.rounds, label: fx.label,
+      repeatSave: fx.words?.repeatSave && save ? { type: save.type, dc: save.dc } : undefined,
+      endsOnHarm: fx.words?.endsOnHarm || undefined
+    };
+  }
+
+  /**
+   * A spell or feature that works on whoever it touches without an attack or a save: a buff for friends (Bless, Shield
+   * of Faith, Haste, Aid, Blur), a mark on a foe that adds to your hits (Hunter's Mark, Hex), or a curse.
+   */
+  #support(item, activity, base, { units, rangeFeet, targets, tempHp = 0 }) {
+    const fx = this.#effects(item, activity, { words: item.type === "spell" || item.type === "feat" });
+    const others = item.system.activities?.contents ?? [];
+    // The mark's own damage: an activity with no activation of its own (the 2014 SRD calls it "special").
+    const markAct = fx?.words?.mark ? others.find(a => a.type === "damage" && [undefined, "", "special"].includes(a.activation?.type)) : null;
+    const mark = markAct ? this.#parts(markAct) : null;
+    const temp = Math.max(tempHp, fx?.tempHp ?? 0);
+    const outcome = this.#outcome(fx) ?? (temp ? { rounds: durationRounds(item.system.duration) ?? 10, label: "bolstered" } : null);
+    // (Rage: its resistances count as much as its damage.)
+    if ( outcome && fx?.iwr ) outcome.iwr = fx.iwr;
+    if ( !outcome && !mark?.length ) return null;
+    if ( temp ) outcome.tempHp = temp;
+    const affects = String(activity.target?.affects?.type ?? item.system.target?.affects?.type ?? "").toLowerCase();
+    const self = units === "self" || affects === "self";
+    const reach = units === "touch" ? { reach: 5 } : rangeFeet && !self ? { range: { increment: rangeFeet, max: rangeFeet, noPenalty: true } } : {};
+    if ( mark?.length ) {
+      return { ...base, kind: "control", auto: true, melee: false, ...reach, freeWhileHeld: true,
+        outcome: { ...(outcome ?? {}), rounds: outcome?.rounds ?? durationRounds(item.system.duration) ?? 600, mark, label: /hex/i.test(item.name) ? "hexed" : "marked" } };
+    }
+    const friendly = self || ["ally", "willing"].includes(affects) || (affects !== "enemy" && (helps(outcome.mods ?? {}, outcome.conditions ?? {}) || outcome.iwr || (temp > 0 && !outcome.mods && !outcome.conditions)));
+    if ( !friendly ) return { ...base, kind: "control", auto: true, melee: false, ...reach, outcome };
+    return { ...base, kind: "buff", outcome, targets: self ? "self" : undefined, area: !self && targets > 1 ? { targets } : undefined, ...reach };
   }
 
   /** The riders an attack carries: its conditions, a grab, and a save its target must make on a hit. */
@@ -361,7 +478,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     if ( !control ) return [];
     const out = [];
     if ( control.grab ) out.push({ kind: "grabbed" });
-    if ( control.conditions ) out.push({ kind: "condition", conditions: control.conditions, rounds: control.rounds, label: control.label, critOnly: false });
+    if ( control.conditions || control.mods ) out.push({ kind: "condition", conditions: control.conditions ?? undefined, mods: control.mods ?? undefined, rounds: control.rounds, label: control.label, critOnly: false });
     return out;
   }
 
@@ -391,10 +508,10 @@ export class Dnd5eAdapter extends SystemAdapter {
     };
     const damage = this.#parts(activity);
     const control = this.#effects(item, activity);
-    if ( !damage.length && !control?.conditions ) return null;
+    if ( !damage.length && !control?.conditions && !control?.mods ) return null;
     return {
       riderFor: item.id,
-      rider: { kind: "save", save, damage: damage.length ? damage : undefined, conditions: control?.conditions ?? undefined, rounds: control?.rounds, label: control?.label ?? item.name }
+      rider: { kind: "save", save, damage: damage.length ? damage : undefined, conditions: control?.conditions ?? undefined, mods: control?.mods ?? undefined, rounds: control?.rounds, label: control?.label ?? item.name }
     };
   }
 
@@ -413,9 +530,11 @@ export class Dnd5eAdapter extends SystemAdapter {
       || (units === "self" && inFeet(template.size, template.units ?? "ft")) || (units === "touch" ? 5 : null);
     const longFeet = inFeet(range.long, range.units) || inFeet(own.long, own.units);
     const several = (item.system.activities?.size ?? 1) > 1 && activity.type !== "attack";
+    // Concentration: one such spell at a time, and a hard knock may end it.
+    const concentration = !!(item.system.properties?.has?.("concentration") || item.system.duration?.concentration) || undefined;
     const base = {
       id: `${actor.id}.${item.id}.${activity.id}`, name: several && activity.name && activity.name !== item.name ? `${item.name}: ${activity.name}` : item.name,
-      cost: 1, economy, itemId: item.id, traits: [], rank: item.type === "spell" ? item.system.level : undefined, ...this.#resource(actor, item)
+      cost: 1, economy, itemId: item.id, traits: [], rank: item.type === "spell" ? item.system.level : undefined, concentration, ...this.#resource(actor, item)
     };
     const reachOf = () => inFeet(range.reach, range.units) || 5;
     const casterLevel = actor.type === "character" ? (actor.system.details?.level ?? 1) : (actor.system.attributes?.spell?.level ?? actor.system.details?.spellLevel ?? 1);
@@ -443,20 +562,21 @@ export class Dnd5eAdapter extends SystemAdapter {
       const type = asArray(activity.save?.ability)[0] ?? "dex";
       const dc = activity.save?.dc?.value ?? (8 + proficiency(actor.system.details?.level ?? 1) + 3);
       const damage = this.#parts(activity);
-      const control = this.#effects(item, activity);
-      const save = { type, dc, basic: activity.damage?.onSave !== "none" };
+      const control = this.#effects(item, activity, { words: item.type === "spell" || item.type === "feat" });
+      // (Charm Person: "with Advantage if you or your allies are fighting it", and this is a fight.)
+      const save = { type, dc, basic: activity.damage?.onSave !== "none", ...(control?.words?.saveAdvantage ? { advantage: 1 } : {}) };
       const common = {
         ...base, melee: false, range: { increment: rangeFeet ?? 30, max: rangeFeet ?? 30, noPenalty: true },
         area: targets > 1 ? { targets } : undefined
       };
+      const outcome = this.#outcome(control, save);
       if ( damage.length ) {
-        const riders = control?.conditions ? [{ kind: "condition", conditions: control.conditions, rounds: control.rounds, label: control.label, critOnly: false }] : [];
+        const riders = outcome ? [{ kind: "condition", ...outcome, critOnly: false }] : [];
         return { ...common, kind: "save", damage, save, effects: riders.length ? riders : undefined };
       }
-      // No damage: crowd control on a failed save.
-      if ( !control?.conditions ) return null;
-      const outcome = { conditions: control.conditions, rounds: control.rounds, label: control.label };
-      return { ...common, kind: "control", save: { type, dc, basic: false }, onSave: [outcome, outcome, null, null] };
+      // No damage: crowd control or a debuff on a failed save (Hold Person, Bane, Slow, Faerie Fire).
+      if ( !outcome ) return null;
+      return { ...common, kind: "control", save: { ...save, basic: false }, onSave: [outcome, outcome, null, null] };
     }
 
     if ( activity.type === "damage" ) {
@@ -468,8 +588,16 @@ export class Dnd5eAdapter extends SystemAdapter {
       } : null;
     }
 
+    // Utility spells and features (Bless, Shield of Faith), and enchantments of a weapon (Magic Weapon).
+    if ( activity.type === "utility" || activity.type === "enchant" ) return this.#support(item, activity, base, { units, rangeFeet, targets });
+
     if ( activity.type === "heal" ) {
-      const heal = this.#parts(activity, true).map(p => ({ ...p, type: "healing" }));
+      const parts = this.#parts(activity, true);
+      // Temporary hit points (False Life, Heroism) or a bigger maximum (Aid): a buff, not a heal.
+      const temp = parts.length > 0 && parts.every(p => /^temp/i.test(p.type ?? ""));
+      const raised = activity.effects?.length ? this.#effects(item, activity)?.tempHp ?? 0 : 0;
+      if ( temp || raised || !parts.length ) return this.#support(item, activity, base, { units, rangeFeet, targets, tempHp: Math.max(raised, temp ? Math.round(meanOf(parts)) : 0) });
+      const heal = parts.map(p => ({ ...p, type: "healing" }));
       if ( !heal.length ) return null;
       const self = item.type === "consumable" || units === "self";
       // Cure Wounds is a touch; Healing Word reaches 60 feet.
@@ -481,7 +609,7 @@ export class Dnd5eAdapter extends SystemAdapter {
 
   /** Rogues: Sneak Attack, once a turn, with advantage or an ally beside the target, on a finesse or ranged weapon. */
   #sneakAttack(actor, level, features, actions) {
-    if ( actor.type !== "character" || !features.some(f => f.includes("sneak attack")) ) return;
+    if ( actor.type !== "character" || !hasFeature(features, "sneak-attack", "sneak attack") ) return;
     const scaled = actor.system.scale?.rogue?.["sneak-attack"];
     const formula = scaled?.formula ?? (typeof scaled === "string" ? scaled : `${Math.ceil(level / 2)}d6`);
     for ( const a of actions ) {
@@ -506,11 +634,13 @@ export class Dnd5eAdapter extends SystemAdapter {
       level,
       wisSave: typeof save === "number" ? save : (save?.value ?? sys.abilities?.wis?.mod ?? 0),
       hasMaster: false,
-      features: actor.items.filter(i => i.type === "feat").map(i => i.name.toLowerCase())
+      features: featureKeys(actor)
     });
   }
 
-  #leadershipEntry(actor, id, level, features) {
+  #leadershipEntry(actor, id, level) {
+    // One entry per feature: its identifier to match on, its name to show.
+    const features = actor.items.filter(i => i.type === "feat").map(i => ({ key: String(i.identifier ?? i.system?.identifier ?? ""), name: i.name }));
     // Animals and the mindless follow; they don't lead.
     if ( (actor.system.abilities?.int?.value ?? 10) <= 3 ) return null;
     const skills = actor.system.skills ?? {};

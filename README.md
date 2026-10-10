@@ -19,6 +19,8 @@ Foundry only offers this module in D&D 5e worlds. Metric worlds work too: speeds
 
 ## What it reads
 
+Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 (their wordings differ, and both are read). The Player's Handbook, the Dungeon Master's Guide and other books only add more spells and features, read the same way: from what an item does (its activities and effects), then its words, never from a list of names. Features it has to recognise (Extra Attack, Sneak Attack, Rage's companions Reckless Attack and Action Surge, Pack Tactics, Nimble Escape, Multiattack) are found by their identifier, the same in every book and language.
+
 - **Attacks:** weapons and features through their attack activities: to-hit, damage (with your modifiers), melee reach, and ranged normal and long range.
   - A save beside an attack on the same item happens on a hit: a wolf's bite (Strength or prone), a spider's venom (Constitution, half on a success).
   - A grapple from an attack uses the core's grab, which the target can try to escape.
@@ -32,6 +34,15 @@ Foundry only offers this module in D&D 5e worlds. Metric worlds work too: speeds
   - cones and lines from yourself reach as far as they're long, and areas catch more foes the bigger they are;
   - characters only use cantrips and prepared spells.
 - **Healing:** spells and potions, as actions or bonus actions. Cure Wounds is a touch (walk over first); Healing Word reaches 60 feet.
+- **Buffs and debuffs** (from their effects' changes, statuses and words):
+  - for friends: Bless (+1d4 to attacks and saves), Shield of Faith, Haste (and its extra action), Aid and False Life (extra hit points), Divine Favor, Magic Weapon, Longstrider, Blur, Mirror Image, Greater Invisibility, Protection from Evil and Good, Warding Bond;
+  - for foes: Bane (−1d4), Faerie Fire (advantage against it), Slow, Ray of Enfeeblement, Vicious Mockery's disadvantage, Ray of Frost's slowing;
+  - Hunter's Mark and Hex: extra damage on your own hits, moved to a new foe when the first one drops, at no new slot;
+  - Hold Person, Hideous Laughter, Confusion, Command, Entangle, Fear, Grease, Sleep and the like, with the save they repeat each turn;
+  - Charm Person and the Dominate spells turn the target to your side (saved with advantage in a fight, as the spells say), until it shakes it off, your concentration breaks, or (for a charm) your side harms it;
+  - class features: Rage (its damage and its resistance to weapons), Reckless Attack, Action Surge, Bardic Inspiration, Turn Undead, Intimidating Presence and others with effects;
+  - concentration: one spell at a time; damage calls for a Constitution save (DC 10 or half the damage), and being incapacitated ends it;
+  - anyone can Dodge; characters and humanoids can Shove a foe prone (Strength or Dexterity save, whichever is better).
 - **Defenses:**
   - damage immunities, resistances and vulnerabilities;
   - condition immunities, so a spell isn't wasted on a creature immune to everything it would do.

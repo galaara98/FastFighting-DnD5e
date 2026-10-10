@@ -14,7 +14,7 @@ export function isMindless(int, creature) {
  * @param {number} d.level       Level or challenge rating
  * @param {number} d.wisSave     Wisdom save bonus
  * @param {boolean} d.hasMaster  A familiar, steed or companion
- * @param {string[]} d.features  Feature names (lower case)
+ * @param {string[]} d.features  Feature identifiers and names (lower case)
  * @returns {{traits, flags, reasons}}
  */
 export function deriveDnd5eTraits(d) {
@@ -22,11 +22,12 @@ export function deriveDnd5eTraits(d) {
   const reasons = {};
   const flags = {};
   const features = d.features ?? [];
-  const has = name => features.some(f => f.includes(name));
-  if ( has("pack tactics") ) flags.packTactics = true;
-  if ( has("sneak attack") ) flags.sneakAttack = true;
+  // By identifier first (the same in every book and language), then by name.
+  const has = (id, name) => features.includes(id) || features.some(f => f.includes(name));
+  if ( has("pack-tactics", "pack tactics") ) flags.packTactics = true;
+  if ( has("sneak-attack", "sneak attack") ) flags.sneakAttack = true;
   // Disengage as a bonus action.
-  if ( has("cunning action") || has("nimble escape") ) flags.nimble = true;
+  if ( has("cunning-action", "cunning action") || has("nimble-escape", "nimble escape") ) flags.nimble = true;
 
   if ( d.type === "character" ) {
     return {

@@ -8,7 +8,7 @@ import { Dnd5eAdapter } from "./adapter.js";
 export const MODULE_ID = "fast-fighting-dnd5e";
 
 /** The core API this helper is written against (older cores have no api.version: that is 1). */
-const NEEDS_API = 3;
+const NEEDS_API = 4;
 
 Hooks.once("fastFighting.init", api => {
   // module.json limits this module to dnd5e worlds; this guard covers anything that slips past.

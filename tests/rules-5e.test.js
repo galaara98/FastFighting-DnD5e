@@ -189,3 +189,20 @@ describe("reading spell text", () => {
     expect(isMindless(6, "undead")).toBe(false);
   });
 });
+
+describe("features by identifier", () => {
+  test("identifiers work alone (the same in every book and language)", () => {
+    const wolf = deriveDnd5eTraits({ type: "npc", creature: "beast", int: 3, wis: 1, level: 0.25, features: ["pack-tactics", "rudel-taktik"] });
+    expect(wolf.flags.packTactics).toBe(true);
+    expect(deriveDnd5eTraits({ type: "character", features: ["cunning-action"] }).flags.nimble).toBe(true);
+  });
+
+  test("a wolf's Pack Tactics isn't leadership; a Rallying Cry is", async () => {
+    const { rankLeaders } = await import("../scripts/leadership.js");
+    const [wolf] = rankLeaders([{ id: "w", level: 1, skills: { persuasion: 0, intimidation: 0 }, features: [{ key: "pack-tactics", name: "Pack Tactics" }] }]);
+    expect(wolf.reason).not.toMatch(/Pack Tactics/);
+    const [captain] = rankLeaders([{ id: "c", level: 1, skills: { persuasion: 0, intimidation: 0 }, features: [{ key: "rallying-cry", name: "Cri de ralliement" }] }]);
+    expect(captain.reason).toMatch(/Cri de ralliement/);
+    expect(captain.score).toBe(wolf.score + 3);
+  });
+});

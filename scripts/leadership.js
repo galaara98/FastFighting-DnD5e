@@ -4,11 +4,12 @@
  */
 import { proficiency } from "./rules.js";
 
-// ("Pack Tactics" is how wolves hunt, not command.)
-const LEADER_FEATURE = /(leadership|rally|rallying|commander|inspir|battle cry|warlord|captain|(?<!pack )tactic)/i;
+// ("Pack Tactics" is how wolves hunt, not command.) Matched against identifiers too, so hyphens count as spaces.
+const LEADER_FEATURE = /(leadership|rally|rallying|commander|inspir|battle[ -]cry|warlord|captain|(?<!pack[ -])tactic)/i;
 
 /**
- * @param {object[]} entries  [{id, level, skills: {persuasion, intimidation}, features: string[]}]
+ * @param {object[]} entries  [{id, level, skills: {persuasion, intimidation}, features: [{key, name}]}] (key: the
+ *   feature's identifier; plain strings are read as both)
  * @returns {{id, score, reason, bonus: {brave, tacticalFloor, attack, ac}}[]} best first
  */
 export function rankLeaders(entries) {
@@ -18,10 +19,11 @@ export function rankLeaders(entries) {
     if ( best <= -99 ) continue;
     let score = best - (proficiency(e.level) + 2);
     const reasons = [`best social skill ${best >= 0 ? "+" : ""}${best}`];
-    const commanding = (e.features ?? []).filter(n => LEADER_FEATURE.test(n));
+    const commanding = (e.features ?? []).map(f => (typeof f === "string" ? { key: f, name: f } : f))
+      .filter(f => LEADER_FEATURE.test(f.key ?? "") || LEADER_FEATURE.test(f.name ?? ""));
     if ( commanding.length ) {
       score += 3;
-      reasons.push(commanding.slice(0, 2).join(", "));
+      reasons.push(commanding.slice(0, 2).map(f => f.name).join(", "));
     }
     out.push({ id: e.id, score, reason: reasons.join("; "), bonus: leaderBonus(score) });
   }

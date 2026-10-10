@@ -41,10 +41,12 @@ export const dnd5eRules = {
   movement: "feet",
   /** An action, a bonus action, your movement, and one spell slot: a turn spends at most one slot on a spell. */
   turn(u) {
-    return { action: 1, bonus: 1, move: u.spec.speeds?.walk ?? Math.max(0, ...Object.values(u.spec.speeds ?? { walk: 30 })), slot: 1 };
+    // Slowed (the Slow spell): an action or a bonus action, not both.
+    return { action: 1, bonus: has(u, "slowed") ? 0 : 1, move: u.spec.speeds?.walk ?? Math.max(0, ...Object.values(u.spec.speeds ?? { walk: 30 })), slot: 1 };
   },
   /** An action, unless it's a bonus action (Healing Word, an off-hand attack ...); a spell slot too, if it takes one. */
   costOf(action) {
+    if ( action.economy === "free" ) return {}; // Reckless Attack, Action Surge: no action at all
     const cost = action.economy === "bonus" ? { bonus: 1 } : { action: 1 };
     if ( /^(?:slots:|pact$)/.test(action.resource ?? "") ) cost.slot = 1;
     return cost;
@@ -59,9 +61,14 @@ export const dnd5eRules = {
    * Opportunity attacks: anyone with a melee attack swings once (its reaction) at a foe leaving its reach. Disengage
    * lets you leave safely; rogues (Cunning Action) and goblins (Nimble Escape) do it as a bonus action.
    */
-  reactions() {
-    return 1;
+  reactions(u) {
+    return has(u, "slowed") ? 0 : 1;
   },
+  /**
+   * Concentration: one such spell at a time. Taking damage calls for a Constitution save (DC 10 or half the damage,
+   * at most 30); being incapacitated ends it.
+   */
+  concentration: { save: "con", dc: dmg => Math.min(30, Math.max(10, Math.floor(dmg / 2))), breaksOn: ["incapacitated", "paralyzed", "stunned", "unconscious", "petrified"] },
   opportunity(reactor) {
     const c = reactor.conds ?? {};
     if ( c.incapacitated || c.paralyzed || c.stunned || c.unconscious || c.petrified ) return null;
@@ -272,14 +279,18 @@ export const dnd5eRules = {
   isImmune(target, action) {
     const immune = new Set(target.spec.iwr?.immune ?? []);
     if ( (action.traits ?? []).some(t => immune.has(t)) ) return true;
-    const alias = { incapacitated: "unconscious", immobilized: "restrained" };
+    const alias = { incapacitated: "unconscious", immobilized: "restrained", controlled: "charmed" };
     const keys = [...new Set([...(action.onSave ?? []), ...(action.onHit ?? [])].filter(Boolean).flatMap(o => Object.keys(o.conditions ?? {})))];
     return keys.length > 0 && keys.every(k => immune.has(k) || immune.has(alias[k]));
   },
 
   /** Share of a creature's fighting a condition takes away each round. */
   conditionWeight(key) {
-    return { paralyzed: 1, stunned: 1, unconscious: 1, petrified: 1, restrained: 0.4, blinded: 0.35, frightened: 0.25, poisoned: 0.2, charmed: 0.3 }[key];
+    return { paralyzed: 1, stunned: 1, unconscious: 1, petrified: 1, restrained: 0.4, blinded: 0.35, frightened: 0.25, poisoned: 0.2, charmed: 0.3, slowed: 0.3 }[key];
+  },
+  /** Knocked prone, as numbers: its own attacks at disadvantage, and those against it (up close) at advantage. */
+  conditionMods(key) {
+    return key === "prone" ? { adv: -1, defAdv: 1 } : null;
   },
 
   /** Death saves, so Make it So can write them back. */
