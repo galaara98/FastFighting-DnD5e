@@ -1,0 +1,10 @@
+{
+  "FFDND5E": {
+    "NeedsCore": "FastFighting D&D 5e needs the FastFighting Core module. Install and enable it.",
+    "CoreTooOld": "FastFighting D&D 5e needs a newer FastFighting Core. Update FastFighting Core in Add-on Modules.",
+    "SpellSlot": "Level {level} spell slot",
+    "PactSlot": "Pact slot",
+    "Surrendered": "Surrendered",
+    "SurrenderedHint": "Laid down arms during a FastFighting battle and is at the victors' mercy."
+  }
+}
