@@ -47,7 +47,7 @@ export function describeDnd5eOutcome(spec, final) {
   for ( const k of Object.keys(final.conditions ?? {}) ) if ( LINGERING[k] && !lines.includes(LINGERING[k]) ) lines.push(LINGERING[k]);
   for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
     const used = start - (final.resources?.[key] ?? start);
-    if ( used > 0 ) lines.push(`Uses ${used}× ${key === "fate" ? (spec.fateLabel ?? "Inspiration") : key === "pact" ? "pact slot" : key.startsWith("slots:") ? `level ${key.split(":")[1]} slot` : spec.resourceNames?.[key] ?? spec.actions.find(a => a.resource === key)?.name ?? key}`);
+    if ( used > 0 ) lines.push(`Uses ${used}× ${key === "fate" ? (spec.fateLabel ?? "Inspiration") : key === "legres" ? (spec.standFirm?.label ?? "Legendary Resistance") : key === "pact" ? "pact slot" : key.startsWith("slots:") ? `level ${key.split(":")[1]} slot` : spec.resourceNames?.[key] ?? spec.actions.find(a => a.resource === key)?.name ?? key}`);
   }
   for ( const [id, left] of Object.entries(final.uses ?? {}) ) {
     const a = spec.actions.find(x => x.id === id);
@@ -96,6 +96,7 @@ export async function commitDnd5eOutcome(tokenDoc, spec, final, options = {}) {
     if ( key === "pact" ) set("system.spells.pact.value", left);
     else if ( key.startsWith("feature:") ) continue; // (a feature's uses: with the items, below)
     else if ( key === "fate" ) set("system.attributes.inspiration", left > 0);
+    else if ( key === "legres" ) set("system.resources.legres.spent", Math.max(0, (actor.system.resources?.legres?.spent ?? 0) + (start - left)));
     else if ( key.startsWith("slots:") ) set(`system.spells.spell${key.split(":")[1]}.value`, left);
   }
   // Conditions first, HP last: dnd5e reacts to an HP change by adding or removing Bloodied on its own, and on an

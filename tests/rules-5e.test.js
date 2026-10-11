@@ -221,3 +221,28 @@ describe("Make it So: whose side a token ends up on", () => {
     expect(sideChange({ swayed: null, side: "hostile", status: "down" })).toBeNull();
   });
 });
+
+describe("abilities that recharge", () => {
+  test("Recharge 5–6 comes back on a d6 of 5 or more; Recharge 6 on a 6", async () => {
+    const { rechargeOf } = await import("../scripts/adapter.js");
+    expect(rechargeOf({ max: 1, recovery: [{ period: "recharge", formula: "5" }] })).toEqual({ recharge: { on: 5, die: 6 } });
+    expect(rechargeOf({ max: 1, recovery: [{ period: "recharge" }] })).toEqual({ recharge: { on: 6, die: 6 } });
+    expect(rechargeOf({ max: 3, recovery: [{ period: "lr" }] })).toEqual({});
+  });
+});
+
+describe("legendary", () => {
+  test("a legendary action's cost: its activation, else its name", async () => {
+    const { legendaryCost } = await import("../scripts/adapter.js");
+    expect(legendaryCost({ activation: { type: "legendary", value: 2 } }, { name: "Wing Attack" })).toBe(2);
+    expect(legendaryCost({ activation: { type: "legendary" } }, { name: "Wing Attack (Costs 2 Actions)" })).toBe(2);
+    expect(legendaryCost({ activation: { type: "legendary" } }, { name: "Detect" })).toBe(1);
+  });
+
+  test("a legendary action that names one of its attacks makes that attack", async () => {
+    const { legendaryAttack } = await import("../scripts/adapter.js");
+    expect(legendaryAttack("The dragon makes a tail attack.", ["Bite", "Claw", "Tail"])).toBe("Tail");
+    expect(legendaryAttack("The lich makes one Paralyzing Touch attack.", ["Paralyzing Touch"])).toBe("Paralyzing Touch");
+    expect(legendaryAttack("The dragon beats its wings. Each creature within 10 feet must succeed on a DC 22 Dexterity saving throw.", ["Bite"])).toBeNull();
+  });
+});

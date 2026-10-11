@@ -19,6 +19,38 @@ const PHYSICAL = new Set(["weapon", "equipment", "consumable", "tool", "loot"]);
 const SIZES = ["tiny", "sm", "med", "lg", "huge", "grg"];
 const sizeOf = key => { const i = SIZES.indexOf(String(key ?? "med")); return i < 0 ? 2 : i; };
 
+/** What a legendary action costs from the pool: its activation's value, else "(Costs 2 Actions)" in its name. */
+export function legendaryCost(activity, item) {
+  const value = Number(activity?.activation?.value);
+  if ( Number.isFinite(value) && value > 0 ) return value;
+  const named = /costs?\s+(\d)\s+actions?/i.exec(item?.name ?? "");
+  return named ? Number(named[1]) : 1;
+}
+
+/**
+ * The attack a legendary action makes, by its words ("The dragon makes a tail attack", "makes one Rend attack"):
+ * the name of one of the creature's own attacks, or null.
+ */
+export function legendaryAttack(text, attackNames) {
+  const said = /\bmakes?\s+(?:a|an|one)\s+(.+?)\s+attack\b/i.exec(text ?? "")?.[1]?.toLowerCase();
+  if ( !said ) return null;
+  return attackNames.find(n => n.toLowerCase() === said) ?? attackNames.find(n => said.includes(n.toLowerCase()) || n.toLowerCase().includes(said)) ?? null;
+}
+
+const legendaryLabel = () => {
+  const key = "DND5E.LegendaryResistance.Label";
+  const text = globalThis.game?.i18n?.localize?.(key);
+  return text && text !== key ? text : "Legendary Resistance";
+};
+
+/** "Recharge 5–6": the use comes back on a d6 at or over the formula, at the start of the creature's turn. */
+export function rechargeOf(uses) {
+  const recovery = (uses?.recovery ?? []).find(r => r.period === "recharge");
+  if ( !recovery ) return {};
+  const on = parseInt(recovery.formula ?? "6");
+  return { recharge: { on: Number.isFinite(on) ? Math.min(6, Math.max(2, on)) : 6, die: 6 } };
+}
+
 /** dnd5e statuses -> engine conditions (the engine's own: prone, immobilized, incapacitated). */
 const STATUS_CONDITIONS = {
   prone: { prone: 1 },
@@ -195,6 +227,11 @@ export class Dnd5eAdapter extends SystemAdapter {
     for ( const a of actions ) delete a.pool;
     // (Heroic) Inspiration: a reroll, spent to keep someone from dying.
     if ( actor.type === "character" && sys.attributes?.inspiration ) resources.fate = 1;
+    // Legendary Resistance: a failed save it simply makes, so many times a day; legendary actions, so many a round.
+    const legres = sys.resources?.legres ?? {};
+    const resistLeft = Math.max(0, Number(legres.value ?? ((Number(legres.max) || 0) - (Number(legres.spent) || 0))) || 0);
+    if ( Number(legres.max) > 0 ) resources.legres = resistLeft;
+    const legendaryPool = Number(sys.resources?.legact?.max) || 0;
 
     const derived = this.deriveTraits(actor);
     const skill = key => sys.skills?.[key];
@@ -222,6 +259,8 @@ export class Dnd5eAdapter extends SystemAdapter {
       resourceNames: Object.keys(hits.names).length ? hits.names : undefined,
       riders: hits.riders.length ? hits.riders : undefined,
       reactions: this.#reactions(actor, level, resources) ?? undefined,
+      legendary: legendaryPool && actions.some(a => a.legendary) ? { pool: legendaryPool } : undefined,
+      standFirm: Number(legres.max) > 0 ? { pool: "legres", label: legendaryLabel() } : undefined,
       traits: Object.fromEntries(Object.entries(derived.traits).map(([k, v]) => [k, { base: v, fudge: 0 }])),
       traitReasons: derived.reasons,
       flags: { ...derived.flags },
@@ -361,6 +400,8 @@ export class Dnd5eAdapter extends SystemAdapter {
 
   async #actions(actor, level, features, hits = { riders: [], pools: {}, names: {} }) {
     const out = [];
+    const legendaryItems = [];
+    const legendaryDone = new Set();
     for ( const item of actor.items ) {
       // What rides on a hit (smites, Stunning Strike, maneuvers) isn't an action of its own.
       const onHit = this.#onHit(actor, item);
@@ -376,6 +417,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       if ( item.type === "consumable" && IDLE_CONSUMABLES.has(item.system.type?.value) ) continue;
       const riders = [];
       const mine = [];
+      if ( (item.system.activities ?? []).some?.(a => a.activation?.type === "legendary") ) legendaryItems.push(item);
       for ( const activity of item.system.activities ?? [] ) {
         if ( activity.type === "summon" ) {
           const called = await this.#summonFrom(actor, item, activity);
@@ -390,6 +432,16 @@ export class Dnd5eAdapter extends SystemAdapter {
       // One mark per spell: "Move Mark" and "Curse New Creature" are the same spell moving on.
       const marks = mine.filter(a => a.outcome?.mark);
       out.push(...mine.filter(a => !a.outcome?.mark || a === marks[0]));
+      if ( mine.length ) legendaryDone.add(item.id);
+    }
+    // A legendary action that only says which of its attacks it makes ("The dragon makes a tail attack"): that attack,
+    // at the legendary action's cost.
+    for ( const item of legendaryItems ) {
+      if ( legendaryDone.has(item.id) ) continue;
+      const activity = (item.system.activities ?? []).find?.(a => a.activation?.type === "legendary");
+      const named = legendaryAttack(plainText(item.system.description?.value, actor), out.filter(a => a.kind === "strike" && !a.legendary).map(a => a.name));
+      const base = named && out.find(a => a.name === named && !a.legendary);
+      if ( base ) out.push({ ...base, id: `${actor.id}.${item.id}.legendary`, name: item.name, legendary: legendaryCost(activity, item), uses: undefined, resource: undefined, recharge: undefined });
     }
     // Anyone can Dodge (attacks against it have disadvantage until its next turn); characters and humanoids can Shove
     // a foe prone (a Strength or Dexterity save against 8 + Strength + proficiency).
@@ -431,7 +483,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     if ( multi ) {
       // Its everyday attacks, best first (limited uses such as a breath weapon aren't part of a Multiattack).
       const mean = a => (a.damage ?? []).reduce((s, p) => s + p.flat + p.dice.reduce((t, d) => t + d.n * (d.faces + 1) / 2, 0), 0);
-      const strikes = out.filter(a => ["strike", "spell-attack", "save"].includes(a.kind) && a.economy !== "bonus" && a.uses === undefined && !a.resource)
+      const strikes = out.filter(a => ["strike", "spell-attack", "save"].includes(a.kind) && a.economy !== "bonus" && a.uses === undefined && !a.resource && !a.legendary)
         .sort((a, b) => ((b.bonus ?? 0) + mean(b)) - ((a.bonus ?? 0) + mean(a)));
       const options = parseMultiattackOptions(plainText(multi.system.description?.value, actor), strikes.map(s => ({ name: s.name, melee: !!s.melee })))
         .filter(names => names.length > 1);
@@ -898,7 +950,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     }
     const max = Number(s.uses?.max) || 0;
     if ( item.type === "consumable" ) return { resource: `item:${item.id}`, pool: Math.max(0, Number(s.quantity ?? 1)) * Math.max(1, max ? max - (s.uses?.spent ?? 0) : 1) };
-    if ( max ) return { uses: Math.max(0, max - (s.uses?.spent ?? 0)) };
+    if ( max ) return { uses: Math.max(0, max - (s.uses?.spent ?? 0)), ...rechargeOf(s.uses) };
     return {};
   }
 
@@ -921,7 +973,9 @@ export class Dnd5eAdapter extends SystemAdapter {
   #fromActivity(actor, item, activity) {
     if ( activity.type === "save" && (item.system.activities?.contents ?? []).some(a => a.type === "attack") ) return this.#saveRider(actor, item, activity);
     const activation = activity.activation?.type ?? "action";
-    if ( !["action", "bonus"].includes(activation) ) return null;
+    if ( !["action", "bonus", "legendary"].includes(activation) ) return null;
+    // A legendary action: taken between other creatures' turns, for what it costs from the pool.
+    const legendary = activation === "legendary" ? legendaryCost(activity, item) : undefined;
     const economy = activation === "bonus" ? "bonus" : undefined;
     // The activity's own range (dnd5e 4+), else the item's; a cone or line from yourself reaches as far as it is long.
     const range = item.system.range ?? {};
@@ -937,7 +991,8 @@ export class Dnd5eAdapter extends SystemAdapter {
     const concentration = !!(item.system.properties?.has?.("concentration") || item.system.duration?.concentration) || undefined;
     const base = {
       id: `${actor.id}.${item.id}.${activity.id}`, name: several && activity.name && activity.name !== item.name ? `${item.name}: ${activity.name}` : item.name,
-      cost: 1, economy, itemId: item.id, traits: [], rank: item.type === "spell" ? item.system.level : undefined, concentration, ...this.#resource(actor, item)
+      cost: 1, economy, itemId: item.id, traits: [], rank: item.type === "spell" ? item.system.level : undefined, concentration, ...this.#resource(actor, item),
+      legendary
     };
     const reachOf = () => inFeet(range.reach, range.units) || 5;
     const casterLevel = actor.type === "character" ? (actor.system.details?.level ?? 1) : (actor.system.attributes?.spell?.level ?? actor.system.details?.spellLevel ?? 1);
