@@ -17,6 +17,8 @@ import { t, skillName, coin, englishName, englishDescription } from "./words.js"
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 const MODES = ["walk", "fly", "swim", "climb", "burrow"];
 const PHYSICAL = new Set(["weapon", "equipment", "consumable", "tool", "loot"]);
+/** The item properties that say what a thing is made of (adamantine, silvered). */
+const MATERIALS = ["ada", "sil"];
 
 /** Creature sizes, smallest first (dnd5e and PF2e use the same keys). */
 const SIZES = ["tiny", "sm", "med", "lg", "huge", "grg"];
@@ -450,7 +452,13 @@ export class Dnd5eAdapter extends SystemAdapter {
     const wielded = [];
     for ( const item of actor.items ) {
       if ( !PHYSICAL.has(item.type) || !(Number(item.system.quantity ?? 1) > 0) || item.type === "container" ) continue;
-      const entry = { id: item.id, name: item.name, value: copperValue(item.system.price) };
+      // (What kind of thing it is, of what, how rare: for a character asking for something of a kind, itemCatalog.)
+      const props = item.system.properties;
+      const has = p => (props instanceof Set ? props.has(p) : Array.isArray(props) ? props.includes(p) : !!props?.[p]);
+      const entry = {
+        id: item.id, name: item.name, value: copperValue(item.system.price),
+        category: item.type, material: MATERIALS.find(has) ?? "", rarity: item.system.rarity ?? ""
+      };
       if ( !item.system.equipped ) stowed.push(entry);
       else if ( item.type === "weapon" || item.system.type?.value === "shield" ) wielded.push(entry);
     }
@@ -1334,6 +1342,19 @@ export class Dnd5eAdapter extends SystemAdapter {
 
   detectLeaders(specs) {
     return rankLeaders(specs.map(s => s.leadership).filter(Boolean));
+  }
+
+  /**
+   * The kinds of thing a character can ask for in a standoff: dnd5e's physical item types, the materials its item
+   * properties name, and its rarities, in its own words.
+   */
+  itemCatalog() {
+    const label = v => game.i18n.localize(typeof v === "string" ? v : v?.label ?? "");
+    return {
+      categories: [...PHYSICAL].filter(k => CONFIG.Item.typeLabels?.[k]).map(key => ({ key, label: label(CONFIG.Item.typeLabels[key]) })),
+      materials: MATERIALS.filter(k => CONFIG.DND5E?.itemProperties?.[k]).map(key => ({ key, label: label(CONFIG.DND5E.itemProperties[key]) })),
+      rarities: Object.entries(CONFIG.DND5E?.itemRarity ?? {}).map(([key, v]) => ({ key, label: label(v) }))
+    };
   }
 
   /** The dnd5e system's own words for armor class and hit points (in the client's language). */

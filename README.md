@@ -106,7 +106,9 @@ It also:
 - hides fleeing NPCs (PCs who retreat stay on the map);
 - marks the surrendered;
 - switches the disposition of creatures who change sides (won over: their new side; talked out of the fight: Neutral; a neutral that turned on the party: Hostile);
-- hands coins or items over when someone is talked into giving them up or has them stolen.
+- hands coins or items over when someone is talked into giving them up, strikes a deal, or has them stolen.
+
+For bargaining in a standoff, a character can ask for something of a kind: dnd5e's item types, the materials its item properties name (adamantine, silvered) and its rarities, in its own words.
 
 Undo reverses all of it.
 
