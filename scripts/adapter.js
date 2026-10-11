@@ -10,6 +10,7 @@ import { rankLeaders } from "./leadership.js";
 import { commitDnd5eOutcome, describeDnd5eOutcome, commitDnd5eConcession } from "./commit.js";
 import { modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "./effects.js";
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
+import { edgeActions, studyCheck } from "./edges.js";
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 const MODES = ["walk", "fly", "swim", "climb", "burrow"];
@@ -328,6 +329,9 @@ export class Dnd5eAdapter extends SystemAdapter {
         pick: sys.tools?.thief && (actor.type !== "character" || actor.items.some(i => i.type === "tool" && i.system.type?.baseItem === "thief"))
           ? { mod: sys.tools.thief.total ?? sys.tools.thief.mod ?? 0 } : null
       },
+      // Sizing a foe up (a Lore-Collector): the Study action, with its best knowledge skill (2024: Arcana, History,
+      // Investigation, Nature, Religion).
+      sizeUp: isMindless(sys.abilities?.int?.value, creature) ? undefined : studyCheck(sys),
       creatureTraits: [creature],
       // What kind of creature (the planner groups neutrals by it): its type, narrowed by a subtype (humanoid (goblinoid)).
       creatureKind: [creature, String(sys.details?.type?.subtype ?? "").trim().toLowerCase()].filter(Boolean).join(":") || null,
@@ -493,6 +497,8 @@ export class Dnd5eAdapter extends SystemAdapter {
     // Anyone can Dodge (attacks against it have disadvantage until its next turn); characters and humanoids can Shove
     // a foe prone (a Strength or Dexterity save against 8 + Strength + proficiency).
     out.push({ id: `${actor.id}.dodge`, name: "Dodge", kind: "buff", targets: "self", cost: 1, traits: [], tell: "dodge", outcome: { mods: { defAdv: -1 }, rounds: 1, label: "dodging" } });
+    // Help, and Insight before talking (edges.js).
+    out.push(...edgeActions({ id: actor.id, sys: actor.system, mindless: isMindless(actor.system.abilities?.int?.value, String(actor.system.details?.type?.value ?? "").toLowerCase()) }));
     // Reckless Attack (barbarians): advantage on its attacks, and against it, until its next turn; no action at all.
     const reckless = featureItem(actor, "reckless-attack", "reckless attack");
     if ( reckless ) out.push({ id: `${actor.id}.reckless`, name: reckless.name, kind: "buff", targets: "self", economy: "free", oncePerTurn: true, traits: [], itemId: reckless.id, tell: "reckless",
@@ -1062,6 +1068,8 @@ export class Dnd5eAdapter extends SystemAdapter {
     return {
       iwr: fx.iwr ?? undefined,
       conditions: fx.conditions ?? undefined, mods: fx.mods ?? undefined, tempHp: fx.tempHp || undefined, rounds: fx.rounds, label: fx.label,
+      // Good for one roll (Guidance, Bardic Inspiration), against whoever it's set on (True Strike).
+      uses: fx.words?.uses || undefined, vsFocus: fx.words?.vsFocus || undefined,
       repeatSave: fx.words?.repeatSave && save ? { type: save.type, dc: save.dc } : undefined,
       endsOnHarm: fx.words?.endsOnHarm || undefined
     };
@@ -1084,7 +1092,13 @@ export class Dnd5eAdapter extends SystemAdapter {
     if ( !outcome && !mark?.length ) return null;
     if ( temp ) outcome.tempHp = temp;
     const affects = String(activity.target?.affects?.type ?? item.system.target?.affects?.type ?? "").toLowerCase();
-    const self = units === "self" || affects === "self";
+    const self = units === "self" || affects === "self" || !!fx?.words?.self;
+    // Bardic Inspiration's die: the bard's own (d8 at 5th level, d10 at 10th, d12 at 15th).
+    if ( fx?.words?.inspiration && outcome?.mods ) {
+      const scale = item.actor?.system?.scale?.bard?.["bardic-inspiration"];
+      const faces = Number(scale?.faces) || Number(/d(\d+)/.exec(String(scale?.die ?? scale?.formula ?? scale ?? ""))?.[1]) || 6;
+      for ( const k of ["attackDie", "checkDie", "saveDie"] ) if ( outcome.mods[k] ) outcome.mods[k] = faces;
+    }
     const reach = units === "touch" ? { reach: 5 } : rangeFeet && !self ? { range: { increment: rangeFeet, max: rangeFeet, noPenalty: true } } : {};
     // (The spell's own effects, to leave on a creature still under them when the fight ends.)
     if ( fx?.refs?.length ) base.effectRef = { uuid: item.uuid, ids: fx.refs };
@@ -1102,7 +1116,8 @@ export class Dnd5eAdapter extends SystemAdapter {
     if ( !control ) return [];
     const out = [];
     if ( control.grab ) out.push({ kind: "grabbed" });
-    if ( control.conditions || control.mods ) out.push({ kind: "condition", conditions: control.conditions ?? undefined, mods: control.mods ?? undefined, rounds: control.rounds, label: control.label, critOnly: false });
+    // (Guiding Bolt: the next attack at it, from anyone, has advantage.)
+    if ( control.conditions || control.mods ) out.push({ kind: "condition", conditions: control.conditions ?? undefined, mods: control.mods ?? undefined, rounds: control.rounds, label: control.label, critOnly: false, uses: control.words?.uses || undefined });
     return out;
   }
 
@@ -1173,7 +1188,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       if ( !damage.length ) return null;
       const melee = activity.attack?.type?.value !== "ranged";
       const bonus = numberOf(activity.labels?.modifier) ?? numberOf(activity.labels?.toHit) ?? 0;
-      const riders = this.#riders(this.#effects(item, activity));
+      const riders = this.#riders(this.#effects(item, activity, { words: item.type === "spell" }));
       const attack = {
         ...base, kind: item.type === "spell" ? "spell-attack" : "strike", weapon: item.type === "weapon", bonus, melee,
         reach: melee ? reachOf() : undefined,

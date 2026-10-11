@@ -69,14 +69,29 @@ export function modsFromChanges(changes) {
   return { mods, tempHp, iwr: Object.keys(iwr.resist).length || iwr.immune.length ? iwr : null };
 }
 
-/** Words that say what the changes can't. Each: [pattern, what it adds]. */
+/**
+ * Words that say what the changes can't. Each: [pattern, what it adds]. `uses`: good for that many rolls (the next
+ * attack, one ability check); `vsFocus`: only against whoever its bearer is set on; `self`: it's the caster's own.
+ */
 const WORDED = [
+  // Guiding Bolt: "the next attack roll made against this target before the end of your next turn has Advantage"
+  [/next attack roll (?:made )?against (?:this|the|that) (?:target|creature)[^.]*?\bhas advantage/i, { mods: { defAdv: 1 }, uses: 1, rounds: 1 }],
+  // True Strike (2014): "you gain advantage on your first attack roll against the target"
+  [/advantage on your first attack roll against the target/i, { mods: { adv: 1 }, uses: 1, vsFocus: true, self: true, rounds: 2 }],
+  // Steady Aim: "you give yourself advantage on your next attack roll on the current turn"
+  [/advantage on your next attack roll/i, { mods: { adv: 1 }, uses: 1, self: true, rounds: 1 }],
+  // Guidance (2014): "roll a d4 and add the number rolled to one ability check of its choice"
+  [/roll a d4 and add the number rolled to one ability check/i, { mods: { checkDie: 4 }, uses: 1 }],
+  // Guidance (2024): "adds 1d4 to any ability check using the chosen skill"
+  [/adds? (?:1d4|a d4) to (?:any|an) ability check/i, { mods: { checkDie: 4 } }],
+  // Enhance Ability: "Advantage on ... checks" with the chosen ability (Eagle's Splendor: talking)
+  [/(?:has|have) advantage on (?:charisma|wisdom|strength|dexterity|intelligence|constitution) checks/i, { mods: { checkAdv: 1 } }],
   // Faerie Fire: "Attack rolls against an affected creature or object have Advantage"
   [/attack rolls against (?:an |the |that |each )?(?:affected )?(?:creature|target|it)\b[^.]*?\bhave advantage/i, { mods: { defAdv: 1 } }],
   // Blur: "any creature has Disadvantage on attack rolls against you"
   [/disadvantage on attack rolls against (?:you|it|the target|that creature)/i, { mods: { defAdv: -1 } }],
   // Vicious Mockery: "Disadvantage on the next attack roll it makes"
-  [/disadvantage on the next attack roll/i, { mods: { adv: -1 }, rounds: 1 }],
+  [/disadvantage on the next attack roll/i, { mods: { adv: -1 }, rounds: 1, uses: 1 }],
   // Haste: "it gains an additional action on each of its turns"
   [/gains? an additional action/i, { mods: { actions: 1 } }],
   // Slow: "it can take either an action or a Bonus Action, not both"
@@ -89,8 +104,8 @@ const WORDED = [
   [/illusory duplicates of yourself/i, { mods: { defAdv: -1 } }],
   // A duel it's compelled into: disadvantage against anyone but the caster
   [/disadvantage on attack rolls against creatures other than you/i, { mods: { adv: -1 } }],
-  // Bardic Inspiration: a die to add to one roll, once (about a point on its rolls while it lasts)
-  [/add the number rolled to (?:the d20|one ability check, attack roll, or saving throw)/i, { mods: { attack: 1, saves: 1 } }],
+  // Bardic Inspiration: a die (a d6 unless the bard's scale says more) to add to one roll, once
+  [/add the number rolled to (?:the d20|one ability check, attack roll, or saving throw)/i, { mods: { attackDie: 6, checkDie: 6, saveDie: 6 }, uses: 1, inspiration: true }],
   // Confusion: it mostly does nothing useful (a d10 each turn decides)
   [/roll (?:a |1)d10 at the start of each of its turns to determine its behavior|roll (?:from|on) the [\w\s]{1,30}table at the start of each of its turns to determine its behavior/i, { conditions: { incapacitated: 1 } }]
 ];
@@ -108,6 +123,7 @@ export function fromWords(text, has = {}) {
     for ( const [k, v] of Object.entries(add.mods ?? {}) ) if ( has[k] === undefined ) out.mods[k] = v;
     Object.assign(out.conditions, add.conditions ?? {});
     if ( add.rounds ) out.rounds = add.rounds;
+    for ( const k of ["uses", "vsFocus", "self", "inspiration"] ) if ( add[k] ) out[k] = add[k];
   }
   out.repeatSave = /repeats? the sav|repeat the saving throw|makes? (?:another|a new) [^.]{0,60}saving throw/i.test(t);
   out.endsOnHarm = /(?:if|until) you or (?:any of )?your (?:allies|companions) (?:do anything harmful to|damage|harm)/i.test(t);
