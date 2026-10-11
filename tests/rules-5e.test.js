@@ -4,7 +4,7 @@ import { parseMultiattackOptions } from "../scripts/multiattack.js";
 
 /** The first (most likely) way to make a Multiattack. */
 const parseMultiattack = (description, strikes) => parseMultiattackOptions(description, strikes)[0] ?? null;
-import { payFrom } from "../scripts/commit.js";
+import { payFrom, sideChange } from "../scripts/commit.js";
 import { deriveDnd5eTraits } from "../scripts/traits.js";
 import { degreeDistribution } from "../scripts/core.js";
 
@@ -207,5 +207,17 @@ describe("features by identifier", () => {
     const [captain] = rankLeaders([{ id: "c", level: 1, skills: { persuasion: 0, intimidation: 0 }, features: [{ key: "rallying-cry", name: "Cri de ralliement" }] }]);
     expect(captain.reason).toMatch(/Cri de ralliement/);
     expect(captain.score).toBe(wolf.score + 3);
+  });
+});
+
+describe("Make it So: whose side a token ends up on", () => {
+  test("won over, talked out of the fight, or a neutral that turned on the party", () => {
+    expect(sideChange({ swayed: "switched", side: "friendly", status: "standing" })).toBe("friendly");
+    expect(sideChange({ swayed: "neutral", side: "neutralParty", status: "standing", against: [] })).toBe("neutral");
+    expect(sideChange({ swayed: null, side: "neutralParty", status: "standing", against: ["friendly"] })).toBe("hostile");
+    // A neutral that only fought the enemy, or never took a side, stays as it was.
+    expect(sideChange({ swayed: null, side: "neutralParty", status: "standing", against: ["hostile"] })).toBeNull();
+    expect(sideChange({ swayed: "neutral", side: "neutralParty", status: "dead", against: [] })).toBeNull();
+    expect(sideChange({ swayed: null, side: "hostile", status: "down" })).toBeNull();
   });
 });

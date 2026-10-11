@@ -95,7 +95,7 @@ Make it So writes the outcome back to each token:
 It also:
 - hides fleeing NPCs (PCs who retreat stay on the map);
 - marks the surrendered;
-- switches the disposition of creatures who change sides;
+- switches the disposition of creatures who change sides (won over: their new side; talked out of the fight: Neutral; a neutral that turned on the party: Hostile);
 - hands coins or items over when someone is talked into giving them up or has them stolen.
 
 Undo reverses all of it.
