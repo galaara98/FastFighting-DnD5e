@@ -173,6 +173,16 @@ export function projectileCount(description, level) {
 }
 
 /**
+ * How many more darts, rays or beams a spell makes for each slot level above its own (Magic Missile, Scorching Ray:
+ * "one more dart for each spell slot level above 1"): 0 when it doesn't say.
+ */
+export function moreProjectilesPerLevel(description) {
+  const text = String(description ?? "").replace(/<[^>]+>/g, " ");
+  const m = new RegExp(`\\b(one|an?|two)\\s+(?:more|additional|extra)\\s+(?:${PROJECTILES})\\s+for\\s+each\\s+(?:spell\\s+)?slot\\s+level\\s+above`, "i").exec(text);
+  return m ? (/two/i.test(m[1]) ? 2 : 1) : 0;
+}
+
+/**
  * The words of an HTML description, with dnd5e's enrichers read: [[/item .id]]{label} (or the item's own name),
  * [[lookup @name]]{label}, @UUID[...]{label}.
  */
@@ -463,10 +473,12 @@ export class Dnd5eAdapter extends SystemAdapter {
         if ( action?.riderFor ) riders.push(action.rider);
         else if ( action ) mine.push(action);
       }
+      if ( item.type === "spell" ) mine.splice(0, mine.length, ...this.#atSlotLevels(actor, item, mine));
       for ( const a of mine ) if ( riders.length && a.kind !== "heal" && a.kind !== "buff" ) a.effects = [...(a.effects ?? []), ...riders];
       // One mark per spell: "Move Mark" and "Curse New Creature" are the same spell moving on.
       const marks = mine.filter(a => a.outcome?.mark);
-      out.push(...mine.filter(a => !a.outcome?.mark || a === marks[0]));
+      const first = marks[0] ? String(marks[0].id).split("@")[0] : null;
+      out.push(...mine.filter(a => !a.outcome?.mark || String(a.id).split("@")[0] === first));
       if ( mine.length ) legendaryDone.add(item.id);
     }
     // A legendary action that only says which of its attacks it makes ("The dragon makes a tail attack"): that attack,
@@ -506,7 +518,8 @@ export class Dnd5eAdapter extends SystemAdapter {
     if ( actor.type === "character" ) {
       const extra = hasFeature(features, "three-extra-attacks", "three extra attacks") ? 4
         : hasFeature(features, "two-extra-attacks", "two extra attacks") || features.some(f => f.includes("extra attack (2)")) ? 3
-          : hasFeature(features, "extra-attack", "extra attack") ? 2 : 1;
+          // (A warlock's Thirsting Blade: the same, with its pact weapon. Extra Attack from two classes doesn't add up.)
+          : hasFeature(features, "extra-attack", "extra attack") || hasFeature(features, "thirsting-blade", "thirsting blade") ? 2 : 1;
       if ( extra > 1 ) {
         for ( const a of out.filter(x => x.kind === "strike" && x.weapon && x.economy !== "bonus") ) {
           out.push({ ...a, id: `${a.id}.extra`, name: `${a.name} ×${extra}`, sequence: Array.from({ length: extra }, (_, i) => ({ ...a, id: `${a.id}.${i}` })) });
@@ -811,6 +824,54 @@ export class Dnd5eAdapter extends SystemAdapter {
       };
     }
     return null;
+  }
+
+  /**
+   * A spell cast from a slot can be cast from a higher one too, and (the multiclassing rules) from a warlock's pact slot,
+   * as a warlock's spell can from the others' slots: one entry per slot it could use, lowest first so it spends the
+   * cheapest it has, a higher slot adding its damage for each level up. A spell that doesn't grow gets only the
+   * cheapest higher slot (and the pact slot), for when its own level runs out.
+   */
+  #atSlotLevels(actor, item, actions) {
+    const base = Number(item.system.level) || 0;
+    if ( !base ) return actions;
+    const sp = actor.system.spells ?? {};
+    const slots = [];
+    for ( let l = base; l <= 9; l++ ) if ( Number(sp[`spell${l}`]?.max) > 0 ) slots.push({ key: `slots:${l}`, level: l, pool: Number(sp[`spell${l}`].value) || 0 });
+    const pactLevel = Number(sp.pact?.level) || 0;
+    if ( Number(sp.pact?.max) > 0 && pactLevel >= base ) slots.push({ key: "pact", level: pactLevel, pool: Number(sp.pact.value) || 0 });
+    if ( slots.length <= 1 ) return actions;
+    const out = [];
+    for ( const a of actions ) {
+      if ( a.resource !== `slots:${base}` && a.resource !== "pact" ) {
+        out.push(a);
+        continue;
+      }
+      const activity = item.system.activities?.get?.(String(a.id).split(".").at(-1));
+      const per = activity ? this.#perLevel(activity) : [];
+      // (Darts and rays: one more for each level up. Magic Missile's darts are all in its damage; a ray is an attack.)
+      const shots = moreProjectilesPerLevel(item.system.description?.value);
+      const darts = a.sequence?.length || projectileCount(item.system.description?.value, 1);
+      const grows = (per.length > 0 || shots > 0) && a.damage?.length;
+      const used = new Set();
+      for ( const s of slots ) {
+        const higher = s.level > base;
+        // (Without growth, one higher slot is enough: the cheapest.)
+        if ( higher && !grows && s.key !== "pact" && [...used].some(k => k !== `slots:${base}` && k !== "pact") ) continue;
+        used.add(s.key);
+        const up = s.level - base;
+        const more = grows && up > 0 ? per.map(p => ({ ...p, dice: p.dice.map(d => ({ ...d, n: d.n * up })), flat: p.flat * up })) : [];
+        const entry = { ...a, id: s.key === a.resource ? a.id : `${a.id}@${s.key}`, resource: s.key, pool: s.pool, rank: s.level,
+          ...(more.length ? { damage: [...a.damage, ...more] } : {}) };
+        if ( shots && up > 0 ) {
+          const extra = shots * up;
+          if ( a.sequence?.length ) entry.sequence = [...a.sequence, ...Array.from({ length: extra }, (_, i) => ({ ...a.sequence[0], id: `${entry.id}.more${i}` }))];
+          else if ( darts > 0 ) entry.damage = entry.damage.map(p => ({ ...p, dice: p.dice.map(d => ({ ...d, n: Math.round(d.n * (darts + extra) / darts) })), flat: Math.round(p.flat * (darts + extra) / darts) }));
+        }
+        out.push(entry);
+      }
+    }
+    return out;
   }
 
   /** Dice a damage activity adds for each spell slot level above its own. */

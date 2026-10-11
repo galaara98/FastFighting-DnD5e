@@ -268,3 +268,12 @@ describe("mending", () => {
       .toEqual({ save: "con", base: 5, except: ["radiant"], notOnCrit: true, label: "Undead Fortitude" });
   });
 });
+
+describe("upcasting", () => {
+  test("more darts or rays for each slot level above the spell's own", async () => {
+    const { moreProjectilesPerLevel } = await import("../scripts/adapter.js");
+    expect(moreProjectilesPerLevel("<p><strong>Using a Higher-Level Spell Slot.</strong> The spell creates one more dart for each spell slot level above 1.</p>")).toBe(1);
+    expect(moreProjectilesPerLevel("When you cast this spell using a spell slot of 3rd level or higher, you create one additional ray for each slot level above 2nd.")).toBe(1);
+    expect(moreProjectilesPerLevel("The damage increases by 1d6 for each spell slot level above 1.")).toBe(0);
+  });
+});
