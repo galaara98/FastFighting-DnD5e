@@ -78,7 +78,6 @@ async function setStatus(actor, id, active, undo, { overlay = false } = {}) {
 export async function commitDnd5eOutcome(tokenDoc, spec, final, options = {}) {
   const actor = tokenDoc.actor;
   const undo = emptyRecord(tokenDoc, actor);
-  const sys = actor.system;
   const update = {};
   const set = (path, value) => {
     const before = foundry.utils.getProperty(actor, path);

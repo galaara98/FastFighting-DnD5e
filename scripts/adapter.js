@@ -1344,12 +1344,11 @@ export class Dnd5eAdapter extends SystemAdapter {
    */
   difficultyCrossCheck(friendly, hostile) {
     const pcs = friendly.filter(s => s.kind === "pc");
-    const foes = hostile.filter(h => h.kind !== "hazard");
     const table = CONFIG.DND5E?.ENCOUNTER_DIFFICULTY;
-    if ( !pcs.length || !foes.length || !table?.length ) return null;
+    if ( !pcs.length || !hostile.length || !table?.length ) return null;
     const budget = [0, 0, 0];
     for ( const pc of pcs ) (table[Math.min(table.length - 1, Math.max(1, Math.round(pc.level ?? 1)))] ?? []).forEach((v, i) => { budget[i] += v; });
-    const xp = foes.reduce((s, h) => s + (h.xp ?? 0), 0);
+    const xp = hostile.reduce((s, h) => s + (h.xp ?? 0), 0);
     const [low, moderate, high] = budget;
     const [label, key] = xp >= high * 2 ? ["extreme", "BeyondHigh"] : xp >= high ? ["severe", "High"] : xp >= moderate ? ["moderate", "Moderate"]
       : xp >= low ? ["low", "Low"] : ["trivial", "BelowLow"];
