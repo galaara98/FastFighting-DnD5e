@@ -20,6 +20,48 @@
         "Name": "Lore-Collector advantage",
         "Hint": "How much likelier a Lore-Collector's rolls against a foe it has sized up are to succeed, through its next turn, after spending its action on the Study action (when the check worked; never without it). 1.25× is a nudge, 3× a sure thing more often than not. Default 2.5×: Study takes the whole turn, and works only a little over half the time. Ordinary attacks already hit often, and the dice stop a roll near 95%, so above about 1.75× little changes for them; the rest helps long-shot rolls (a hard AC, a hard talk)."
       }
+    },
+    "Passive": "passive {skill}",
+    "Dodge": "Dodge",
+    "Dodging": "dodging",
+    "Reckless": "reckless",
+    "Surging": "surging",
+    "KnockedProne": "knocked prone",
+    "Shove": "Shove",
+    "OffHand": "{name} (off hand)",
+    "MartialArts": "{name} (Martial Arts)",
+    "Flurry": "Flurry of Blows",
+    "Bolstered": "bolstered",
+    "LegendaryResistance": "Legendary Resistance",
+    "Help": "Help",
+    "Helped": "helped",
+    "SeesThrough": "sees through them",
+    "Study": "Study",
+    "VsFiends": "{name} (fiend or undead)",
+    "Disengage": "takes the Disengage action",
+    "DeathSaves": "Unconscious, death saves {s} ✓ {f} ✗",
+    "Death": {
+      "Twenty": "rolls a 20 on a death save and comes to with 1 HP",
+      "Dies": "fails a third death save and dies",
+      "Stable": "succeeds on a third death save and stabilizes (unconscious)",
+      "Success": "death save success ({s} ✓, {f} ✗)",
+      "Failure": "death save failure ({s} ✓, {f} ✗)"
+    },
+    "Reason": {
+      "Pc": "Player character",
+      "Int": "Intelligence {n}",
+      "Beast": "Beast",
+      "BarelyThinks": "Barely thinks",
+      "Pack": "; hunts as a pack",
+      "WisSave": "Wisdom save",
+      "NeverFlees": "Mindless: never flees",
+      "Construct": "Construct",
+      "BeastFlees": "Beast: flees when hurt",
+      "Typical": "Typical",
+      "Fiend": "Fiend",
+      "Celestial": "Celestial",
+      "Master": "Serves a master",
+      "BoundToObey": "Bound to obey"
     }
   }
 }

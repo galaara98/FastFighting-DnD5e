@@ -1,0 +1,67 @@
+{
+  "FFDND5E": {
+    "NeedsCore": "FastFighting D&D 5e necesita el módulo FastFighting Core. Instálalo y actívalo.",
+    "CoreTooOld": "FastFighting D&D 5e necesita una versión más reciente de FastFighting Core. Actualiza FastFighting Core en Módulos complementarios.",
+    "SpellSlot": "Espacio de conjuro de nivel {level}",
+    "PactSlot": "Espacio de pacto",
+    "Surrendered": "Rendido",
+    "SurrenderedHint": "Depuso las armas durante una batalla de FastFighting y está a merced de los vencedores.",
+    "Difficulty": {
+      "BelowLow": "Por debajo de baja",
+      "Low": "Baja",
+      "Moderate": "Moderada",
+      "High": "Alta",
+      "BeyondHigh": "Por encima de alta"
+    },
+    "HeroicInspiration": "Inspiración heroica",
+    "Inspiration": "Inspiración",
+    "Settings": {
+      "loreBoost": {
+        "Name": "Ventaja del Coleccionista de saber",
+        "Hint": "Cuánto más probable es que las tiradas de un Coleccionista de saber contra un enemigo que ha estudiado tengan éxito, hasta su siguiente turno, tras gastar su acción en la acción Estudiar (cuando la prueba salió bien; nunca sin ella). 1,25× es un empujoncito; 3×, casi siempre un éxito seguro. Por defecto 2,5×: Estudiar ocupa todo el turno y solo funciona algo más de la mitad de las veces. Los ataques normales ya impactan a menudo, y los dados detienen una tirada cerca del 95 %, así que por encima de 1,75× cambia poco para ellos; el resto ayuda a las tiradas difíciles (una CA alta, una conversación complicada)."
+      }
+    },
+    "Passive": "{skill} pasiva",
+    "Dodge": "Esquivar",
+    "Dodging": "esquivando",
+    "Reckless": "temerario",
+    "Surging": "con oleada de acción",
+    "KnockedProne": "derribado",
+    "Shove": "Empujar",
+    "OffHand": "{name} (mano torpe)",
+    "MartialArts": "{name} (Artes marciales)",
+    "Flurry": "Ráfaga de golpes",
+    "Bolstered": "reforzado",
+    "LegendaryResistance": "Resistencia legendaria",
+    "Help": "Ayudar",
+    "Helped": "ayudado",
+    "SeesThrough": "le cala",
+    "Study": "Estudiar",
+    "VsFiends": "{name} (infernal o muerto viviente)",
+    "Disengage": "realiza la acción Destrabarse",
+    "DeathSaves": "Inconsciente, salvaciones contra muerte {s} ✓ {f} ✗",
+    "Death": {
+      "Twenty": "saca un 20 en una salvación contra muerte y vuelve en sí con 1 PG",
+      "Dies": "falla una tercera salvación contra muerte y muere",
+      "Stable": "supera una tercera salvación contra muerte y se estabiliza (inconsciente)",
+      "Success": "salvación contra muerte superada ({s} ✓, {f} ✗)",
+      "Failure": "salvación contra muerte fallada ({s} ✓, {f} ✗)"
+    },
+    "Reason": {
+      "Pc": "Personaje jugador",
+      "Int": "Inteligencia {n}",
+      "Beast": "Bestia",
+      "BarelyThinks": "Apenas piensa",
+      "Pack": "; caza en manada",
+      "WisSave": "Salvación de Sabiduría",
+      "NeverFlees": "Sin mente: nunca huye",
+      "Construct": "Constructo",
+      "BeastFlees": "Bestia: huye cuando está herida",
+      "Typical": "Típico",
+      "Fiend": "Infernal",
+      "Celestial": "Celestial",
+      "Master": "Sirve a un amo",
+      "BoundToObey": "Obligado a obedecer"
+    }
+  }
+}

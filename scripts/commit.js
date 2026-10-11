@@ -5,7 +5,8 @@
  *   { tokenUuid, actorUuid, actorUpdate, itemUpdates: [{id, update}], createdItems: [id], deletedItems: [data],
  *     createdEffects: [id], tokenUpdate, createdActors, createdTokens, deletedTokens, statuses: [{id, active}], combatant }
  */
-import { MODULE_ID, STATUS } from "./core.js";
+import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine } from "./core.js";
+import { t, conditionName } from "./words.js";
 
 /** Engine conditions that are dnd5e statuses worth leaving on a creature after the fight. */
 const LINGERING = { frightened: "frightened", poisoned: "poisoned", blinded: "blinded", restrained: "restrained", paralyzed: "paralyzed", stunned: "stunned", charmed: "charmed", controlled: "charmed", petrified: "petrified" };
@@ -27,34 +28,39 @@ export function sideChange(final) {
   if ( final.against?.includes("friendly") ) return "hostile";
   return final.swayed === "neutral" ? "neutral" : null;
 }
-const SIDE_LINES = { friendly: "Switches sides (now friendly)", hostile: "Turned on the party (now hostile)", neutral: "Stands aside (now neutral)" };
 const DISPOSITIONS = { friendly: "FRIENDLY", hostile: "HOSTILE", neutral: "NEUTRAL" };
 
 /** Human-readable list of what will change, for the confirmation dialog. */
 export function describeDnd5eOutcome(spec, final) {
-  const lines = [];
-  if ( final.hp !== spec.hp.value ) lines.push(`HP ${spec.hp.value} → ${final.hp}`);
-  if ( final.status === STATUS.DEAD ) lines.push(spec.kind === "pc" ? "DIES" : "Dead");
-  else if ( final.status === STATUS.FLED ) lines.push(spec.kind === "pc" ? "Retreated from the battle" : final.swayed ? "Talked into fleeing (token hidden)" : "Fled the battle (token hidden)");
-  else if ( final.status === STATUS.SURRENDERED ) lines.push("Surrenders");
-  else if ( final.status === STATUS.STOOD_DOWN ) lines.push("Stands down (talked out of fighting)");
-  const changed = sideChange(final);
-  if ( changed ) lines.push(final.swayed === "switched" ? `Switches sides (now ${changed})` : SIDE_LINES[changed]);
+  // (Hit points, its fate and a change of side: the core's words.)
+  const lines = commonOutcome(spec, final);
   if ( final.status === STATUS.DOWN ) {
     const s = final.system ?? {};
-    lines.push(final.stable ? "Unconscious (stable)" : `Unconscious, death saves ${s.deathSuccesses ?? 0} ✓ ${s.deathFailures ?? 0} ✗`);
+    lines.push(final.stable ? outcomeLine("Unconscious") : t("DeathSaves", "Unconscious, death saves {s} ✓ {f} ✗", { s: s.deathSuccesses ?? 0, f: s.deathFailures ?? 0 }));
   }
-  for ( const k of Object.keys(final.conditions ?? {}) ) if ( LINGERING[k] && !lines.includes(LINGERING[k]) ) lines.push(LINGERING[k]);
+  for ( const k of Object.keys(final.conditions ?? {}) ) {
+    const name = LINGERING[k] ? conditionName(LINGERING[k]) : null;
+    if ( name && !lines.includes(name) ) lines.push(name);
+  }
   for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
     const used = start - (final.resources?.[key] ?? start);
-    if ( used > 0 ) lines.push(`Uses ${used}× ${key === "fate" ? (spec.fateLabel ?? "Inspiration") : key === "legres" ? (spec.standFirm?.label ?? "Legendary Resistance") : key === "pact" ? "pact slot" : key.startsWith("slots:") ? `level ${key.split(":")[1]} slot` : spec.resourceNames?.[key] ?? spec.actions.find(a => a.resource === key)?.name ?? key}`);
+    if ( used > 0 ) lines.push(outcomeLine("Uses", { n: used, what: resourceLabel(spec, key) }));
   }
   for ( const [id, left] of Object.entries(final.uses ?? {}) ) {
     const a = spec.actions.find(x => x.id === id);
-    if ( a && Number.isFinite(a.uses) && left < a.uses ) lines.push(`Uses ${a.uses - left}× ${a.name}`);
+    if ( a && Number.isFinite(a.uses) && left < a.uses ) lines.push(outcomeLine("Uses", { n: a.uses - left, what: a.name }));
   }
-  for ( const e of final.effects ?? [] ) lines.push(`Still ${e.label || "affected"} (${e.rounds} more round${e.rounds === 1 ? "" : "s"})`);
+  for ( const e of final.effects ?? [] ) lines.push(stillLine(e));
   return lines;
+}
+
+/** What a used-up resource is called. */
+function resourceLabel(spec, key) {
+  if ( key === "fate" ) return spec.fateLabel ?? t("Inspiration", "Inspiration");
+  if ( key === "legres" ) return spec.standFirm?.label ?? t("LegendaryResistance", "Legendary Resistance");
+  if ( key === "pact" ) return t("PactSlot", "Pact slot");
+  if ( key.startsWith("slots:") ) return t("SpellSlot", "Level {level} spell slot", { level: key.split(":")[1] });
+  return spec.resourceNames?.[key] ?? spec.actions.find(a => a.resource === key)?.name ?? key;
 }
 
 async function setStatus(actor, id, active, undo, { overlay = false } = {}) {

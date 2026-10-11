@@ -8,6 +8,7 @@
  * that says it works "when you hit" or "after you hit" counts too, so books nobody has seen yet still work.
  * Pure: plain values in, riders out.
  */
+import { t } from "./words.js";
 
 /** Identifiers of things that ride on a hit. */
 export const ON_HIT = new Set([
@@ -69,7 +70,7 @@ export function ridersFrom(d) {
     else if ( outcome ) rider.outcome = outcome;
     if ( !rider.damage && !rider.save && !rider.outcome ) continue;
     // Against fiends and undead (Divine Smite), a bigger version first: one or the other.
-    if ( extra.length ) out.push({ ...rider, id: `${tag}:vs`, label: `${d.name} (fiend or undead)`, vs: ["fiend", "undead"], damage: versusAll });
+    if ( extra.length ) out.push({ ...rider, id: `${tag}:vs`, label: t("VsFiends", "{name} (fiend or undead)", { name: d.name }), vs: ["fiend", "undead"], damage: versusAll });
     out.push({ ...rider, id: tag });
   }
   return out;

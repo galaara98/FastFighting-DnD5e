@@ -7,6 +7,7 @@
  * three failures kill it, and taking damage while down counts as a failure (two on a critical).
  */
 import { DOWNED_MODELS, STATUS, rollD20, bestReactionStrike } from "./core.js";
+import { t } from "./words.js";
 
 /** Proficiency bonus for a level or challenge rating. */
 export function proficiency(level) {
@@ -75,7 +76,7 @@ export const dnd5eRules = {
     return bestReactionStrike(reactor);
   },
   disengage(u) {
-    return { cost: u.spec.flags?.nimble ? { bonus: 1 } : { action: 1 }, label: "takes the Disengage action" };
+    return { cost: u.spec.flags?.nimble ? { bonus: 1 } : { action: 1 }, label: t("Disengage", "takes the Disengage action") };
   },
   /** A wooden door (AC 15, 18 HP), locked against a DC 15 Strength check or thieves' tools. */
   door: { ac: 15, hp: 18, threshold: 0, forceDC: 15, pickDC: 15 },
@@ -187,23 +188,23 @@ export const dnd5eRules = {
       c.deathFailures = 0;
       c.deathSuccesses = 0;
       c.dying = 0;
-      return "rolls a 20 on a death save and comes to with 1 HP";
+      return t("Death.Twenty", "rolls a 20 on a death save and comes to with 1 HP");
     }
     if ( natural >= 10 ) c.deathSuccesses = (c.deathSuccesses ?? 0) + 1;
     else c.deathFailures = (c.deathFailures ?? 0) + (natural === 1 ? 2 : 1);
     c.dying = c.deathFailures;
     if ( c.deathFailures >= 3 ) {
       c.status = STATUS.DEAD;
-      return "fails a third death save and dies";
+      return t("Death.Dies", "fails a third death save and dies");
     }
     if ( c.deathSuccesses >= 3 ) {
       c.stable = true;
       c.deathSuccesses = 0;
       c.deathFailures = 0;
       c.dying = 0;
-      return "succeeds on a third death save and stabilizes (unconscious)";
+      return t("Death.Stable", "succeeds on a third death save and stabilizes (unconscious)");
     }
-    return `death save ${natural >= 10 ? "success" : "failure"} (${c.deathSuccesses ?? 0} ✓, ${c.deathFailures ?? 0} ✗)`;
+    return t(natural >= 10 ? "Death.Success" : "Death.Failure", natural >= 10 ? "death save success ({s} ✓, {f} ✗)" : "death save failure ({s} ✓, {f} ✗)", { s: c.deathSuccesses ?? 0, f: c.deathFailures ?? 0 });
   },
 
   /** Stabilizing a dying creature: a DC 10 Wisdom (Medicine) check. */
