@@ -309,8 +309,6 @@ export class Dnd5eAdapter extends SystemAdapter {
       img: tokenDoc.texture?.src ?? actor.img,
       kind: actor.type === "character" ? "pc" : "npc",
       level,
-      // What it's worth in an encounter budget (the system works it out from the challenge rating).
-      xp: actor.type === "npc" ? (Number(sys.details?.xp?.value) || CONFIG.DND5E?.CR_EXP_LEVELS?.[Math.max(0, Math.floor(level))] || 0) : 0,
       hp: { value: hp.value ?? 0, max: hp.max ?? 1, temp: hp.temp ?? 0 },
       defenses,
       shield: null, // a 5e shield is already in the AC
@@ -1336,23 +1334,6 @@ export class Dnd5eAdapter extends SystemAdapter {
 
   detectLeaders(specs) {
     return rankLeaders(specs.map(s => s.leadership).filter(Boolean));
-  }
-
-  /**
-   * The system's own encounter budget (dnd5e ships the free rules' XP budget per character: low, moderate, high),
-   * for the party's levels against the foes' XP. Well past high is beyond what the budget plans for.
-   */
-  difficultyCrossCheck(friendly, hostile) {
-    const pcs = friendly.filter(s => s.kind === "pc");
-    const table = CONFIG.DND5E?.ENCOUNTER_DIFFICULTY;
-    if ( !pcs.length || !hostile.length || !table?.length ) return null;
-    const budget = [0, 0, 0];
-    for ( const pc of pcs ) (table[Math.min(table.length - 1, Math.max(1, Math.round(pc.level ?? 1)))] ?? []).forEach((v, i) => { budget[i] += v; });
-    const xp = hostile.reduce((s, h) => s + (h.xp ?? 0), 0);
-    const [low, moderate, high] = budget;
-    const [label, key] = xp >= high * 2 ? ["extreme", "BeyondHigh"] : xp >= high ? ["severe", "High"] : xp >= moderate ? ["moderate", "Moderate"]
-      : xp >= low ? ["low", "Low"] : ["trivial", "BelowLow"];
-    return { label, text: game.i18n.localize(`FFDND5E.Difficulty.${key}`), xp, budgets: budget };
   }
 
   /* -------------------------------------------- */

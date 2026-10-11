@@ -92,7 +92,6 @@ Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 
   - damage while down is a failure, two on a critical;
   - massive damage kills outright;
   - after the fight, allies stabilize the dying with a DC 10 Medicine check or heal them.
-- **Encounter difficulty:** checked against the encounter XP budget the dnd5e system ships (low, moderate, high), against the foes' XP.
 
 ## Make it So
 
