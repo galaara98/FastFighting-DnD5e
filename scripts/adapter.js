@@ -2,17 +2,22 @@
  * D&D Fifth Edition adapter: reads dnd5e actors (through their items' activities) into CombatantSpecs and commits
  * outcomes back. Written against dnd5e 6 on Foundry v14; values are read defensively so older data still works.
  */
-import { SystemAdapter, parseFormula } from "./core.js";
+import { SystemAdapter, parseFormula, part } from "./core.js";
 import { dnd5eRules, proficiency } from "./rules.js";
 import { deriveDnd5eTraits, isMindless } from "./traits.js";
 import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
 import { commitDnd5eOutcome, describeDnd5eOutcome, commitDnd5eConcession } from "./commit.js";
 import { modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "./effects.js";
+import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 const MODES = ["walk", "fly", "swim", "climb", "burrow"];
 const PHYSICAL = new Set(["weapon", "equipment", "consumable", "tool", "loot"]);
+
+/** Creature sizes, smallest first (dnd5e and PF2e use the same keys). */
+const SIZES = ["tiny", "sm", "med", "lg", "huge", "grg"];
+const sizeOf = key => { const i = SIZES.indexOf(String(key ?? "med")); return i < 0 ? 2 : i; };
 
 /** dnd5e statuses -> engine conditions (the engine's own: prone, immobilized, incapacitated). */
 const STATUS_CONDITIONS = {
@@ -121,8 +126,31 @@ export function plainText(html, actor = null) {
 /** Consumables nobody spends in a fight (torches, rations, candles ...). */
 const IDLE_CONSUMABLES = new Set(["trinket", "food"]);
 
+/** Things a summoning calls that aren't creatures at all: nobody attacks them, and they don't hold the field alone. */
+const NOT_CREATURES = new Set(["spiritual-weapon", "flaming-sphere", "arcane-sword", "mordenkainens-sword", "bigbys-hand", "arcane-hand"]);
+const CREATURE_CACHE = new Map();
+
+/** A creature of this challenge rating and type from the installed books (the SRD's own first), for a summoning that names none. */
+async function creatureByCr(cr, types = []) {
+  const key = `${cr}|${types.join(",")}`;
+  if ( !CREATURE_CACHE.has(key) ) CREATURE_CACHE.set(key, (async () => {
+    const packs = [...game.packs].filter(p => p.documentName === "Actor").sort((a, b) => (a.collection.startsWith("dnd5e.") ? 0 : 1) - (b.collection.startsWith("dnd5e.") ? 0 : 1));
+    for ( const pack of packs ) {
+      const index = await pack.getIndex({ fields: ["type", "system.details.cr", "system.details.type.value"] });
+      const found = index.filter(e => e.type === "npc" && Number(e.system?.details?.cr) === Number(cr) && (!types.length || types.includes(e.system?.details?.type?.value)))
+        .sort((a, b) => a.name.localeCompare(b.name))[0];
+      if ( found ) return pack.getDocument(found._id);
+    }
+    return null;
+  })().catch(() => null));
+  return CREATURE_CACHE.get(key);
+}
+
 export class Dnd5eAdapter extends SystemAdapter {
   static systemId = "dnd5e";
+
+  /** Building a summoned creature (which doesn't summon in turn). */
+  #summoning = false;
 
   get label() {
     return "D&D 5e";
@@ -160,8 +188,9 @@ export class Dnd5eAdapter extends SystemAdapter {
       defenses[a] = typeof s === "number" ? s : (s?.value ?? sys.abilities?.[a]?.mod ?? 0);
     }
 
-    const actions = await this.#actions(actor, level, features);
-    const resources = {};
+    const hits = { riders: [], pools: {}, names: {} };
+    const actions = await this.#actions(actor, level, features, hits);
+    const resources = { ...hits.pools };
     for ( const a of actions ) if ( a.resource && a.pool !== undefined ) resources[a.resource] = a.pool;
     for ( const a of actions ) delete a.pool;
     // (Heroic) Inspiration: a reroll, spent to keep someone from dying.
@@ -190,6 +219,9 @@ export class Dnd5eAdapter extends SystemAdapter {
       actions,
       iwr: this.#iwr(sys),
       resources,
+      resourceNames: Object.keys(hits.names).length ? hits.names : undefined,
+      riders: hits.riders.length ? hits.riders : undefined,
+      reactions: this.#reactions(actor, level, resources) ?? undefined,
       traits: Object.fromEntries(Object.entries(derived.traits).map(([k, v]) => [k, { base: v, fudge: 0 }])),
       traitReasons: derived.reasons,
       flags: { ...derived.flags },
@@ -215,6 +247,7 @@ export class Dnd5eAdapter extends SystemAdapter {
           ? { mod: sys.tools.thief.total ?? sys.tools.thief.mod ?? 0 } : null
       },
       creatureTraits: [creature],
+      size: sizeOf(sys.traits?.size),
       social: {
         pitches: {
           persuade: skillMod("per") !== null ? { skill: "Persuasion", mod: skillMod("per") } : null,
@@ -326,9 +359,17 @@ export class Dnd5eAdapter extends SystemAdapter {
   /*  Actions                                     */
   /* -------------------------------------------- */
 
-  async #actions(actor, level, features) {
+  async #actions(actor, level, features, hits = { riders: [], pools: {}, names: {} }) {
     const out = [];
     for ( const item of actor.items ) {
+      // What rides on a hit (smites, Stunning Strike, maneuvers) isn't an action of its own.
+      const onHit = this.#onHit(actor, item);
+      if ( onHit ) {
+        hits.riders.push(...onHit.riders);
+        Object.assign(hits.pools, onHit.pools);
+        Object.assign(hits.names, onHit.names);
+        continue;
+      }
       if ( item.type === "spell" && !this.#spellReady(actor, item) ) continue;
       // A character only fights with the weapons it has equipped.
       if ( actor.type === "character" && item.type === "weapon" && !item.system.equipped ) continue;
@@ -336,6 +377,11 @@ export class Dnd5eAdapter extends SystemAdapter {
       const riders = [];
       const mine = [];
       for ( const activity of item.system.activities ?? [] ) {
+        if ( activity.type === "summon" ) {
+          const called = await this.#summonFrom(actor, item, activity);
+          if ( called ) mine.push(called);
+          continue;
+        }
         const action = this.#fromActivity(actor, item, activity);
         if ( action?.riderFor ) riders.push(action.rider);
         else if ( action ) mine.push(action);
@@ -360,10 +406,15 @@ export class Dnd5eAdapter extends SystemAdapter {
     if ( actor.type === "character" || creatureType === "humanoid" ) {
       const dc = 8 + (actor.system.abilities?.str?.mod ?? 0) + proficiency(level);
       const prone = { conditions: { prone: 1 }, rounds: 1, label: "knocked prone" };
-      out.push({ id: `${actor.id}.shove`, name: "Shove", kind: "control", cost: 1, traits: [], melee: true, reach: 5,
+      // (Only a creature at most one size larger.)
+      out.push({ id: `${actor.id}.shove`, name: "Shove", kind: "control", cost: 1, traits: [], melee: true, reach: 5, maxSize: sizeOf(actor.system.traits?.size) + 1,
         save: { type: ["str", "dex"], dc, basic: false }, onSave: [prone, prone, null, null] });
     }
     this.#sneakAttack(actor, level, features, out);
+    // Improved Divine Smite (2014) and Radiant Strikes (2024): a die of radiant on every melee weapon hit.
+    if ( hasFeature(features, "radiant-strikes", "improved divine smite") ) {
+      for ( const a of out ) if ( a.kind === "strike" && a.weapon && a.melee ) a.bonusDamage = [...(a.bonusDamage ?? []), { id: "radiant-strikes", when: "always", parts: [part([{ n: 1, faces: 8 }], 0, "radiant")] }];
+    }
     // Characters with Extra Attack make several weapon attacks with the Attack action.
     if ( actor.type === "character" ) {
       const extra = hasFeature(features, "three-extra-attacks", "three extra attacks") ? 4
@@ -401,6 +452,300 @@ export class Dnd5eAdapter extends SystemAdapter {
     const method = s.method ?? s.preparation?.mode;
     if ( ["pact", "innate", "atwill", "always"].includes(method) ) return true;
     return !!(s.prepared ?? s.preparation?.prepared);
+  }
+
+  /**
+   * A feature or spell that rides on a hit (see riders.js): {riders, pools, names}, or null if it isn't one. Known by
+   * identifier, or by its words when it has no attack of its own ("immediately after you hit").
+   */
+  #onHit(actor, item) {
+    const id = String(item.identifier ?? item.system?.identifier ?? "");
+    if ( !["feat", "spell"].includes(item.type) || ["sneak-attack", "radiant-strikes"].includes(id) ) return null;
+    const activities = [...(item.system.activities ?? [])];
+    const text = plainText(item.system.description?.value, actor);
+    const said = HIT_WORDS.test(text) && activities.some(a => ["damage", "save"].includes(a.type)) && !activities.some(a => ["attack", "heal", "summon"].includes(a.type));
+    if ( !ON_HIT.has(id) && !said ) return null;
+    if ( item.type === "spell" && !this.#spellReady(actor, item) ) return { riders: [], pools: {}, names: {} };
+    const damage = [];
+    let save = null;
+    for ( const a of activities ) {
+      if ( a.type === "damage" ) {
+        const parts = this.#parts(a);
+        if ( !parts.length ) continue;
+        let perLevel = this.#perLevel(a);
+        // (2014 Divine Smite: a d8 more for each slot level above the first.)
+        if ( !perLevel.length && id === "divine-smite" && item.type === "feat" ) perLevel = [part([{ n: 1, faces: 8 }], 0, parts[0].type)];
+        damage.push({ parts, perLevel, vs: namesFiends(a.name) });
+      } else if ( a.type === "save" ) {
+        const s = { type: asArray(a.save?.ability)[0] ?? "con", dc: a.save?.dc?.value ?? (8 + proficiency(actor.system.details?.level ?? 1) + 3) };
+        const outcome = this.#outcome(this.#effects(item, a, { words: true }), s);
+        if ( outcome ) save = { ...s, outcome };
+      }
+    }
+    // Against fiends and undead: an extra die (2014) or all it deals then (2024: 3d8 rather than 2d8).
+    const mean = list => list.reduce((s, x) => s + meanOf(x.parts), 0);
+    const versus = damage.filter(x => x.vs);
+    if ( versus.length && mean(versus) > mean(damage.filter(x => !x.vs)) ) for ( const x of versus ) x.total = true;
+    const cost = this.#hitCost(actor, item, id, activities);
+    const key = `${actor.id}.${item.id}`;
+    const riders = id === "precision-attack"
+      ? ridersFrom({ id: key, name: item.name, text, damage: [], save: null, cost: cost.cost, attackDie: this.#superiorityDie(actor) })
+      : ridersFrom({ id: key, name: item.name, text, damage, save, cost: cost.cost });
+    return { riders, pools: cost.pools, names: cost.names };
+  }
+
+  /**
+   * Reactions that answer what's done to it (see the core's responses.js), by identifier: Shield, Uncanny Dodge,
+   * Hellish Rebuke, Counterspell, a Battle Master's Parry and Riposte, a monk's Deflect Attacks (or Missiles); and any
+   * reaction spell whose effect raises AC (a Shield by another name). A spell gets one entry per slot level it can be
+   * cast at, lowest first, so it spends the cheapest slot it has. Null when it has none.
+   */
+  #reactions(actor, level, resources) {
+    const out = [];
+    const ident = i => String(i.identifier ?? i.system?.identifier ?? "");
+    const sp = actor.system.spells ?? {};
+    const slotLevels = min => {
+      const list = [];
+      for ( let l = min; l <= 9; l++ ) if ( Number(sp[`spell${l}`]?.max) > 0 ) list.push({ key: `slots:${l}`, level: l, pool: Number(sp[`spell${l}`].value) || 0 });
+      if ( Number(sp.pact?.max) > 0 && (Number(sp.pact.level) || 0) >= min ) list.push({ key: "pact", level: Number(sp.pact.level), pool: Number(sp.pact.value) || 0 });
+      return list;
+    };
+    const dex = Number(actor.system.abilities?.dex?.mod) || 0;
+    for ( const item of actor.items ) {
+      const id = ident(item);
+      const activities = [...(item.system.activities ?? [])];
+      const activation = item.system.activation?.type ?? activities[0]?.activation?.type;
+      if ( item.type === "spell" ) {
+        if ( activation !== "reaction" || !this.#spellReady(actor, item) ) continue;
+        const base = Number(item.system.level) || 1;
+        const levels = slotLevels(base);
+        const label = item.name;
+        for ( const s of levels ) resources[s.key] ??= s.pool;
+        if ( id === "counterspell" ) {
+          // 2024: the caster saves (Constitution) against your spell DC; 2014: a spell of the slot's level or lower
+          // simply fails, a higher one on a check with your spellcasting ability.
+          const save = activities.find(a => a.type === "save");
+          const ability = actor.system.attributes?.spellcasting ?? "int";
+          for ( const s of levels ) {
+            const counter = save ? { level: s.level, save: { type: asArray(save.save?.ability)[0] ?? "con", dc: save.save?.dc?.value ?? actor.system.attributes?.spell?.dc ?? 13 } }
+              : { level: s.level, mod: Number(actor.system.abilities?.[ability]?.mod) || 0 };
+            out.push({ id: `${actor.id}.${item.id}@${s.key}`, label, on: "spell", resource: s.key, range: 60, counter });
+          }
+          continue;
+        }
+        const harm = activities.find(a => a.type === "save" && a.damage?.parts?.length);
+        if ( id === "hellish-rebuke" || (harm && /\b(?:damaged|damages you|deals damage to you)\b/i.test(plainText(item.system.description?.value))) ) {
+          const act = harm ?? activities.find(a => a.type === "save");
+          if ( !act ) continue;
+          const parts = this.#parts(act);
+          const per = this.#perLevel(act);
+          const save = { type: asArray(act.save?.ability)[0] ?? "dex", dc: act.save?.dc?.value ?? actor.system.attributes?.spell?.dc ?? 13, basic: act.damage?.onSave !== "none" };
+          for ( const s of levels ) {
+            const more = per.map(p => ({ ...p, dice: p.dice.map(x => ({ ...x, n: x.n * (s.level - base) })), flat: p.flat * (s.level - base) })).filter(p => p.dice.some(x => x.n > 0) || p.flat);
+            out.push({ id: `${actor.id}.${item.id}@${s.key}`, label, on: "damaged", resource: s.key, range: 60, damage: [...parts, ...more], save });
+          }
+          continue;
+        }
+        // A reaction spell that raises AC: Shield, or one like it.
+        const fx = activities.map(a => this.#effects(item, a)).find(x => x?.mods?.ac > 0);
+        if ( id === "shield" || fx ) {
+          const ac = fx?.mods?.ac ?? 5;
+          for ( const s of levels ) out.push({ id: `${actor.id}.${item.id}@${s.key}`, label, on: "hit", resource: s.key, ac });
+        }
+        continue;
+      }
+      if ( item.type !== "feat" ) continue;
+      if ( id === "uncanny-dodge" ) out.push({ id: `${actor.id}.${item.id}`, label: item.name, on: "hit", halve: true });
+      else if ( id === "deflect-attacks" || id === "deflect-missiles" ) {
+        out.push({ id: `${actor.id}.${item.id}`, label: item.name, on: "hit", reduce: part([{ n: 1, faces: 10 }], dex + level, "untyped"), physical: true, ranged: id === "deflect-missiles" || undefined });
+      } else if ( id === "parry" || id === "riposte" ) {
+        const sup = this.#usesItem(actor, item, null, "trip-attack");
+        if ( !sup ) continue;
+        const key = `feature:${sup.id}`;
+        resources[key] ??= Math.max(0, (Number(sup.system.uses?.max) || 0) - (Number(sup.system.uses?.spent) || 0));
+        const die = this.#superiorityDie(actor);
+        if ( id === "parry" ) out.push({ id: `${actor.id}.${item.id}`, label: item.name, on: "hit", melee: true, resource: key, reduce: part([{ n: 1, faces: die }], dex, "untyped") });
+        else out.push({ id: `${actor.id}.${item.id}`, label: item.name, on: "missed", melee: true, resource: key, strike: true });
+      }
+    }
+    return out.length ? out : null;
+  }
+
+  /**
+   * A summoning (Spiritual Weapon, Conjure Animals, Animate Objects ...) as the engine's: the creatures its first
+   * usable profile calls, read like any creature (a profile that names a challenge rating and type instead gets one
+   * from the installed books), matched to the caster where it says (its spell attack, the save DC, more damage for a
+   * higher slot). Things that aren't creatures (a spiritual weapon, a flaming sphere) can't be attacked, and act only
+   * when the caster spends its bonus action on them.
+   */
+  async #summonFrom(actor, item, activity) {
+    if ( this.#summoning ) return null;
+    if ( item.type === "spell" && !this.#spellReady(actor, item) ) return null;
+    // Only what can be called in the middle of a fight (Find Familiar takes an hour).
+    const activation = item.system.activation?.type ?? activity.activation?.type ?? "action";
+    if ( !["action", "bonus"].includes(activation) ) return null;
+    const level = Number(item.system.level) || 0;
+    const value = (formula, fallback = 1) => {
+      try {
+        const v = Roll.safeEval(Roll.replaceFormulaData(String(formula || fallback), { item: { level } }, { missing: "0" }));
+        return Number.isFinite(v) ? Math.floor(v) : fallback;
+      } catch ( err ) {
+        return fallback;
+      }
+    };
+    const id = String(item.identifier ?? item.system?.identifier ?? "");
+    const text = plainText(item.system.description?.value, actor);
+    const spellAttack = Number(actor.system.attributes?.spell?.attack ?? actor.system.attributes?.spellattack ?? NaN);
+    const fallbackAttack = (Number(actor.system.abilities?.[actor.system.attributes?.spellcasting ?? "int"]?.mod) || 0) + proficiency(actor.system.details?.level ?? 1);
+    for ( const p of activity.profiles ?? [] ) {
+      if ( (Number.isFinite(p.level?.min) && level < p.level.min) || (Number.isFinite(p.level?.max) && level > p.level.max) ) continue;
+      const count = Math.max(0, p.count ? value(p.count, 1) : 1);
+      if ( !count ) continue;
+      let src = null;
+      try {
+        src = p.uuid ? await fromUuid(p.uuid) : await creatureByCr(value(p.cr, 0), [...(p.types ?? [])]);
+      } catch ( err ) { /* not installed */ }
+      if ( !src ) continue;
+      // As dnd5e summons it: a temporary copy (never saved) that knows the casting's level, the caster's modifier and
+      // proficiency, so formulas such as "(4 + 2 * (@flags.dnd5e.summon.level - 5))d8" come out right.
+      let creature = src;
+      try {
+        const data = src.toObject();
+        foundry.utils.setProperty(data, "flags.dnd5e.summon", { level, mod: fallbackAttack - proficiency(actor.system.details?.level ?? 1), prof: proficiency(actor.system.details?.level ?? 1), origin: item.uuid });
+        creature = new CONFIG.Actor.documentClass(data);
+      } catch ( err ) { /* read it as it is */ }
+      this.#summoning = true;
+      let spec = null;
+      try {
+        spec = await this.toCombatantSpec({ actor: creature, id: `summon-${src.id}`, name: src.name, texture: { src: src.img } });
+      } finally {
+        this.#summoning = false;
+      }
+      // Something that can't fight (Mage Hand) is no help in one.
+      if ( !spec || !spec.actions.some(a => a.damage?.length || a.kind === "control") ) continue;
+      const extraAttack = activity.bonuses?.attackDamage ? parseFormula(Roll.replaceFormulaData(activity.bonuses.attackDamage, { item: { level } }, { missing: "0" })) : null;
+      const extraSave = activity.bonuses?.saveDamage ? parseFormula(Roll.replaceFormulaData(activity.bonuses.saveDamage, { item: { level } }, { missing: "0" })) : null;
+      for ( const a of spec.actions ) {
+        const attacks = a.kind === "strike" || a.kind === "spell-attack";
+        if ( activity.match?.attacks && attacks ) a.bonus = Number.isFinite(spellAttack) ? spellAttack : fallbackAttack;
+        if ( activity.match?.saves && a.save ) a.save = { ...a.save, dc: actor.system.attributes?.spell?.dc ?? a.save.dc };
+        if ( extraAttack && attacks && a.damage?.length && extraAttack.dice.some(d => d.n > 0) ) a.damage = [...a.damage, { ...extraAttack, type: a.damage[0].type }];
+        if ( extraSave && a.kind === "save" && a.damage?.length && extraSave.dice.some(d => d.n > 0) ) a.damage = [...a.damage, { ...extraSave, type: a.damage[0].type }];
+      }
+      if ( activity.bonuses?.hp ) {
+        const hp = value(activity.bonuses.hp, 0);
+        spec.hp = { ...spec.hp, value: spec.hp.value + hp, max: spec.hp.max + hp };
+      }
+      if ( activity.bonuses?.ac ) spec.defenses = { ...spec.defenses, ac: spec.defenses.ac + value(activity.bonuses.ac, 0) };
+      const thing = NOT_CREATURES.has(id);
+      if ( thing ) spec.untargetable = true;
+      const concentration = !!(item.system.properties?.has?.("concentration") || item.system.duration?.concentration) || undefined;
+      // "As a Bonus Action on your later turns, you can move the weapon and attack": it acts only when told to.
+      const told = thing || /\bbonus action\b[^.]*\b(?:move|attack|command|direct)/i.test(text);
+      return {
+        id: `${actor.id}.${item.id}.${activity.id}`, name: item.name, kind: "summon", cost: 1, economy: activation === "bonus" ? "bonus" : undefined,
+        itemId: item.id, traits: [], rank: item.type === "spell" ? level : undefined, concentration, ...this.#resource(actor, item),
+        creatures: Array.from({ length: Math.min(count, 8) }, () => spec),
+        rounds: durationRounds(item.system.duration) ?? 10,
+        sustain: told ? { bonus: 1 } : undefined
+      };
+    }
+    return null;
+  }
+
+  /** Dice a damage activity adds for each spell slot level above its own. */
+  #perLevel(activity) {
+    const out = [];
+    for ( const p of activity.damage?.parts ?? [] ) {
+      const s = p.scaling ?? {};
+      const type = asArray(p.types)[0] ?? "untyped";
+      if ( s.mode === "whole" && Number(s.number) > 0 && Number(p.denomination) > 0 ) out.push(part([{ n: Number(s.number), faces: Number(p.denomination) }], 0, type));
+      else if ( s.formula ) {
+        const q = parseFormula(s.formula, type);
+        if ( q.dice.length || q.flat ) out.push(q);
+      }
+    }
+    return out;
+  }
+
+  /**
+   * What a rider costs: spell slots (each level it can be cast at), a pact slot, another feature's uses (Focus, ki,
+   * superiority dice) or its own; and what it takes from the turn (a bonus action, the turn's one spell slot).
+   * @returns {{cost, pools: Record<string, number>, names: Record<string, string>}}
+   */
+  #hitCost(actor, item, id, activities) {
+    const sp = actor.system.spells ?? {};
+    const slots = (min, max = 9) => {
+      const out = [];
+      for ( let l = min; l <= max; l++ ) {
+        const s = sp[`spell${l}`];
+        if ( Number(s?.max) > 0 ) out.push({ key: `slots:${l}`, level: l, pool: Number(s.value) || 0 });
+      }
+      if ( Number(sp.pact?.max) > 0 && (Number(sp.pact.level) || 0) >= min && (Number(sp.pact.level) || 0) <= max ) out.push({ key: "pact", level: Number(sp.pact.level), pool: Number(sp.pact.value) || 0 });
+      return out;
+    };
+    const fromSlots = (list, extra) => ({ cost: { slots: list, ...extra }, pools: Object.fromEntries(list.map(s => [s.key, s.pool])), names: {} });
+    const activation = item.system.activation?.type ?? activities[0]?.activation?.type ?? "";
+    const turn = activation === "bonus" ? { bonus: 1 } : {};
+    if ( item.type === "spell" ) {
+      const level = Number(item.system.level) || 1;
+      return fromSlots(slots(level), { baseLevel: level, turn: { ...turn, slot: 1 } });
+    }
+    // 2014 Divine Smite: any slot, up to 5d8.
+    if ( id === "divine-smite" ) return fromSlots(slots(1), { baseLevel: 1, maxLevel: 4, turn });
+    for ( const a of activities ) {
+      for ( const t of a.consumption?.targets ?? [] ) {
+        // Eldritch Smite: a pact slot (its damage already counts the slot's level).
+        if ( t.type === "attribute" && /spells\.pact/.test(String(t.target ?? "")) ) {
+          const pact = slots(1).filter(s => s.key === "pact").map(s => ({ ...s, level: 1 }));
+          return fromSlots(pact, { baseLevel: 1, turn });
+        }
+        if ( t.type === "itemUses" ) {
+          const pool = this.#usesItem(actor, item, t.target, id);
+          if ( pool ) return this.#usesCost(pool, turn);
+        }
+      }
+    }
+    const fallback = this.#usesItem(actor, item, null, id);
+    if ( fallback && fallback !== item ) return this.#usesCost(fallback, turn);
+    const max = Number(item.system.uses?.max) || 0;
+    if ( max ) return { cost: { uses: Math.max(0, max - (item.system.uses?.spent ?? 0)), turn }, pools: {}, names: {} };
+    return { cost: { turn }, pools: {}, names: {} };
+  }
+
+  #usesCost(pool, turn) {
+    const key = `feature:${pool.id}`;
+    const left = Math.max(0, (Number(pool.system.uses?.max) || 0) - (Number(pool.system.uses?.spent) || 0));
+    return { cost: { resource: key, turn }, pools: { [key]: left }, names: { [key]: pool.name } };
+  }
+
+  /**
+   * The feature whose uses a rider spends: the one its consumption names (an id on the actor, or a compendium
+   * reference to the feature it came from), else what it plainly draws on (Focus or ki for Stunning Strike,
+   * superiority dice for maneuvers).
+   */
+  #usesItem(actor, item, ref, id) {
+    const r = String(ref ?? "");
+    if ( r ) {
+      const found = actor.items.get(r) ?? actor.items.find(i => i.uuid === r || i._stats?.compendiumSource === r || i.flags?.core?.sourceId === r || (r.length > 16 && r.endsWith(i.id)));
+      if ( found ) return found;
+      const tail = r.split(".").pop();
+      const byTail = actor.items.find(i => i._stats?.compendiumSource?.endsWith(tail));
+      if ( byTail ) return byTail;
+    } else if ( Number(item.system.uses?.max) ) return item;
+    const ident = i => String(i.identifier ?? i.system?.identifier ?? "");
+    if ( id === "stunning-strike" ) return actor.items.find(i => ["monks-focus", "ki", "focus-points", "ki-points"].includes(ident(i)) || /^(?:monk'?s focus|ki)\b/i.test(i.name)) ?? null;
+    if ( ON_HIT.has(id) ) return actor.items.find(i => ["combat-superiority", "superiority-dice"].includes(ident(i)) || /superiority/i.test(i.name)) ?? null;
+    return null;
+  }
+
+  /** A Battle Master's superiority die (d8, d10 at 10th level, d12 at 18th), from the character's scale values. */
+  #superiorityDie(actor) {
+    for ( const [cls, values] of Object.entries(actor.system.scale ?? {}) ) {
+      if ( !/battle|master|fighter/.test(cls) ) continue;
+      for ( const [k, v] of Object.entries(values ?? {}) ) if ( /superiority|die/.test(k) && Number(v?.faces) > 0 ) return Number(v.faces);
+    }
+    return 8;
   }
 
   /** Damage parts an activity deals (or heals), with the actor's numbers filled in. */
@@ -735,7 +1080,8 @@ export class Dnd5eAdapter extends SystemAdapter {
 
   /* -------------------------------------------- */
 
-  resourceLabel(key) {
+  resourceLabel(key, spec) {
+    if ( spec?.resourceNames?.[key] ) return spec.resourceNames[key];
     if ( key === "fate" ) return this.#fateLabel();
     if ( key === "pact" ) return game.i18n.localize("FFDND5E.PactSlot");
     if ( key.startsWith("slots:") ) return game.i18n.format("FFDND5E.SpellSlot", { level: key.split(":")[1] });

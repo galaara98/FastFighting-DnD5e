@@ -277,6 +277,8 @@ export const dnd5eRules = {
 
   /** Immune to a control effect when it's immune to every condition the effect imposes. */
   isImmune(target, action) {
+    // Too big to shove.
+    if ( Number.isFinite(action.maxSize) && Number.isFinite(target.spec.size) && target.spec.size > action.maxSize ) return true;
     const immune = new Set(target.spec.iwr?.immune ?? []);
     if ( (action.traits ?? []).some(t => immune.has(t)) ) return true;
     const alias = { incapacitated: "unconscious", immobilized: "restrained", controlled: "charmed" };

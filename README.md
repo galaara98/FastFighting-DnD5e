@@ -27,6 +27,13 @@ Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 
 - **Multiattack:** NPCs make every strike their Multiattack lists in one action, read from the stat block's wording in both the 2014 and 2024 styles ("one with its bite and two with its claws", "one Bite attack and one Claw attack", "two melee attacks", "using Scimitar or Pistol in any combination"). Where there's a choice, each way is an option, and the simulation picks one each turn (melee up close, ranged from afar). Checked against all 329 SRD monsters with a Multiattack.
 - **Extra Attack:** characters with Extra Attack (or more) make several weapon attacks with the Attack action.
 - **Sneak Attack:** for characters, once a turn on a finesse or ranged weapon, with advantage or an ally next to the target.
+- **What rides on a hit** (by identifier, or for anything that says it works "after you hit"), each used when this hit is worth what it costs:
+  - Divine Smite (2014's feature with any slot up to 5d8, 2024's spell with the bonus action) and the smite spells, at each slot level the character has, the bigger version against fiends and undead;
+  - Eldritch Smite (a pact slot), Stunning Strike (a Focus or ki point), Battle Master maneuvers (a superiority die: Trip, Menacing, Pushing, Disarming ... and Precision Attack on a close miss);
+  - Improved Divine Smite (Radiant Strikes): a d8 of radiant on every melee weapon hit.
+- **Reactions:** Shield (perhaps a miss after all), Uncanny Dodge (half the blow), Hellish Rebuke, Counterspell (2014: by the slot's level or a check; 2024: the caster's Constitution save), a Battle Master's Parry and Riposte, a monk's Deflect Attacks (or Missiles), and any reaction spell whose effect raises AC. Spells spend the cheapest slot that works.
+- **Summons:** a summon activity's creatures (Spiritual Weapon, Flaming Sphere, Animate Objects, Conjure Animals, a magic item's elementals ...), read like any creature as dnd5e would summon them (at the casting's level), with the caster's spell attack and save DC where the spell says, and more damage for a higher slot. A spell that names a challenge rating and type gets one from the installed books. A spiritual weapon or a flaming sphere can't be attacked, and acts only when the caster spends its bonus action. Rituals and what can't fight (Find Familiar, Mage Hand) are left out.
+- **Size:** Shove only works on a creature up to one size larger.
 - **Spells:**
   - attack, save and damage activities, plus the conditions their effects impose (Hold Person's paralysis, a Web's restraint, and so on);
   - spell slots, pact slots and innate uses, and one slot a turn (Healing Word and Guiding Bolt can't share a turn; Healing Word and a cantrip can);

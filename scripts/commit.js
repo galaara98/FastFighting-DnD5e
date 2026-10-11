@@ -32,7 +32,7 @@ export function describeDnd5eOutcome(spec, final) {
   for ( const k of Object.keys(final.conditions ?? {}) ) if ( LINGERING[k] && !lines.includes(LINGERING[k]) ) lines.push(LINGERING[k]);
   for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
     const used = start - (final.resources?.[key] ?? start);
-    if ( used > 0 ) lines.push(`Uses ${used}× ${key === "fate" ? (spec.fateLabel ?? "Inspiration") : key === "pact" ? "pact slot" : key.startsWith("slots:") ? `level ${key.split(":")[1]} slot` : spec.actions.find(a => a.resource === key)?.name ?? key}`);
+    if ( used > 0 ) lines.push(`Uses ${used}× ${key === "fate" ? (spec.fateLabel ?? "Inspiration") : key === "pact" ? "pact slot" : key.startsWith("slots:") ? `level ${key.split(":")[1]} slot` : spec.resourceNames?.[key] ?? spec.actions.find(a => a.resource === key)?.name ?? key}`);
   }
   for ( const [id, left] of Object.entries(final.uses ?? {}) ) {
     const a = spec.actions.find(x => x.id === id);
@@ -79,6 +79,7 @@ export async function commitDnd5eOutcome(tokenDoc, spec, final, options = {}) {
     const left = final.resources?.[key] ?? start;
     if ( left === start ) continue;
     if ( key === "pact" ) set("system.spells.pact.value", left);
+    else if ( key.startsWith("feature:") ) continue; // (a feature's uses: with the items, below)
     else if ( key === "fate" ) set("system.attributes.inspiration", left > 0);
     else if ( key.startsWith("slots:") ) set(`system.spells.spell${key.split(":")[1]}.value`, left);
   }
@@ -150,6 +151,16 @@ async function lingeringEffects(actor, final, options, undo) {
 
 /** Potions and other consumables used, and limited-use features spent. */
 async function commitItems(actor, spec, final, undo) {
+  // Uses of a feature others draw on (Focus or ki for Stunning Strike, superiority dice for maneuvers).
+  for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
+    if ( !key.startsWith("feature:") ) continue;
+    const used = start - (final.resources?.[key] ?? start);
+    const item = used > 0 ? actor.items.get(key.slice(8)) : null;
+    if ( !item?.system.uses ) continue;
+    const spent = item.system.uses.spent ?? 0;
+    undo.itemUpdates.push({ id: item.id, update: { "system.uses.spent": spent } });
+    await item.update({ "system.uses.spent": spent + used });
+  }
   for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
     if ( !key.startsWith("item:") ) continue;
     const used = start - (final.resources?.[key] ?? start);
