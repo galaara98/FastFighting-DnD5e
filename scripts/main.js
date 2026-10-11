@@ -37,6 +37,8 @@ Hooks.once("fastFighting.init", api => {
   }
   api.registerAdapter("dnd5e", Dnd5eAdapter, { priority: 10, source: MODULE_ID });
   api.adviseTranslation?.(MODULE_ID, game.system.title, KNOWN_TRANSLATIONS);
+  // Words kept in English for now, while the system isn't translated (hardcoded-toEN.json).
+  api.keepEnglish?.(MODULE_ID);
 });
 
 Hooks.once("ready", () => {
