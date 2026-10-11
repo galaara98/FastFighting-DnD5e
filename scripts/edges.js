@@ -38,12 +38,12 @@ export function insightAction(actorId, mod) {
 const total = s => (s ? Number(s.total ?? s.mod) : NaN);
 const proficient = s => (Number(s?.proficient ?? s?.value) || 0) >= 1;
 
-/** The Study check: its best knowledge skill, or undefined without one. */
-export function studyCheck(sys) {
+/** The Study check: its best knowledge skill (and, with `boost`, what it pays off with), or undefined without one. */
+export function studyCheck(sys, boost = undefined) {
   let best = null;
   for ( const key of STUDY_SKILLS ) {
     const mod = total(sys?.skills?.[key]);
-    if ( Number.isFinite(mod) && (!best || mod > best.mod) ) best = { mod, label: "Study" };
+    if ( Number.isFinite(mod) && (!best || mod > best.mod) ) best = { mod, label: "Study", ...(boost ? { boost } : {}) };
   }
   return best ?? undefined;
 }

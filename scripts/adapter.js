@@ -11,6 +11,7 @@ import { commitDnd5eOutcome, describeDnd5eOutcome, commitDnd5eConcession } from 
 import { modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "./effects.js";
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 import { edgeActions, studyCheck } from "./edges.js";
+import { loreBoost } from "./lore.js";
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 const MODES = ["walk", "fly", "swim", "climb", "burrow"];
@@ -331,7 +332,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       },
       // Sizing a foe up (a Lore-Collector): the Study action, with its best knowledge skill (2024: Arcana, History,
       // Investigation, Nature, Religion).
-      sizeUp: isMindless(sys.abilities?.int?.value, creature) ? undefined : studyCheck(sys),
+      sizeUp: isMindless(sys.abilities?.int?.value, creature) ? undefined : studyCheck(sys, loreBoost()),
       creatureTraits: [creature],
       // What kind of creature (the planner groups neutrals by it): its type, narrowed by a subtype (humanoid (goblinoid)).
       creatureKind: [creature, String(sys.details?.type?.subtype ?? "").trim().toLowerCase()].filter(Boolean).join(":") || null,
