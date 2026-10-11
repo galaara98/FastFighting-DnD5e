@@ -54,6 +54,11 @@ export const dnd5eRules = {
   },
   basicAction: { action: 1 },
   talkCost: { action: 1 },
+  /**
+   * A playstyle's taunt: an action. A few words are free, but urging a creature to do something is the Influence action
+   * (SRD 5.2).
+   */
+  tauntCost: { action: 1 },
   firstAidCost: { action: 1 },
   stealCost: { action: 1 },
   /** Stealing in the open: the feint is part of the same action. */
