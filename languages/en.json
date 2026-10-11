@@ -12,6 +12,8 @@
       "Moderate": "Moderate",
       "High": "High",
       "BeyondHigh": "Beyond High"
-    }
+    },
+    "HeroicInspiration": "Heroic Inspiration",
+    "Inspiration": "Inspiration"
   }
 }

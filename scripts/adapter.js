@@ -27,7 +27,8 @@ const STATUS_CONDITIONS = {
   petrified: { petrified: 1 },
   unconscious: { unconscious: 1, incapacitated: 1 },
   incapacitated: { incapacitated: 1 },
-  charmed: { charmed: 1 }
+  charmed: { charmed: 1 },
+  deafened: { deafened: 1 }
 };
 /** What a spell's effect does to its target: the same, except that a charm (or domination) turns it to its caster's side. */
 const EFFECT_CONDITIONS = { ...STATUS_CONDITIONS, charmed: { controlled: 1 } };
@@ -163,6 +164,8 @@ export class Dnd5eAdapter extends SystemAdapter {
     const resources = {};
     for ( const a of actions ) if ( a.resource && a.pool !== undefined ) resources[a.resource] = a.pool;
     for ( const a of actions ) delete a.pool;
+    // (Heroic) Inspiration: a reroll, spent to keep someone from dying.
+    if ( actor.type === "character" && sys.attributes?.inspiration ) resources.fate = 1;
 
     const derived = this.deriveTraits(actor);
     const skill = key => sys.skills?.[key];
@@ -198,6 +201,9 @@ export class Dnd5eAdapter extends SystemAdapter {
       conditions: this.#conditions(actor),
       perception: skillMod("prc") ?? 0,
       darkvision: Number(sys.attributes?.senses?.ranges?.darkvision ?? sys.attributes?.senses?.darkvision) > 0, // any range will do
+      senses: this.#senses(sys),
+      mods: await this.#activeMods(actor),
+      fateLabel: this.#fateLabel(),
       // Anyone can try to stabilize the dying with a DC 10 Wisdom (Medicine) check.
       firstAid: (actor.type === "character" || creature === "humanoid") && skillMod("med") !== null ? { mod: skillMod("med") } : null,
       theft: skillMod("slt") !== null ? { skill: skill("slt")?.label ?? "Sleight of Hand", mod: skillMod("slt") } : null,
@@ -232,6 +238,54 @@ export class Dnd5eAdapter extends SystemAdapter {
   }
 
   /* -------------------------------------------- */
+
+  /**
+   * Buffs and debuffs already on it when the fight starts (a Bless cast beforehand, a Faerie Fire outline). dnd5e's
+   * own numbers already hold flat bonuses (Shield of Faith's AC, a Rage's damage) and dice on damage; what they leave
+   * out is added here: dice on attack rolls and saves (Bless, Bane), helpful statuses (invisible), and what a spell's
+   * words say (Faerie Fire's advantage, Haste's extra action). Null when there's nothing.
+   */
+  async #activeMods(actor) {
+    const list = [];
+    for ( const effect of actor.appliedEffects ?? [] ) {
+      const { mods } = modsFromChanges(effect.changes ?? []);
+      const dice = Object.fromEntries(Object.entries(mods).filter(([k]) => k === "attackDie" || k === "saveDie"));
+      if ( Object.keys(dice).length ) list.push(dice);
+      for ( const status of effect.statuses ?? [] ) if ( STATUS_MODS[status] ) list.push(STATUS_MODS[status]);
+      let origin = null;
+      try {
+        origin = effect.origin ? await fromUuid(effect.origin) : null;
+      } catch ( err ) { /* gone */ }
+      if ( origin?.type === "spell" ) {
+        const said = fromWords(plainText(origin.system?.description?.value), mods);
+        if ( said.endsOnAttack && (effect.statuses?.has?.("invisible") ?? false) ) list.pop(); // invisible until it attacks
+        if ( Object.keys(said.mods).length ) list.push(said.mods);
+      }
+    }
+    return list.length ? list : null;
+  }
+
+  /** Darkvision and truesight see in the dark; blindsight and tremorsense need no sight at all. In feet. */
+  #senses(sys) {
+    const s = sys.attributes?.senses ?? {};
+    const ranges = s.ranges ?? s;
+    const units = s.units ?? "ft";
+    const out = [];
+    for ( const [type, how] of [["darkvision", { dark: true }], ["truesight", { dark: true }], ["blindsight", { blind: true }], ["tremorsense", { blind: true }]] ) {
+      const feet = inFeet(ranges[type], units);
+      if ( feet > 0 ) out.push({ type, range: feet, ...how });
+    }
+    return out;
+  }
+
+  /** "Heroic Inspiration" under the 2024 rules, "Inspiration" under the 2014 ones. */
+  #fateLabel() {
+    let modern = true;
+    try {
+      modern = game.settings.get("dnd5e", "rulesVersion") !== "legacy";
+    } catch ( err ) { /* an older dnd5e: no such setting */ }
+    return game.i18n.localize(modern ? "FFDND5E.HeroicInspiration" : "FFDND5E.Inspiration");
+  }
 
   #iwr(sys) {
     const t = sys.traits ?? {};
@@ -378,6 +432,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     const names = [];
     const changes = [];
     const helpful = [];
+    const refs = [];
     let rounds = 0;
     const finite = v => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0);
     const base = item.type === "spell" ? Number(item.system.level) || 0 : null;
@@ -389,6 +444,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       const effect = ref.effect ?? item.effects?.get(ref._id ?? ref.id);
       if ( !effect ) continue;
       names.push(effect.name);
+      refs.push(effect.id);
       for ( const status of effect.statuses ?? [] ) {
         if ( EFFECT_CONDITIONS[status] ) statuses.add(status);
         else if ( STATUS_MODS[status] ) helpful.push(STATUS_MODS[status]);
@@ -428,7 +484,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     if ( !Object.keys(conditions).length && !hasMods && !tempHp && !grab && !said?.mark && !iwr ) return null;
     const label = statuses.size || hasMods || tempHp || Object.keys(conditions).length ? effectLabel({ statuses: [...statuses], names, mods, tempHp, conditions }) : "grappled";
     return {
-      conditions: Object.keys(conditions).length ? conditions : null, mods: hasMods ? mods : null, tempHp, grab, names, iwr,
+      conditions: Object.keys(conditions).length ? conditions : null, mods: hasMods ? mods : null, tempHp, grab, names, iwr, refs,
       // The effect's own duration first; the words only when it has none ("the next attack roll it makes").
       rounds: rounds || said?.rounds || durationRounds(item.system.duration) || 10, label, words: said
     };
@@ -464,6 +520,8 @@ export class Dnd5eAdapter extends SystemAdapter {
     const affects = String(activity.target?.affects?.type ?? item.system.target?.affects?.type ?? "").toLowerCase();
     const self = units === "self" || affects === "self";
     const reach = units === "touch" ? { reach: 5 } : rangeFeet && !self ? { range: { increment: rangeFeet, max: rangeFeet, noPenalty: true } } : {};
+    // (The spell's own effects, to leave on a creature still under them when the fight ends.)
+    if ( fx?.refs?.length ) base.effectRef = { uuid: item.uuid, ids: fx.refs };
     if ( mark?.length ) {
       return { ...base, kind: "control", auto: true, melee: false, ...reach, freeWhileHeld: true,
         outcome: { ...(outcome ?? {}), rounds: outcome?.rounds ?? durationRounds(item.system.duration) ?? 600, mark, label: /hex/i.test(item.name) ? "hexed" : "marked" } };
@@ -576,6 +634,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       }
       // No damage: crowd control or a debuff on a failed save (Hold Person, Bane, Slow, Faerie Fire).
       if ( !outcome ) return null;
+      if ( control?.refs?.length ) common.effectRef = { uuid: item.uuid, ids: control.refs };
       return { ...common, kind: "control", save: { ...save, basic: false }, onSave: [outcome, outcome, null, null] };
     }
 
@@ -677,6 +736,7 @@ export class Dnd5eAdapter extends SystemAdapter {
   /* -------------------------------------------- */
 
   resourceLabel(key) {
+    if ( key === "fate" ) return this.#fateLabel();
     if ( key === "pact" ) return game.i18n.localize("FFDND5E.PactSlot");
     if ( key.startsWith("slots:") ) return game.i18n.format("FFDND5E.SpellSlot", { level: key.split(":")[1] });
     return null;

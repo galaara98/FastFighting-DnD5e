@@ -32,12 +32,13 @@ export function describeDnd5eOutcome(spec, final) {
   for ( const k of Object.keys(final.conditions ?? {}) ) if ( LINGERING[k] && !lines.includes(LINGERING[k]) ) lines.push(LINGERING[k]);
   for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
     const used = start - (final.resources?.[key] ?? start);
-    if ( used > 0 ) lines.push(`Uses ${used}× ${key === "pact" ? "pact slot" : key.startsWith("slots:") ? `level ${key.split(":")[1]} slot` : spec.actions.find(a => a.resource === key)?.name ?? key}`);
+    if ( used > 0 ) lines.push(`Uses ${used}× ${key === "fate" ? (spec.fateLabel ?? "Inspiration") : key === "pact" ? "pact slot" : key.startsWith("slots:") ? `level ${key.split(":")[1]} slot` : spec.actions.find(a => a.resource === key)?.name ?? key}`);
   }
   for ( const [id, left] of Object.entries(final.uses ?? {}) ) {
     const a = spec.actions.find(x => x.id === id);
     if ( a && Number.isFinite(a.uses) && left < a.uses ) lines.push(`Uses ${a.uses - left}× ${a.name}`);
   }
+  for ( const e of final.effects ?? [] ) lines.push(`Still ${e.label || "affected"} (${e.rounds} more round${e.rounds === 1 ? "" : "s"})`);
   return lines;
 }
 
@@ -78,6 +79,7 @@ export async function commitDnd5eOutcome(tokenDoc, spec, final, options = {}) {
     const left = final.resources?.[key] ?? start;
     if ( left === start ) continue;
     if ( key === "pact" ) set("system.spells.pact.value", left);
+    else if ( key === "fate" ) set("system.attributes.inspiration", left > 0);
     else if ( key.startsWith("slots:") ) set(`system.spells.spell${key.split(":")[1]}.value`, left);
   }
   // Conditions first, HP last: dnd5e reacts to an HP change by adding or removing Bloodied on its own, and on an
@@ -118,7 +120,32 @@ export async function commitDnd5eOutcome(tokenDoc, spec, final, options = {}) {
   }
   await commitItems(actor, spec, final, undo);
   if ( Object.keys(update).length ) await actor.update(update);
+  await lingeringEffects(actor, final, options, undo);
   return undo;
+}
+
+/** Buffs and debuffs still running when the fight ends stay on, copied from their spell, for the rounds left. */
+async function lingeringEffects(actor, final, options, undo) {
+  for ( const e of final.effects ?? [] ) {
+    const ref = options?.effectSource?.(e.key)?.action?.effectRef;
+    if ( !ref?.uuid ) continue;
+    let item = null;
+    try {
+      item = await fromUuid(ref.uuid);
+    } catch ( err ) { /* gone */ }
+    for ( const id of ref.ids ?? [] ) {
+      const data = item?.effects?.get(id)?.toObject();
+      if ( !data ) continue;
+      delete data._id;
+      Object.assign(data, {
+        origin: item.uuid, transfer: false, disabled: false,
+        duration: { value: Math.max(1, e.rounds), units: "rounds", expiry: "turnStart" },
+        flags: { ...(data.flags ?? {}), [MODULE_ID]: { lingering: true } }
+      });
+      const [made] = await actor.createEmbeddedDocuments("ActiveEffect", [data]);
+      if ( made ) undo.createdEffects.push(made.id);
+    }
+  }
 }
 
 /** Potions and other consumables used, and limited-use features spent. */

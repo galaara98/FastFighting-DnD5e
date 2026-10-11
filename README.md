@@ -42,7 +42,11 @@ Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 
   - Charm Person and the Dominate spells turn the target to your side (saved with advantage in a fight, as the spells say), until it shakes it off, your concentration breaks, or (for a charm) your side harms it;
   - class features: Rage (its damage and its resistance to weapons), Reckless Attack, Action Surge, Bardic Inspiration, Turn Undead, Intimidating Presence and others with effects;
   - concentration: one spell at a time; damage calls for a Constitution save (DC 10 or half the damage), and being incapacitated ends it;
-  - anyone can Dodge; characters and humanoids can Shove a foe prone (Strength or Dexterity save, whichever is better).
+  - anyone can Dodge; characters and humanoids can Shove a foe prone (Strength or Dexterity save, whichever is better);
+  - already on a creature when the fight starts: what dnd5e's numbers leave out (Bless's d4 on attacks and saves, invisibility, a Faerie Fire outline); flat bonuses such as Shield of Faith's AC are already in them;
+  - still running when the fight ends: Make it So leaves the spell's own effect on, for the rounds left.
+- **Senses:** darkvision and truesight (in the dark), blindsight and tremorsense (no sight needed), with their ranges; blinded and deafened.
+- **Fate:** a character's (Heroic) Inspiration is spent to keep someone from dying, and Make it So takes it away.
 - **Defenses:**
   - damage immunities, resistances and vulnerabilities;
   - condition immunities, so a spell isn't wasted on a creature immune to everything it would do.

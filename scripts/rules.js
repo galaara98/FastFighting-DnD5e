@@ -295,6 +295,12 @@ export const dnd5eRules = {
     return key === "prone" ? { adv: -1, defAdv: 1 } : null;
   },
 
+  /** Knocked out rather than killed: stable at 0 HP, no death saves to make. */
+  knockOut(u) {
+    u.deathSuccesses = 0;
+    u.deathFailures = 0;
+  },
+
   /** Death saves, so Make it So can write them back. */
   capture(u) {
     return { deathSuccesses: u.deathSuccesses ?? 0, deathFailures: u.deathFailures ?? 0 };
