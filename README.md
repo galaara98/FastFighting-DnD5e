@@ -25,7 +25,8 @@ Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 
   - A save beside an attack on the same item happens on a hit: a wolf's bite (Strength or prone), a spider's venom (Constitution, half on a success).
   - A grapple from an attack uses the core's grab, which the target can try to escape.
 - **Multiattack:** NPCs make every strike their Multiattack lists in one action, read from the stat block's wording in both the 2014 and 2024 styles ("one with its bite and two with its claws", "one Bite attack and one Claw attack", "two melee attacks", "using Scimitar or Pistol in any combination"). Where there's a choice, each way is an option, and the simulation picks one each turn (melee up close, ranged from afar). Checked against all 329 SRD monsters with a Multiattack.
-- **Extra Attack:** characters with Extra Attack (or more) make several weapon attacks with the Attack action.
+- **Extra Attack:** characters with Extra Attack (or more) make several weapon attacks with the Attack action (from two classes it doesn't add up; a warlock's Thirsting Blade counts).
+- **Multiclassing:** each spell's attack bonus and save DC come from its own class; a spell can be cast from any slot it can use, a higher one adding its damage (and darts or rays) for each level up, and, as the multiclassing rules allow, from a warlock's pact slot (or a warlock's spell from the other slots), the cheapest first.
 - **Sneak Attack:** for characters, once a turn on a finesse or ranged weapon, with advantage or an ally next to the target.
 - **What rides on a hit** (by identifier, or for anything that says it works "after you hit"), each used when this hit is worth what it costs:
   - Divine Smite (2014's feature with any slot up to 5d8, 2024's spell with the bonus action) and the smite spells, at each slot level the character has, the bigger version against fiends and undead;
