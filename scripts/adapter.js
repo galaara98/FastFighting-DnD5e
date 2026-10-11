@@ -43,7 +43,7 @@ export function legendaryAttack(text, attackNames) {
 const legendaryLabel = () => {
   const key = "DND5E.LegendaryResistance.Label";
   const text = globalThis.game?.i18n?.localize?.(key);
-  return text && text !== key ? text : t("LegendaryResistance", "Legendary Resistance");
+  return text && text !== key ? text : t("LegendaryResistance");
 };
 
 /** "Recharge 5–6": the use comes back on a d6 at or over the formula, at the start of the creature's turn. */
@@ -248,7 +248,7 @@ export class Dnd5eAdapter extends SystemAdapter {
   #summoning = false;
 
   get label() {
-    return "D&D 5e";
+    return t("Label");
   }
 
   get rules() {
@@ -342,7 +342,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       fateLabel: this.#fateLabel(),
       // Anyone can try to stabilize the dying with a DC 10 Wisdom (Medicine) check.
       firstAid: (actor.type === "character" || creature === "humanoid") && skillMod("med") !== null ? { mod: skillMod("med") } : null,
-      theft: skillMod("slt") !== null ? { skill: skill("slt")?.label ?? "Sleight of Hand", mod: skillMod("slt") } : null,
+      theft: skillMod("slt") !== null ? { skill: skill("slt")?.label ?? skillName("slt"), mod: skillMod("slt") } : null,
       // A locked door: a Strength (Athletics) check to force it, or thieves' tools to pick it (proficiency, and the tools
       // themselves for a character).
       doorWork: {
@@ -359,16 +359,16 @@ export class Dnd5eAdapter extends SystemAdapter {
       size: sizeOf(sys.traits?.size),
       social: {
         pitches: {
-          persuade: skillMod("per") !== null ? { skill: skillName("per", "Persuasion"), mod: skillMod("per") } : null,
-          intimidate: skillMod("itm") !== null ? { skill: skillName("itm", "Intimidation"), mod: skillMod("itm") } : null,
-          deceive: skillMod("dec") !== null ? { skill: skillName("dec", "Deception"), mod: skillMod("dec") } : null
+          persuade: skillMod("per") !== null ? { skill: skillName("per"), mod: skillMod("per") } : null,
+          intimidate: skillMod("itm") !== null ? { skill: skillName("itm"), mod: skillMod("itm") } : null,
+          deceive: skillMod("dec") !== null ? { skill: skillName("dec"), mod: skillMod("dec") } : null
         },
         // Insight sees through all three; Perception keeps hands off your purse.
         resist: {
-          persuade: { dc: passive("ins"), label: t("Passive", "passive {skill}", { skill: skillName("ins", "Insight") }) },
-          intimidate: { dc: passive("ins"), label: t("Passive", "passive {skill}", { skill: skillName("ins", "Insight") }) },
-          deceive: { dc: passive("ins"), label: t("Passive", "passive {skill}", { skill: skillName("ins", "Insight") }) },
-          steal: { dc: passive("prc"), label: t("Passive", "passive {skill}", { skill: skillName("prc", "Perception") }) }
+          persuade: { dc: passive("ins"), label: t("Passive", { skill: skillName("ins") }) },
+          intimidate: { dc: passive("ins"), label: t("Passive", { skill: skillName("ins") }) },
+          deceive: { dc: passive("ins"), label: t("Passive", { skill: skillName("ins") }) },
+          steal: { dc: passive("prc"), label: t("Passive", { skill: skillName("prc") }) }
         },
         resolve: (defenses.wis ?? 0) - (proficiency(level) + 1),
         languages: asArray(sys.traits?.languages?.value),
@@ -530,23 +530,23 @@ export class Dnd5eAdapter extends SystemAdapter {
     }
     // Anyone can Dodge (attacks against it have disadvantage until its next turn); characters and humanoids can Shove
     // a foe prone (a Strength or Dexterity save against 8 + Strength + proficiency).
-    out.push({ id: `${actor.id}.dodge`, name: t("Dodge", "Dodge"), kind: "buff", targets: "self", cost: 1, traits: [], tell: "dodge", outcome: { mods: { defAdv: -1 }, rounds: 1, label: t("Dodging", "dodging") } });
+    out.push({ id: `${actor.id}.dodge`, name: t("Dodge"), kind: "buff", targets: "self", cost: 1, traits: [], tell: "dodge", outcome: { mods: { defAdv: -1 }, rounds: 1, label: t("Dodging") } });
     // Help, and Insight before talking (edges.js).
     out.push(...edgeActions({ id: actor.id, sys: actor.system, mindless: isMindless(actor.system.abilities?.int?.value, String(actor.system.details?.type?.value ?? "").toLowerCase()) }));
     // Reckless Attack (barbarians): advantage on its attacks, and against it, until its next turn; no action at all.
     const reckless = featureItem(actor, "reckless-attack", "reckless attack");
     if ( reckless ) out.push({ id: `${actor.id}.reckless`, name: reckless.name, kind: "buff", targets: "self", economy: "free", oncePerTurn: true, traits: [], itemId: reckless.id, tell: "reckless",
-      outcome: { mods: { adv: 1, defAdv: 1 }, rounds: 1, label: t("Reckless", "reckless") } });
+      outcome: { mods: { adv: 1, defAdv: 1 }, rounds: 1, label: t("Reckless") } });
     // Action Surge (fighters): one more action, this turn, once a rest.
     const surge = featureItem(actor, "action-surge", "action surge");
     if ( surge ) out.push({ id: `${actor.id}.action-surge`, name: surge.name, kind: "buff", targets: "self", economy: "free", oncePerTurn: true, traits: [], itemId: surge.id, tell: "surge",
-      ...this.#resource(actor, surge), outcome: { actionsNow: 1, rounds: 1, label: t("Surging", "surging") } });
+      ...this.#resource(actor, surge), outcome: { actionsNow: 1, rounds: 1, label: t("Surging") } });
     const creatureType = String(actor.system.details?.type?.value ?? "").toLowerCase();
     if ( actor.type === "character" || creatureType === "humanoid" ) {
       const dc = 8 + (actor.system.abilities?.str?.mod ?? 0) + proficiency(level);
-      const prone = { conditions: { prone: 1 }, rounds: 1, label: t("KnockedProne", "knocked prone") };
+      const prone = { conditions: { prone: 1 }, rounds: 1, label: t("KnockedProne") };
       // (Only a creature at most one size larger.)
-      out.push({ id: `${actor.id}.shove`, name: t("Shove", "Shove"), kind: "control", cost: 1, traits: [], melee: true, reach: 5, maxSize: sizeOf(actor.system.traits?.size) + 1,
+      out.push({ id: `${actor.id}.shove`, name: t("Shove"), kind: "control", cost: 1, traits: [], melee: true, reach: 5, maxSize: sizeOf(actor.system.traits?.size) + 1,
         save: { type: ["str", "dex"], dc, basic: false }, onSave: [prone, prone, null, null] });
     }
     this.#sneakAttack(actor, level, features, out);
@@ -641,14 +641,14 @@ export class Dnd5eAdapter extends SystemAdapter {
       const str = Number(abilities.str?.mod) || 0;
       const mod = Math.max(0, props(second).has("fin") ? Math.max(str, Number(abilities.dex?.mod) || 0) : str);
       const damage = style || !mod ? second.damage : second.damage.map((p, i) => (i === 0 ? { ...p, flat: p.flat - mod } : p));
-      out.push({ ...second, id: `${second.id}.off-hand`, name: t("OffHand", "{name} (off hand)", { name: second.name }), economy: "bonus", damage });
+      out.push({ ...second, id: `${second.id}.off-hand`, name: t("OffHand", { name: second.name }), economy: "bonus", damage });
     }
     // (In a Spanish world: "Ataque sin armas", "desarmado".)
     const unarmed = out.filter(a => a.kind === "strike" && a.melee && !a.sequence && a.economy !== "bonus" && /unarmed|sin armas|desarmad/i.test(a.name))
       .sort((x, y) => (y.bonus ?? 0) - (x.bonus ?? 0))[0];
     if ( !unarmed ) return;
     if ( hasFeature(features, "martial-arts", "martial arts") ) {
-      out.push({ ...unarmed, id: `${unarmed.id}.martial-arts`, name: t("MartialArts", "{name} (Martial Arts)", { name: unarmed.name }), economy: "bonus" });
+      out.push({ ...unarmed, id: `${unarmed.id}.martial-arts`, name: t("MartialArts", { name: unarmed.name }), economy: "bonus" });
     }
     if ( hasFeature(features, "flurry-of-blows", "flurry of blows") ) {
       const ident = i => String(i.identifier ?? i.system?.identifier ?? "");
@@ -657,7 +657,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       const count = hasFeature(features, "heightened-focus", "heightened focus") ? 3 : 2;
       Object.assign(hits.pools, price?.pools ?? {});
       Object.assign(hits.names, price?.names ?? {});
-      out.push({ ...unarmed, id: `${unarmed.id}.flurry`, name: featureItem(actor, "flurry-of-blows", "flurry of blows")?.name ?? t("Flurry", "Flurry of Blows"), economy: "bonus", resource: price?.cost.resource,
+      out.push({ ...unarmed, id: `${unarmed.id}.flurry`, name: featureItem(actor, "flurry-of-blows", "flurry of blows")?.name ?? t("Flurry"), economy: "bonus", resource: price?.cost.resource,
         sequence: Array.from({ length: count }, (_, i) => ({ ...unarmed, id: `${unarmed.id}.flurry.${i}` })) });
     }
   }
@@ -1124,7 +1124,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     const markAct = fx?.words?.mark ? others.find(a => a.type === "damage" && [undefined, "", "special"].includes(a.activation?.type)) : null;
     const mark = markAct ? this.#parts(markAct) : null;
     const temp = Math.max(tempHp, fx?.tempHp ?? 0);
-    const outcome = this.#outcome(fx) ?? (temp ? { rounds: durationRounds(item.system.duration) ?? 10, label: t("Bolstered", "bolstered") } : null);
+    const outcome = this.#outcome(fx) ?? (temp ? { rounds: durationRounds(item.system.duration) ?? 10, label: t("Bolstered") } : null);
     // (Rage: its resistances count as much as its damage.)
     if ( outcome && fx?.iwr ) outcome.iwr = fx.iwr;
     if ( !outcome && !mark?.length ) return null;
@@ -1142,7 +1142,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     if ( fx?.refs?.length ) base.effectRef = { uuid: item.uuid, ids: fx.refs };
     if ( mark?.length ) {
       return { ...base, kind: "control", auto: true, melee: false, ...reach, freeWhileHeld: true,
-        outcome: { ...(outcome ?? {}), rounds: outcome?.rounds ?? durationRounds(item.system.duration) ?? 600, mark, label: /hex/i.test(englishName(item)) ? t("Hexed", "hexed") : t("Marked", "marked") } };
+        outcome: { ...(outcome ?? {}), rounds: outcome?.rounds ?? durationRounds(item.system.duration) ?? 600, mark, label: /hex/i.test(englishName(item)) ? t("Hexed") : t("Marked") } };
     }
     const friendly = self || ["ally", "willing"].includes(affects) || (affects !== "enemy" && (helps(outcome.mods ?? {}, outcome.conditions ?? {}) || outcome.iwr || (temp > 0 && !outcome.mods && !outcome.conditions)));
     if ( !friendly ) return { ...base, kind: "control", auto: true, melee: false, ...reach, outcome };

@@ -3,6 +3,8 @@
  * and features that read like command (Leadership, Rallying Cry, Commander's Strike, Bardic Inspiration ...).
  */
 import { proficiency } from "./rules.js";
+import { listItems } from "./core.js";
+import { t } from "./words.js";
 
 // ("Pack Tactics" is how wolves hunt, not command.) Matched against identifiers too, so hyphens count as spaces.
 const LEADER_FEATURE = /(leadership|rally|rallying|commander|inspir|battle[ -]cry|warlord|captain|(?<!pack[ -])tactic)/i;
@@ -18,12 +20,12 @@ export function rankLeaders(entries) {
     const best = Math.max(e.skills?.persuasion ?? -99, e.skills?.intimidation ?? -99);
     if ( best <= -99 ) continue;
     let score = best - (proficiency(e.level) + 2);
-    const reasons = [`best social skill ${best >= 0 ? "+" : ""}${best}`];
+    const reasons = [t("Lead.Best", { n: `${best >= 0 ? "+" : ""}${best}` })];
     const commanding = (e.features ?? []).map(f => (typeof f === "string" ? { key: f, name: f } : f))
       .filter(f => LEADER_FEATURE.test(f.key ?? "") || LEADER_FEATURE.test(f.name ?? ""));
     if ( commanding.length ) {
       score += 3;
-      reasons.push(commanding.slice(0, 2).map(f => f.name).join(", "));
+      reasons.push(listItems(commanding.slice(0, 2).map(f => f.name)));
     }
     out.push({ id: e.id, score, reason: reasons.join("; "), bonus: leaderBonus(score) });
   }

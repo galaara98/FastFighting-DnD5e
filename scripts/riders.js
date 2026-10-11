@@ -70,7 +70,7 @@ export function ridersFrom(d) {
     else if ( outcome ) rider.outcome = outcome;
     if ( !rider.damage && !rider.save && !rider.outcome ) continue;
     // Against fiends and undead (Divine Smite), a bigger version first: one or the other.
-    if ( extra.length ) out.push({ ...rider, id: `${tag}:vs`, label: t("VsFiends", "{name} (fiend or undead)", { name: d.name }), vs: ["fiend", "undead"], damage: versusAll });
+    if ( extra.length ) out.push({ ...rider, id: `${tag}:vs`, label: t("VsFiends", { name: d.name }), vs: ["fiend", "undead"], damage: versusAll });
     out.push({ ...rider, id: tag });
   }
   return out;

@@ -9,7 +9,8 @@
  * Player's Handbook and the Dungeon Master's Guide only add more spells and features to read the same way.
  */
 
-import { describeMods } from "./core.js";
+import { describeMods, listItems } from "./core.js";
+import { t, conditionName } from "./words.js";
 
 const ADD = 2;
 const MULTIPLY = 1;
@@ -136,14 +137,17 @@ export function fromWords(text, has = {}) {
   return out;
 }
 
+/** Conditions told by a word of this module's (FFDND5E.Worded: incapacitated reads "halted"). */
+const TOLD = new Set(["incapacitated", "slowed", "controlled"]);
+
 /** A name for how it leaves its target, for the story ("{target} is blessed", "is weakened", "is shielded"). */
 export function effectLabel({ statuses = [], names = [], mods = {}, tempHp = 0, conditions = {} } = {}) {
   // An effect named for what it does ("Blessed", "Dominated", "Outlined") says it best; then its conditions.
   const named = names.find(n => /ed$/i.test(String(n).trim().split(/\s+/).pop() ?? ""));
   if ( named ) return String(named).toLowerCase();
-  if ( statuses.length ) return statuses.join(", ");
-  const worded = Object.keys(conditions).map(k => ({ incapacitated: "halted", slowed: "slowed", controlled: "charmed" }[k])).filter(Boolean);
-  if ( worded.length ) return worded.join(", ");
+  if ( statuses.length ) return listItems(statuses.map(conditionName));
+  const worded = Object.keys(conditions).filter(k => TOLD.has(k)).map(k => t(`Worded.${k}`));
+  if ( worded.length ) return listItems(worded);
   // Otherwise the core's word for what the bonuses do (the same words in every system).
   return describeMods(mods, { tempHp });
 }

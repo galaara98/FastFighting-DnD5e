@@ -1,39 +1,51 @@
 /**
  * Words for the table, in its language: the D&D 5e system's own names where it has them (skills, conditions, coins:
  * in Spanish, French ... when a translation of the system is installed), a character's features by their own names,
- * and this module's words (FFDND5E in languages/) for the rest. English without Foundry (the tests).
+ * and this module's words (FFDND5E in languages/) for the rest. The words are in the language files, never here.
  * A translation of the 5e compendiums (Babele: translate-dnd5e-sdr2-es and the like) doesn't translate the system's own
- * words; where they're still English in a reader's other language, this module's own words stand in.
+ * words; where the system isn't translated into a reader's language and this module is, this module's words stand in.
  */
-import { localize, language } from "./core.js";
+import { localize, hasWords, language } from "./core.js";
 
 /** This module's words. */
-export const t = (key, english, data = null) => localize(`FFDND5E.${key}`, english, data);
+export const t = (key, data = null) => localize(`FFDND5E.${key}`, data);
 
-/** A word from the system's CONFIG: a translation key, or the text the system has already translated it to. */
-function sys(value, english) {
-  if ( typeof value !== "string" || !value ) return english;
-  const i18n = globalThis.game?.i18n;
-  return i18n?.has?.(value) ? i18n.localize(value) : value;
+/** This module's word for a key, if its language files have one (else `otherwise`). */
+const own = (key, otherwise) => (hasWords(`FFDND5E.${key}`) ? t(key) : otherwise);
+
+/** A word from the system's CONFIG: a translation key, or the text the system has already translated it to (null: none). */
+function sys(value) {
+  if ( typeof value !== "string" || !value ) return null;
+  return hasWords(value) ? localize(value) : value;
 }
 
-/** The system's word, or (the system not translated into the reader's language: still the English) this module's. */
-function sysOr(value, english, ownKey) {
-  const word = sys(value, english);
-  return language() !== "en" && word.toLocaleLowerCase() === english.toLocaleLowerCase() ? t(ownKey, english) : word;
+/**
+ * Is the system translated into the reader's language? One of its own keys, read without falling back to English
+ * (Foundry's has(key, false)), tells.
+ */
+const systemTranslated = () => language() === "en" || !!globalThis.game?.i18n?.has?.("DND5E.SkillPer", false);
+
+/** Is this module's word for a key translated into the reader's language (not English standing in)? */
+const ownTranslated = key => !!globalThis.game?.i18n?.has?.(`FFDND5E.${key}`, false);
+
+/** The system's word, or this module's: where the system has none, or isn't translated into the reader's language. */
+function sysOr(value, ownKey, otherwise) {
+  const word = sys(value);
+  if ( !word ) return own(ownKey, otherwise);
+  return !systemTranslated() && ownTranslated(ownKey) ? t(ownKey) : word;
 }
 
 /** A skill's name ("Persuasion"), as the system calls it. */
-export const skillName = (key, english) => sysOr(globalThis.CONFIG?.DND5E?.skills?.[key]?.label, english, `Skill.${key}`);
+export const skillName = key => sysOr(globalThis.CONFIG?.DND5E?.skills?.[key]?.label, `Skill.${key}`, key);
 
 /** A condition's name, lower case ("frightened"), as the system calls it. */
-export function conditionName(key, english = key) {
+export function conditionName(key) {
   const c = globalThis.CONFIG?.DND5E?.conditionTypes?.[key];
-  return sysOr(c?.label ?? c?.name, english, `Cond.${key}`).toLocaleLowerCase();
+  return sysOr(c?.label ?? c?.name, `Cond.${key}`, key).toLocaleLowerCase();
 }
 
 /** A coin's abbreviation ("gp"), as the system writes it. */
-export const coin = c => sysOr(globalThis.CONFIG?.DND5E?.currencies?.[c]?.abbreviation, c, `Coin.${c}`);
+export const coin = c => sysOr(globalThis.CONFIG?.DND5E?.currencies?.[c]?.abbreviation, `Coin.${c}`, c);
 
 /*
  * In a translated world (a Babele translation of the 5e compendiums: translate-dnd5e-sdr2-es and the like), an item

@@ -20,19 +20,19 @@ export const INSIGHT_DC = 15;
 /** The Help action. */
 export function helpAction(actorId) {
   return {
-    id: `${actorId}.help`, name: t("Help", "Help"), kind: "buff", cost: 1, traits: [], includeSelf: false, besideFoe: 5,
+    id: `${actorId}.help`, name: t("Help"), kind: "buff", cost: 1, traits: [], includeSelf: false, besideFoe: 5,
     // (The friend can be anywhere; the foe has to be beside the helper.)
     range: { increment: 600, max: 600, noPenalty: true },
-    outcome: { mods: { adv: 1, checkAdv: 1 }, uses: 1, vsFocus: true, rounds: 1, label: t("Helped", "helped") }
+    outcome: { mods: { adv: 1, checkAdv: 1 }, uses: 1, vsFocus: true, rounds: 1, label: t("Helped") }
   };
 }
 
 /** Reading the one it means to talk round, with Insight. */
 export function insightAction(actorId, mod) {
   return {
-    id: `${actorId}.insight`, name: skillName("ins", "Insight"), kind: "buff", targets: "self", cost: 1, traits: [],
-    check: { mod, dc: INSIGHT_DC, label: skillName("ins", "Insight") },
-    outcome: { mods: { checkAdv: 1 }, uses: 1, vsFocus: true, rounds: 2, label: t("SeesThrough", "sees through them") }
+    id: `${actorId}.insight`, name: skillName("ins"), kind: "buff", targets: "self", cost: 1, traits: [],
+    check: { mod, dc: INSIGHT_DC, label: skillName("ins") },
+    outcome: { mods: { checkAdv: 1 }, uses: 1, vsFocus: true, rounds: 2, label: t("SeesThrough") }
   };
 }
 
@@ -44,7 +44,7 @@ export function studyCheck(sys, boost = undefined) {
   let best = null;
   for ( const key of STUDY_SKILLS ) {
     const mod = total(sys?.skills?.[key]);
-    if ( Number.isFinite(mod) && (!best || mod > best.mod) ) best = { mod, label: t("Study", "Study"), ...(boost ? { boost } : {}) };
+    if ( Number.isFinite(mod) && (!best || mod > best.mod) ) best = { mod, label: t("Study"), ...(boost ? { boost } : {}) };
   }
   return best ?? undefined;
 }

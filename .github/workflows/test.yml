@@ -32,3 +32,5 @@ jobs:
         working-directory: FastFighting-DnD5e
       - run: npm test
         working-directory: FastFighting-DnD5e
+      - run: npm run test:reworded
+        working-directory: FastFighting-DnD5e

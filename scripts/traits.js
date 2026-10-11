@@ -34,53 +34,53 @@ export function deriveDnd5eTraits(d) {
     return {
       traits: { tactical: 65, brave: 75, selfish: 25, loyal: 80 },
       flags,
-      reasons: Object.fromEntries(["tactical", "brave", "selfish", "loyal"].map(k => [k, t("Reason.Pc", "Player character")]))
+      reasons: Object.fromEntries(["tactical", "brave", "selfish", "loyal"].map(k => [k, t("Reason.Pc")]))
     };
   }
 
   const intMod = Math.floor(((d.int ?? 10) - 10) / 2);
   const mindless = isMindless(d.int, d.creature);
   let tactical = clamp(35 + intMod * 8 + (d.wis ?? 0) * 2, 5, 95);
-  reasons.tactical = t("Reason.Int", "Intelligence {n}", { n: d.int ?? 10 });
+  reasons.tactical = t("Reason.Int", { n: d.int ?? 10 });
   if ( d.creature === "beast" ) {
     tactical = clamp(15 + (d.wis ?? 0) * 3, 5, 35);
-    reasons.tactical = t("Reason.Beast", "Beast");
+    reasons.tactical = t("Reason.Beast");
   }
   if ( mindless ) {
     tactical = Math.min(tactical, 10);
-    reasons.tactical = t("Reason.BarelyThinks", "Barely thinks");
+    reasons.tactical = t("Reason.BarelyThinks");
   }
   if ( flags.packTactics ) {
     tactical = Math.max(tactical, 25);
-    reasons.tactical += t("Reason.Pack", "; hunts as a pack");
+    reasons.tactical += t("Reason.Pack");
   }
 
   const typicalSave = 3 + Math.floor((d.level ?? 0) / 4);
   let brave = clamp(50 + ((d.wisSave ?? 0) - typicalSave) * 5, 10, 90);
-  reasons.brave = t("Reason.WisSave", "Wisdom save");
+  reasons.brave = t("Reason.WisSave");
   if ( ["undead", "construct"].includes(d.creature) && mindless ) {
     brave = 100;
     flags.fearless = true;
-    reasons.brave = t("Reason.NeverFlees", "Mindless: never flees");
+    reasons.brave = t("Reason.NeverFlees");
   } else if ( d.creature === "construct" ) {
     brave = 95;
-    reasons.brave = t("Reason.Construct", "Construct");
+    reasons.brave = t("Reason.Construct");
   } else if ( d.creature === "beast" ) {
     brave = Math.min(brave, 45);
-    reasons.brave = t("Reason.BeastFlees", "Beast: flees when hurt");
+    reasons.brave = t("Reason.BeastFlees");
   }
   if ( mindless ) flags.mindless = true;
 
   let selfish = 50;
-  reasons.selfish = t("Reason.Typical", "Typical");
-  if ( d.creature === "fiend" ) { selfish = 75; reasons.selfish = t("Reason.Fiend", "Fiend"); }
-  else if ( d.creature === "celestial" ) { selfish = 20; reasons.selfish = t("Reason.Celestial", "Celestial"); }
-  else if ( d.creature === "beast" ) { selfish = 55; reasons.selfish = t("Reason.Beast", "Beast"); }
+  reasons.selfish = t("Reason.Typical");
+  if ( d.creature === "fiend" ) { selfish = 75; reasons.selfish = t("Reason.Fiend"); }
+  else if ( d.creature === "celestial" ) { selfish = 20; reasons.selfish = t("Reason.Celestial"); }
+  else if ( d.creature === "beast" ) { selfish = 55; reasons.selfish = t("Reason.Beast"); }
 
   let loyal = 50;
-  reasons.loyal = t("Reason.Typical", "Typical");
-  if ( d.hasMaster ) { loyal = 85; reasons.loyal = t("Reason.Master", "Serves a master"); }
-  else if ( ["construct", "undead"].includes(d.creature) && mindless ) { loyal = 90; reasons.loyal = t("Reason.BoundToObey", "Bound to obey"); }
+  reasons.loyal = t("Reason.Typical");
+  if ( d.hasMaster ) { loyal = 85; reasons.loyal = t("Reason.Master"); }
+  else if ( ["construct", "undead"].includes(d.creature) && mindless ) { loyal = 90; reasons.loyal = t("Reason.BoundToObey"); }
 
   return { traits: { tactical, brave, selfish, loyal }, flags, reasons };
 }

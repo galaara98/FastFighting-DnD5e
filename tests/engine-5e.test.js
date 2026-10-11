@@ -2,6 +2,13 @@ import { describe, expect, test } from "vitest";
 import { runBatchSync, replay } from "../../FastFighting/scripts/engine/simulator.js";
 import { parseFormula } from "../scripts/core.js";
 import { dnd5eRules } from "../scripts/rules.js";
+import { text } from "./foundry-i18n.js";
+
+/** Does a line read as this template, its {placeholders} filled with anything? */
+const reads = (line, key) => {
+  const pattern = text(key).split(/\{\w+\}/).map(bit => bit.replace(/[.*+?^${}()|[\]\\]/g, c => `\\${c}`)).join(".*");
+  return new RegExp(`^${pattern}$`).test(line ?? "");
+};
 
 let n = 0;
 const at = (x, y) => ({ x, y, size: 5 });
@@ -64,7 +71,7 @@ describe("5e turns in the engine", () => {
     // A standing (harmless) ally keeps the fight going, so the PC gets turns to roll on.
     const ally = creature({ id: "ally", hp: { value: 300, max: 300, temp: 0 }, actions: [strike({ bonus: -50 })] });
     const r = replay(battle([pc, ally, foe], { maxRounds: 6, aftermath: "none" }), dnd5eRules, 4);
-    expect(r.log.some(e => e.type === "recovery" && /death save/.test(e.text))).toBe(true);
+    expect(r.log.some(e => e.type === "recovery" && ["Death.Success", "Death.Failure", "Death.Dies", "Death.Stable", "Death.Twenty"].some(k => reads(e.text, `FFDND5E.${k}`)))).toBe(true);
   });
 
   test("a save on a hit: the wolf knocks you down, the spider's venom burns", () => {

@@ -3,6 +3,7 @@ import { replay, runBatchSync } from "../../FastFighting/scripts/engine/simulato
 import { parseFormula } from "../scripts/core.js";
 import { dnd5eRules } from "../scripts/rules.js";
 import { bonusOf, modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "../scripts/effects.js";
+import { text } from "./foundry-i18n.js";
 
 let n = 0;
 const strike = (over = {}) => ({ id: `s${++n}`, name: "Longsword", kind: "strike", bonus: 5, melee: true, reach: 5, damage: [parseFormula("1d8+3", "slashing")], ...over });
@@ -83,11 +84,11 @@ describe("reading 5e effects", () => {
 
   test("labels read as how it leaves its target; buffs are told from debuffs", () => {
     expect(effectLabel({ names: ["Blessed"], mods: { attackDie: 4 } })).toBe("blessed");
-    expect(effectLabel({ names: ["Bane"], mods: { attackDie: -4 } })).toBe("weakened");
-    expect(effectLabel({ names: ["Shimmering Field"], mods: { ac: 2 } })).toBe("shielded");
-    expect(effectLabel({ statuses: ["paralyzed"] })).toBe("paralyzed");
+    expect(effectLabel({ names: ["Bane"], mods: { attackDie: -4 } })).toBe(text("FASTFIGHTING.Effect.weakened"));
+    expect(effectLabel({ names: ["Shimmering Field"], mods: { ac: 2 } })).toBe(text("FASTFIGHTING.Effect.shielded"));
+    expect(effectLabel({ statuses: ["paralyzed"] })).toBe(text("FFDND5E.Cond.paralyzed").toLocaleLowerCase());
     expect(effectLabel({ names: ["Dominated"], statuses: ["charmed"] })).toBe("dominated");
-    expect(effectLabel({ conditions: { incapacitated: 1 } })).toBe("halted");
+    expect(effectLabel({ conditions: { incapacitated: 1 } })).toBe(text("FFDND5E.Worded.incapacitated"));
     expect(durationRounds({ value: 1, units: "minute" })).toBe(10);
     expect(helps({ attackDie: 4, saveDie: 4 })).toBe(true);
     expect(helps({ attackDie: -4 })).toBe(false);

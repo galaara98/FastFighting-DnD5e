@@ -36,7 +36,7 @@ export function describeDnd5eOutcome(spec, final) {
   const lines = commonOutcome(spec, final);
   if ( final.status === STATUS.DOWN ) {
     const s = final.system ?? {};
-    lines.push(final.stable ? outcomeLine("Unconscious") : t("DeathSaves", "Unconscious, death saves {s} ✓ {f} ✗", { s: s.deathSuccesses ?? 0, f: s.deathFailures ?? 0 }));
+    lines.push(final.stable ? outcomeLine("Unconscious") : t("DeathSaves", { s: s.deathSuccesses ?? 0, f: s.deathFailures ?? 0 }));
   }
   for ( const k of Object.keys(final.conditions ?? {}) ) {
     const name = LINGERING[k] ? conditionName(LINGERING[k]) : null;
@@ -56,10 +56,10 @@ export function describeDnd5eOutcome(spec, final) {
 
 /** What a used-up resource is called. */
 function resourceLabel(spec, key) {
-  if ( key === "fate" ) return spec.fateLabel ?? t("Inspiration", "Inspiration");
-  if ( key === "legres" ) return spec.standFirm?.label ?? t("LegendaryResistance", "Legendary Resistance");
-  if ( key === "pact" ) return t("PactSlot", "Pact slot");
-  if ( key.startsWith("slots:") ) return t("SpellSlot", "Level {level} spell slot", { level: key.split(":")[1] });
+  if ( key === "fate" ) return spec.fateLabel ?? t("Inspiration");
+  if ( key === "legres" ) return spec.standFirm?.label ?? t("LegendaryResistance");
+  if ( key === "pact" ) return t("PactSlot");
+  if ( key.startsWith("slots:") ) return t("SpellSlot", { level: key.split(":")[1] });
   return spec.resourceNames?.[key] ?? spec.actions.find(a => a.resource === key)?.name ?? key;
 }
 

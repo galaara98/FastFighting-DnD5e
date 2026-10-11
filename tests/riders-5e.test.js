@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { ridersFrom, HIT_WORDS, ON_HIT, namesFiends } from "../scripts/riders.js";
 import { parseFormula } from "../scripts/core.js";
 import { dnd5eRules } from "../scripts/rules.js";
+import { text } from "./foundry-i18n.js";
 import { replay } from "../../FastFighting/scripts/engine/simulator.js";
 
 const d8 = n => parseFormula(`${n}d8`, "radiant");
@@ -81,7 +82,7 @@ describe("in a fight", () => {
       const r = replay(spec, dnd5eRules, s);
       const used = r.log.filter(e => e.type === "attack" && e.riders?.length);
       expect(used.length).toBeLessThanOrEqual(2);
-      for ( const e of used ) expect(e.riders).toEqual(["Divine Smite (fiend or undead)"]);
+      for ( const e of used ) expect(e.riders).toEqual([text("FFDND5E.VsFiends", { name: "Divine Smite" })]);
       smites += used.length;
     }
     expect(smites).toBeGreaterThan(5);

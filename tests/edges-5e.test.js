@@ -4,6 +4,7 @@ import { parseFormula } from "../scripts/core.js";
 import { dnd5eRules } from "../scripts/rules.js";
 import { fromWords } from "../scripts/effects.js";
 import { helpAction, insightAction, edgeActions, studyCheck, INSIGHT_DC } from "../scripts/edges.js";
+import { text } from "./foundry-i18n.js";
 
 let n = 0;
 const strike = (over = {}) => ({ id: `s${++n}`, name: "Longsword", kind: "strike", bonus: 5, melee: true, reach: 5, damage: [parseFormula("1d8+3", "slashing")], ...over });
@@ -45,10 +46,10 @@ describe("Help, Insight and Study", () => {
     expect(helpAction("a")).toMatchObject({ kind: "buff", besideFoe: 5, includeSelf: false, outcome: { mods: { adv: 1, checkAdv: 1 }, uses: 1, vsFocus: true } });
     expect(insightAction("a", 5)).toMatchObject({ targets: "self", check: { mod: 5, dc: INSIGHT_DC }, outcome: { mods: { checkAdv: 1 }, uses: 1, vsFocus: true } });
     const sys = { skills: { ins: { proficient: 1, total: 5 }, arc: { total: 2 }, his: { total: 6 }, inv: { total: 4 } }, traits: { languages: { value: new Set(["common"]) } } };
-    expect(edgeActions({ id: "a", sys, mindless: false }).map(a => a.name)).toEqual(["Help", "Insight"]);
-    expect(edgeActions({ id: "a", sys: { ...sys, traits: { languages: { value: new Set() } } }, mindless: false }).map(a => a.name)).toEqual(["Help"]);
+    expect(edgeActions({ id: "a", sys, mindless: false }).map(a => a.name)).toEqual([text("FFDND5E.Help"), text("FFDND5E.Skill.ins")]);
+    expect(edgeActions({ id: "a", sys: { ...sys, traits: { languages: { value: new Set() } } }, mindless: false }).map(a => a.name)).toEqual([text("FFDND5E.Help")]);
     expect(edgeActions({ id: "a", sys, mindless: true })).toEqual([]);
-    expect(studyCheck(sys)).toEqual({ mod: 6, label: "Study" });
+    expect(studyCheck(sys)).toEqual({ mod: 6, label: text("FFDND5E.Study") });
   });
 
   test("a friend beside the foe who can't do much against it helps instead, and the advantage is spent on the next swing", () => {

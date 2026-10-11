@@ -1,5 +1,6 @@
 {
   "FFDND5E": {
+    "Label": "D&D 5e",
     "NeedsCore": "FastFighting D&D 5e needs the FastFighting Core module. Install and enable it.",
     "CoreTooOld": "FastFighting D&D 5e needs a newer FastFighting Core. Update FastFighting Core in Add-on Modules.",
     "SpellSlot": "Level {level} spell slot",
@@ -73,7 +74,8 @@
       "his": "History",
       "inv": "Investigation",
       "nat": "Nature",
-      "rel": "Religion"
+      "rel": "Religion",
+      "slt": "Sleight of Hand"
     },
     "Cond": {
       "frightened": "frightened",
@@ -94,6 +96,14 @@
       "cp": "cp"
     },
     "Hexed": "hexed",
-    "Marked": "marked"
+    "Marked": "marked",
+    "Lead": {
+      "Best": "best social skill {n}"
+    },
+    "Worded": {
+      "incapacitated": "halted",
+      "slowed": "slowed",
+      "controlled": "charmed"
+    }
   }
 }

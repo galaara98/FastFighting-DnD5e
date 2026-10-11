@@ -9,7 +9,7 @@ import { registerLoreBoost } from "./lore.js";
 export const MODULE_ID = "fast-fighting-dnd5e";
 
 /** The core API this helper is written against (older cores have no api.version: that is 1). */
-const NEEDS_API = 8;
+const NEEDS_API = 9;
 
 /**
  * The last translation module we knew of for this game system, by language: in a language other than English, this
@@ -36,7 +36,7 @@ Hooks.once("fastFighting.init", api => {
     return;
   }
   api.registerAdapter("dnd5e", Dnd5eAdapter, { priority: 10, source: MODULE_ID });
-  api.adviseTranslation?.(MODULE_ID, "Dungeons & Dragons Fifth Edition", KNOWN_TRANSLATIONS);
+  api.adviseTranslation?.(MODULE_ID, game.system.title, KNOWN_TRANSLATIONS);
 });
 
 Hooks.once("ready", () => {

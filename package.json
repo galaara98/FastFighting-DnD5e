@@ -5,6 +5,7 @@
   "description": "Development tooling for the FastFighting D&D 5e Foundry VTT module",
   "scripts": {
     "test": "vitest run",
+    "test:reworded": "vitest run --mode reworded",
     "test:watch": "vitest"
   },
   "devDependencies": {
