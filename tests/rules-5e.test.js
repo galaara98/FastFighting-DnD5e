@@ -246,3 +246,20 @@ describe("legendary", () => {
     expect(legendaryAttack("The dragon beats its wings. Each creature within 10 feet must succeed on a DC 22 Dexterity saving throw.", ["Bite"])).toBeNull();
   });
 });
+
+describe("mending", () => {
+  test("Regeneration: so much a turn, stopped by the damage it names", async () => {
+    const { regenerationFrom } = await import("../scripts/adapter.js");
+    expect(regenerationFrom("The troll regains 10 hit points at the start of its turn. If the troll takes acid or fire damage, this trait doesn't function at the start of the troll's next turn."))
+      .toEqual({ amount: 10, stoppedBy: ["acid", "fire"] });
+    expect(regenerationFrom("The troll regains 15 Hit Points at the start of each of its turns. If the troll takes Acid or Fire damage, this trait doesn't function on the troll's next turn."))
+      .toEqual({ amount: 15, stoppedBy: ["acid", "fire"] });
+    expect(regenerationFrom("It can fly.")).toBeNull();
+  });
+
+  test("Undead Fortitude: a Constitution save against 5 + the damage, never against radiant or a critical hit", async () => {
+    const { holdOnFrom } = await import("../scripts/adapter.js");
+    expect(holdOnFrom("If damage reduces the zombie to 0 hit points, it must make a Constitution saving throw with a DC of 5 + the damage taken, unless the damage is radiant or from a critical hit. On a success, the zombie drops to 1 hit point instead.", "Undead Fortitude"))
+      .toEqual({ save: "con", base: 5, except: ["radiant"], notOnCrit: true, label: "Undead Fortitude" });
+  });
+});

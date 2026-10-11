@@ -87,6 +87,33 @@ function featureKeys(actor) {
 }
 const hasFeature = (features, id, name) => features.includes(id) || features.some(f => f.includes(name));
 const featureItem = (actor, id, name) => actor.items.find(i => i.type === "feat" && ((i.identifier ?? i.system?.identifier) === id || String(i.name ?? "").toLowerCase() === name));
+
+const DAMAGE_WORDS = ["acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder"];
+/** The damage types named in a phrase ("acid or fire damage", "Radiant damage or damage from holy water"). */
+const damageWordsIn = text => DAMAGE_WORDS.filter(w => new RegExp(`\\b${w}\\b`, "i").test(text ?? ""));
+
+/**
+ * Regeneration, from its words: "regains 10 hit points at the start of its turn. If the troll takes acid or fire
+ * damage, this trait doesn't function ..." -> {amount, stoppedBy}, or null.
+ */
+export function regenerationFrom(text) {
+  const amount = /regains (\d+) hit points at the start of (?:its|each of its|their) turns?/i.exec(text ?? "");
+  if ( !amount ) return null;
+  const stop = /takes ([^.]*?) damage(?: or [^.]*?)?, this (?:trait|ability) doesn['’]t function/i.exec(text) ?? /if (?:it|the \w+) takes ([^.]*?) damage/i.exec(text);
+  return { amount: Number(amount[1]), stoppedBy: stop ? damageWordsIn(stop[0]) : [] };
+}
+
+/**
+ * Undead Fortitude, from its words: "a Constitution saving throw with a DC of 5 + the damage taken, unless the
+ * damage is radiant or from a critical hit" -> {save, base, except, notOnCrit}, or null.
+ */
+export function holdOnFrom(text, label) {
+  const m = /(strength|dexterity|constitution|wisdom|intelligence|charisma) saving throw with a DC (?:of |equal to )?(\d+) \+ the damage/i.exec(text ?? "");
+  if ( !m ) return null;
+  const unless = /unless ([^.]*)/i.exec(text)?.[1] ?? "";
+  const save = { strength: "str", dexterity: "dex", constitution: "con", wisdom: "wis", intelligence: "int", charisma: "cha" }[m[1].toLowerCase()];
+  return { save, base: Number(m[2]), except: damageWordsIn(unless), notOnCrit: /critical/i.test(unless), label };
+}
 const meanOf = parts => parts.reduce((s, p) => s + (p.flat ?? 0) + (p.dice ?? []).reduce((t, d) => t + (d.n * (d.faces + 1)) / 2, 0), 0);
 
 /**
@@ -269,6 +296,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       // At 0 HP a 5e creature is dying until it has three successes (or is stabilized).
       stable: (hp.value ?? 0) <= 0 ? (sys.attributes?.death?.success ?? 0) >= 3 : undefined,
       deathSaves: { success: sys.attributes?.death?.success ?? 0, failure: sys.attributes?.death?.failure ?? 0 },
+      ...this.#mending(actor),
       conditions: this.#conditions(actor),
       perception: skillMod("prc") ?? 0,
       darkvision: Number(sys.attributes?.senses?.ranges?.darkvision ?? sys.attributes?.senses?.darkvision) > 0, // any range will do
@@ -493,6 +521,22 @@ export class Dnd5eAdapter extends SystemAdapter {
         const label = options.length > 1 ? `${multi.name} (${[...new Set(names)].join(", ")})` : multi.name;
         out.push({ ...sequence[0], id: `${actor.id}.multiattack${k ? `.${k}` : ""}`, name: label, sequence, uses: undefined, resource: undefined });
       });
+    }
+    return out;
+  }
+
+  /** Regeneration (a troll's, a vampire's) and Undead Fortitude, by identifier or name, read from their words. */
+  #mending(actor) {
+    const out = {};
+    const regen = featureItem(actor, "regeneration", "regeneration");
+    if ( regen ) {
+      const r = regenerationFrom(plainText(regen.system.description?.value, actor));
+      if ( r ) out.regen = r;
+    }
+    const fortitude = featureItem(actor, "undead-fortitude", "undead fortitude");
+    if ( fortitude ) {
+      const h = holdOnFrom(plainText(fortitude.system.description?.value, actor), fortitude.name);
+      if ( h ) out.holdOn = h;
     }
     return out;
   }
