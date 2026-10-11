@@ -96,11 +96,15 @@ const damageWordsIn = text => DAMAGE_WORDS.filter(w => new RegExp(`\\b${w}\\b`, 
  * Regeneration, from its words: "regains 10 hit points at the start of its turn. If the troll takes acid or fire
  * damage, this trait doesn't function ..." -> {amount, stoppedBy}, or null.
  */
-export function regenerationFrom(text) {
-  const amount = /regains (\d+) hit points at the start of (?:its|each of its|their) turns?/i.exec(text ?? "");
-  if ( !amount ) return null;
+export function regenerationFrom(text, healed = null) {
+  // (How much: in its words, or the trait's own healing when the words only point to it.)
+  const words = /regains (\d+) hit points at the start of (?:its|each of its|their) turns?/i.exec(text ?? "");
+  const amount = words ? Number(words[1]) : Number(healed) || 0;
+  if ( !(amount > 0) || !/regains\b[^.]*\bat the start of/i.test(text ?? "") ) return null;
   const stop = /takes ([^.]*?) damage(?: or [^.]*?)?, this (?:trait|ability) doesn['’]t function/i.exec(text) ?? /if (?:it|the \w+) takes ([^.]*?) damage/i.exec(text);
-  return { amount: Number(amount[1]), stoppedBy: stop ? damageWordsIn(stop[0]) : [] };
+  // "If it has at least 1 hit point": nothing keeps it from dying at 0.
+  const needsHp = /if it has at least 1 hit point/i.test(text);
+  return { amount, stoppedBy: stop ? damageWordsIn(stop[0]) : [], ...(needsHp ? { needsHp: true } : {}) };
 }
 
 /**
@@ -108,7 +112,7 @@ export function regenerationFrom(text) {
  * damage is radiant or from a critical hit" -> {save, base, except, notOnCrit}, or null.
  */
 export function holdOnFrom(text, label) {
-  const m = /(strength|dexterity|constitution|wisdom|intelligence|charisma) saving throw with a DC (?:of |equal to )?(\d+) \+ the damage/i.exec(text ?? "");
+  const m = /(strength|dexterity|constitution|wisdom|intelligence|charisma) saving throw \(?(?:with a )?DC (?:of |equal to )?(\d+) (?:\+|plus) the damage/i.exec(text ?? "");
   if ( !m ) return null;
   const unless = /unless ([^.]*)/i.exec(text)?.[1] ?? "";
   const save = { strength: "str", dexterity: "dex", constitution: "con", wisdom: "wis", intelligence: "int", charisma: "cha" }[m[1].toLowerCase()];
@@ -507,6 +511,7 @@ export class Dnd5eAdapter extends SystemAdapter {
         }
       }
     }
+    if ( actor.type === "character" ) this.#bonusStrikes(actor, level, features, hits, out);
     // NPCs' Multiattack: the strikes it makes in one action.
     const multi = actor.items.find(i => i.type === "feat" && ((i.identifier ?? i.system?.identifier) === "multiattack" || /multiattack/i.test(i.name)));
     if ( multi ) {
@@ -547,7 +552,9 @@ export class Dnd5eAdapter extends SystemAdapter {
     const out = {};
     const regen = featureItem(actor, "regeneration", "regeneration");
     if ( regen ) {
-      const r = regenerationFrom(plainText(regen.system.description?.value, actor));
+      const heal = (regen.system.activities ?? []).find?.(a => a.type === "heal");
+      const healed = heal ? this.#parts(heal, true).reduce((s, p) => s + p.flat + p.dice.reduce((t, d) => t + d.n * (d.faces + 1) / 2, 0), 0) : null;
+      const r = regenerationFrom(plainText(regen.system.description?.value, actor), healed);
       if ( r ) out.regen = r;
     }
     const fortitude = featureItem(actor, "undead-fortitude", "undead fortitude");
@@ -556,6 +563,44 @@ export class Dnd5eAdapter extends SystemAdapter {
       if ( h ) out.holdOn = h;
     }
     return out;
+  }
+
+  /**
+   * A character's bonus-action strikes: with a light weapon in each hand, one with the second (without its ability
+   * modifier, unless it has the Two-Weapon Fighting style); a monk's Martial Arts (an unarmed strike) and Flurry of
+   * Blows (two unarmed strikes, three with Heightened Focus, for a point of Focus or ki).
+   */
+  #bonusStrikes(actor, level, features, hits, out) {
+    const abilities = actor.system.abilities ?? {};
+    const props = a => new Set(asArray(actor.items.get(a.itemId)?.system.properties));
+    const everyday = out.filter(a => a.kind === "strike" && a.weapon && a.melee && !a.sequence && a.economy !== "bonus" && !a.legendary);
+    const light = everyday.filter(a => props(a).has("lig"));
+    const lightItems = [...new Set(light.map(a => a.itemId))];
+    if ( lightItems.length >= 2 ) {
+      const mean = a => (a.damage ?? []).reduce((s, p) => s + p.flat + p.dice.reduce((t, d) => t + d.n * (d.faces + 1) / 2, 0), 0);
+      const [, second] = lightItems.map(id => light.filter(a => a.itemId === id).sort((x, y) => mean(y) - mean(x))[0]).sort((x, y) => mean(y) - mean(x));
+      const style = hasFeature(features, "two-weapon-fighting", "two-weapon fighting");
+      const str = Number(abilities.str?.mod) || 0;
+      const mod = Math.max(0, props(second).has("fin") ? Math.max(str, Number(abilities.dex?.mod) || 0) : str);
+      const damage = style || !mod ? second.damage : second.damage.map((p, i) => (i === 0 ? { ...p, flat: p.flat - mod } : p));
+      out.push({ ...second, id: `${second.id}.off-hand`, name: `${second.name} (off hand)`, economy: "bonus", damage });
+    }
+    const unarmed = out.filter(a => a.kind === "strike" && a.melee && !a.sequence && a.economy !== "bonus" && /unarmed/i.test(a.name))
+      .sort((x, y) => (y.bonus ?? 0) - (x.bonus ?? 0))[0];
+    if ( !unarmed ) return;
+    if ( hasFeature(features, "martial-arts", "martial arts") ) {
+      out.push({ ...unarmed, id: `${unarmed.id}.martial-arts`, name: `${unarmed.name} (Martial Arts)`, economy: "bonus" });
+    }
+    if ( hasFeature(features, "flurry-of-blows", "flurry of blows") ) {
+      const ident = i => String(i.identifier ?? i.system?.identifier ?? "");
+      const pool = actor.items.find(i => ["monks-focus", "ki", "focus-points", "ki-points"].includes(ident(i)) || /^(?:monk'?s focus|ki)\b/i.test(i.name));
+      const price = pool && Number(pool.system.uses?.max) ? this.#usesCost(pool, {}) : null;
+      const count = hasFeature(features, "heightened-focus", "heightened focus") ? 3 : 2;
+      Object.assign(hits.pools, price?.pools ?? {});
+      Object.assign(hits.names, price?.names ?? {});
+      out.push({ ...unarmed, id: `${unarmed.id}.flurry`, name: "Flurry of Blows", economy: "bonus", resource: price?.cost.resource,
+        sequence: Array.from({ length: count }, (_, i) => ({ ...unarmed, id: `${unarmed.id}.flurry.${i}` })) });
+    }
   }
 
   /** Is this spell castable now: cantrips, prepared or always-prepared spells, pact magic, innate and at-will. */

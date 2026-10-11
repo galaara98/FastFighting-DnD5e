@@ -255,11 +255,16 @@ describe("mending", () => {
     expect(regenerationFrom("The troll regains 15 Hit Points at the start of each of its turns. If the troll takes Acid or Fire damage, this trait doesn't function on the troll's next turn."))
       .toEqual({ amount: 15, stoppedBy: ["acid", "fire"] });
     expect(regenerationFrom("It can fly.")).toBeNull();
+    // The amount only in the trait's own healing; "if it has at least 1 hit point": it can die at 0.
+    expect(regenerationFrom("The vampire regains [[/healing]] at the start of its turn if it has at least 1 hit point. If the vampire takes radiant damage or damage from holy water, this trait doesn't function.", 20))
+      .toEqual({ amount: 20, stoppedBy: ["radiant"], needsHp: true });
   });
 
   test("Undead Fortitude: a Constitution save against 5 + the damage, never against radiant or a critical hit", async () => {
     const { holdOnFrom } = await import("../scripts/adapter.js");
     expect(holdOnFrom("If damage reduces the zombie to 0 hit points, it must make a Constitution saving throw with a DC of 5 + the damage taken, unless the damage is radiant or from a critical hit. On a success, the zombie drops to 1 hit point instead.", "Undead Fortitude"))
+      .toEqual({ save: "con", base: 5, except: ["radiant"], notOnCrit: true, label: "Undead Fortitude" });
+    expect(holdOnFrom("If damage reduces the zombie to 0 Hit Points, it makes a Constitution saving throw (DC 5 plus the damage taken) unless the damage is Radiant or from a Critical Hit.", "Undead Fortitude"))
       .toEqual({ save: "con", base: 5, except: ["radiant"], notOnCrit: true, label: "Undead Fortitude" });
   });
 });
