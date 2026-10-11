@@ -1,4 +1,8 @@
 {
   "lastUpdated": "2026-10-11",
-  "keys": []
+  "keys": [
+    "FFDND5E.Skill",
+    "FFDND5E.Cond",
+    "FFDND5E.Coin"
+  ]
 }
