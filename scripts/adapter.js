@@ -1336,6 +1336,12 @@ export class Dnd5eAdapter extends SystemAdapter {
     return rankLeaders(specs.map(s => s.leadership).filter(Boolean));
   }
 
+  /** The dnd5e system's own words for armor class and hit points (in the client's language). */
+  term(key) {
+    const own = { ac: "DND5E.AC", hp: "DND5E.HP" }[key];
+    return own && game.i18n.has(own) ? game.i18n.localize(own) : null;
+  }
+
   /* -------------------------------------------- */
 
   resourceLabel(key, spec) {
