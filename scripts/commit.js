@@ -8,7 +8,7 @@
 import { MODULE_ID, STATUS } from "./core.js";
 
 /** Engine conditions that are dnd5e statuses worth leaving on a creature after the fight. */
-const LINGERING = { frightened: "frightened", poisoned: "poisoned", blinded: "blinded", restrained: "restrained", paralyzed: "paralyzed", stunned: "stunned", charmed: "charmed", petrified: "petrified" };
+const LINGERING = { frightened: "frightened", poisoned: "poisoned", blinded: "blinded", restrained: "restrained", paralyzed: "paralyzed", stunned: "stunned", charmed: "charmed", controlled: "charmed", petrified: "petrified" };
 
 const emptyRecord = (tokenDoc, actor) => ({
   tokenUuid: tokenDoc?.uuid ?? null, actorUuid: actor.uuid, actorUpdate: {}, itemUpdates: [], createdItems: [], deletedItems: [], createdEffects: [],
@@ -29,7 +29,7 @@ export function describeDnd5eOutcome(spec, final) {
     const s = final.system ?? {};
     lines.push(final.stable ? "Unconscious (stable)" : `Unconscious, death saves ${s.deathSuccesses ?? 0} ✓ ${s.deathFailures ?? 0} ✗`);
   }
-  for ( const k of Object.keys(final.conditions ?? {}) ) if ( LINGERING[k] ) lines.push(k);
+  for ( const k of Object.keys(final.conditions ?? {}) ) if ( LINGERING[k] && !lines.includes(LINGERING[k]) ) lines.push(LINGERING[k]);
   for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
     const used = start - (final.resources?.[key] ?? start);
     if ( used > 0 ) lines.push(`Uses ${used}× ${key === "pact" ? "pact slot" : key.startsWith("slots:") ? `level ${key.split(":")[1]} slot` : spec.actions.find(a => a.resource === key)?.name ?? key}`);

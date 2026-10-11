@@ -1,6 +1,9 @@
 import { describe, expect, test } from "vitest";
 import { dnd5eRules, proficiency } from "../scripts/rules.js";
-import { parseMultiattack, parseMultiattackOptions } from "../scripts/multiattack.js";
+import { parseMultiattackOptions } from "../scripts/multiattack.js";
+
+/** The first (most likely) way to make a Multiattack. */
+const parseMultiattack = (description, strikes) => parseMultiattackOptions(description, strikes)[0] ?? null;
 import { payFrom } from "../scripts/commit.js";
 import { deriveDnd5eTraits } from "../scripts/traits.js";
 import { degreeDistribution } from "../scripts/core.js";

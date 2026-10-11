@@ -9,6 +9,8 @@
  * Player's Handbook and the Dungeon Master's Guide only add more spells and features to read the same way.
  */
 
+import { describeMods } from "./core.js";
+
 const ADD = 2;
 const MULTIPLY = 1;
 const ATTACK_BONUS = /^system\.bonuses\.(?:mwak|rwak|msak|rsak)\.attack$/;
@@ -126,19 +128,8 @@ export function effectLabel({ statuses = [], names = [], mods = {}, tempHp = 0, 
   if ( statuses.length ) return statuses.join(", ");
   const worded = Object.keys(conditions).map(k => ({ incapacitated: "halted", slowed: "slowed", controlled: "charmed" }[k])).filter(Boolean);
   if ( worded.length ) return worded.join(", ");
-  const sign = k => Math.sign(Array.isArray(mods[k]) ? mods[k][0] : Number(mods[k]) || 0);
-  if ( sign("actions") > 0 ) return "hastened";
-  if ( sign("attack") > 0 || sign("attackDie") > 0 ) return "emboldened";
-  if ( sign("attack") < 0 || sign("attackDie") < 0 ) return "weakened";
-  if ( sign("ac") > 0 || sign("defAdv") < 0 ) return "shielded";
-  if ( sign("ac") < 0 || sign("defAdv") > 0 ) return "exposed";
-  if ( sign("damage") > 0 ) return "empowered";
-  if ( sign("damage") < 0 ) return "enfeebled";
-  if ( sign("adv") < 0 ) return "rattled";
-  if ( sign("speed") > 0 ) return "fleet-footed";
-  if ( sign("speed") < 0 ) return "slowed";
-  if ( tempHp > 0 ) return "bolstered";
-  return "affected";
+  // Otherwise the core's word for what the bonuses do (the same words in every system).
+  return describeMods(mods, { tempHp });
 }
 
 /** Rounds from a dnd5e duration {value, units} ("1 minute" = 10 rounds), or null. */

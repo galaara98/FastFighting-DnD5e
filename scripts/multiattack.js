@@ -78,11 +78,6 @@ export function parseMultiattackOptions(description, strikes) {
   return out.filter(seq => seq.length && !seen.has(seq.join("|")) && seen.add(seq.join("|"))).slice(0, MAX_OPTIONS);
 }
 
-/** The first (most likely) way: kept for callers that want one answer. */
-export function parseMultiattack(description, strikes) {
-  return parseMultiattackOptions(description, strikes)[0] ?? null;
-}
-
 /** One alternative: a list of slots, each "n strikes, one of these". */
 function readOption(part, known) {
   // "one with its bite and two with its claws", "two ranged attacks with its longbow", "one to constrict"

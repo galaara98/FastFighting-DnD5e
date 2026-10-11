@@ -280,7 +280,9 @@ export const dnd5eRules = {
     const immune = new Set(target.spec.iwr?.immune ?? []);
     if ( (action.traits ?? []).some(t => immune.has(t)) ) return true;
     const alias = { incapacitated: "unconscious", immobilized: "restrained", controlled: "charmed" };
-    const keys = [...new Set([...(action.onSave ?? []), ...(action.onHit ?? [])].filter(Boolean).flatMap(o => Object.keys(o.conditions ?? {})))];
+    // Every outcome it can have on the target (one that simply happens too; a backfire on the user doesn't count).
+    const outcomes = [...(action.onSave ?? []), ...(action.onHit ?? []), action.outcome].filter(o => o && !o.self);
+    const keys = [...new Set(outcomes.flatMap(o => Object.keys(o.conditions ?? {})))];
     return keys.length > 0 && keys.every(k => immune.has(k) || immune.has(alias[k]));
   },
 
