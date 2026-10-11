@@ -2,7 +2,7 @@
 
 > **AI use:** This module used AI in its creation.
 > - **Programming:** I am a skilled programmer by profession, but AI was used heavily as a co-pilot.
-> - **Strings:** ALL initial strings were created by AI. ALL initial translations were created by AI, and then human writers offered corrections.
+> - **Strings:** ALL initial strings were created by AI. An AI-made Spanish translation was used to test localization and has since been removed.
 
 Dungeons & Dragons Fifth Edition support for [FastFighting Core](https://github.com/galaara98/FastFighting), the Foundry VTT module that simulates a battle (or a tense standoff) thousands of times, tells the story of one fair draw, and commits it to the tokens with **Make it So**.
 
