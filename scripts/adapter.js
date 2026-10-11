@@ -297,6 +297,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       stable: (hp.value ?? 0) <= 0 ? (sys.attributes?.death?.success ?? 0) >= 3 : undefined,
       deathSaves: { success: sys.attributes?.death?.success ?? 0, failure: sys.attributes?.death?.failure ?? 0 },
       ...this.#mending(actor),
+      ...this.#saveFeatures(actor, features, level),
       conditions: this.#conditions(actor),
       perception: skillMod("prc") ?? 0,
       darkvision: Number(sys.attributes?.senses?.ranges?.darkvision ?? sys.attributes?.senses?.darkvision) > 0, // any range will do
@@ -521,6 +522,22 @@ export class Dnd5eAdapter extends SystemAdapter {
         const label = options.length > 1 ? `${multi.name} (${[...new Set(names)].join(", ")})` : multi.name;
         out.push({ ...sequence[0], id: `${actor.id}.multiattack${k ? `.${k}` : ""}`, name: label, sequence, uses: undefined, resource: undefined });
       });
+    }
+    return out;
+  }
+
+  /**
+   * What helps its saves, by identifier or name: Magic Resistance (advantage against spells), Evasion (nothing from a
+   * Dexterity save for half on a success, half on a failure), and a paladin's Aura of Protection (Charisma, at least +1,
+   * to its own and its friends' saves within 10 feet; 30 from 18th level).
+   */
+  #saveFeatures(actor, features, level) {
+    const out = {};
+    if ( hasFeature(features, "magic-resistance", "magic resistance") ) out.magicResistance = true;
+    if ( hasFeature(features, "evasion", "evasion") ) out.evasion = "dex";
+    if ( hasFeature(features, "aura-of-protection", "aura of protection") ) {
+      const cha = Number(actor.system.abilities?.cha?.mod) || 0;
+      out.saveAura = { bonus: Math.max(1, cha), range: actor.type === "character" && level >= 18 ? 30 : 10 };
     }
     return out;
   }
