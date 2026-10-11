@@ -319,6 +319,8 @@ export class Dnd5eAdapter extends SystemAdapter {
           ? { mod: sys.tools.thief.total ?? sys.tools.thief.mod ?? 0 } : null
       },
       creatureTraits: [creature],
+      // What kind of creature (the planner groups neutrals by it): its type, narrowed by a subtype (humanoid (goblinoid)).
+      creatureKind: [creature, String(sys.details?.type?.subtype ?? "").trim().toLowerCase()].filter(Boolean).join(":") || null,
       size: sizeOf(sys.traits?.size),
       social: {
         pitches: {
