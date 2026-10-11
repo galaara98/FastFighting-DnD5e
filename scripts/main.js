@@ -11,6 +11,14 @@ export const MODULE_ID = "fast-fighting-dnd5e";
 /** The core API this helper is written against (older cores have no api.version: that is 1). */
 const NEEDS_API = 8;
 
+/**
+ * The last translation module we knew of for this game system, by language: in a language other than English, this
+ * module's settings recommend it when it isn't on (FastFighting Core's api.adviseTranslation).
+ */
+const KNOWN_TRANSLATIONS = {
+  es: { id: "translate-dnd5e-sdr2-es", title: "Translation: DnD5e SRD 5.2 2024 Spanish Translation (Babele)", url: "https://github.com/foundryvtt-sinregistrar/translate-dnd5e-sdr2-es" }
+};
+
 Hooks.once("init", () => {
   // How much a Lore-Collector's sizing a foe up pays off (lore.js).
   registerLoreBoost();
@@ -28,6 +36,7 @@ Hooks.once("fastFighting.init", api => {
     return;
   }
   api.registerAdapter("dnd5e", Dnd5eAdapter, { priority: 10, source: MODULE_ID });
+  api.adviseTranslation?.(MODULE_ID, "Dungeons & Dragons Fifth Edition", KNOWN_TRANSLATIONS);
 });
 
 Hooks.once("ready", () => {
