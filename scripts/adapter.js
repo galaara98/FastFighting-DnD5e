@@ -12,7 +12,7 @@ import { modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 import { edgeActions, studyCheck } from "./edges.js";
 import { loreBoost } from "./lore.js";
-import { t, skillName, coin } from "./words.js";
+import { t, skillName, coin, englishName, englishDescription } from "./words.js";
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 const MODES = ["walk", "fly", "swim", "climb", "burrow"];
@@ -84,12 +84,23 @@ function featureKeys(actor) {
     if ( i.type !== "feat" ) continue;
     const id = i.identifier ?? i.system?.identifier;
     if ( id ) out.push(String(id));
-    out.push(String(i.name ?? "").toLowerCase());
+    out.push(String(englishName(i)).toLowerCase());
   }
   return out;
 }
 const hasFeature = (features, id, name) => features.includes(id) || features.some(f => f.includes(name));
-const featureItem = (actor, id, name) => actor.items.find(i => i.type === "feat" && ((i.identifier ?? i.system?.identifier) === id || String(i.name ?? "").toLowerCase() === name));
+const featureItem = (actor, id, name) => actor.items.find(i => i.type === "feat" && ((i.identifier ?? i.system?.identifier) === id || String(englishName(i)).toLowerCase() === name));
+
+/**
+ * One of its actions' names in English (the item it comes from by the English name Babele keeps, "Cimitarra" ->
+ * "Scimitar"; "Cimitarra: Ataque" -> "Scimitar: Ataque"), to match what an English description says.
+ */
+function englishActionName(actor, name) {
+  for ( const i of actor.items ?? [] ) {
+    if ( name === i.name || String(name).startsWith(`${i.name}:`) || String(name).startsWith(`${i.name} `) ) return englishName(i) + String(name).slice(i.name.length);
+  }
+  return name;
+}
 
 const DAMAGE_WORDS = ["acid", "bludgeoning", "cold", "fire", "force", "lightning", "necrotic", "piercing", "poison", "psychic", "radiant", "slashing", "thunder"];
 /** The damage types named in a phrase ("acid or fire damage", "Radiant damage or damage from holy water"). */
@@ -189,15 +200,23 @@ export function moreProjectilesPerLevel(description) {
  * The words of an HTML description, with dnd5e's enrichers read: [[/item .id]]{label} (or the item's own name),
  * [[lookup @name]]{label}, @UUID[...]{label}.
  */
-export function plainText(html, actor = null) {
+export function plainText(html, actor = null, english = false) {
+  // (english: an item a description points to, by its English name, to read with an English description.)
+  const itemName = item => (item ? (english ? englishName(item) : item.name) : null);
   return String(html ?? "")
     // &Reference[prone apply=false]{Prone} (the 2024 books' condition links): the label, else the name.
     .replace(/&(?:amp;)?Reference\[([^\]]+?)(?:\s+\w+=[^\]]*)?\](?:\{([^}]*)\})?/gi, (m, name, label) => label ?? name)
-    .replace(/\[\[\/item\s+\.?([^\]\s]+)\]\](?:\{([^}]*)\})?/g, (m, ref, label) => label ?? actor?.items?.get(ref.split(".").pop())?.name ?? actor?.items?.getName?.(ref)?.name ?? "")
+    .replace(/\[\[\/item\s+\.?([^\]\s]+)\]\](?:\{([^}]*)\})?/g, (m, ref, label) => label ?? itemName(actor?.items?.get(ref.split(".").pop())) ?? itemName(actor?.items?.getName?.(ref)) ?? "")
     .replace(/\[\[[^\]]*\]\](?:\{([^}]*)\})?/g, (m, label) => label ?? "")
     .replace(/@\w+\[[^\]]*\](?:\{([^}]*)\})?/g, (m, label) => label ?? "")
     .replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
 }
+
+/**
+ * An attack's "at Advantage" version (the 2024 Monster Manual writes "plus 1d4 damage if the attack roll had Advantage"
+ * as a second activity, "Attack at Advantage"): not an attack of its own, only the extra damage when it has advantage.
+ */
+const ADVANTAGE_VARIANT = /\b(?:at|with) advantage\b|con ventaja/i;
 
 /** Consumables nobody spends in a fight (torches, rations, candles ...). */
 const IDLE_CONSUMABLES = new Set(["trinket", "food"]);
@@ -380,7 +399,7 @@ export class Dnd5eAdapter extends SystemAdapter {
         origin = effect.origin ? await fromUuid(effect.origin) : null;
       } catch ( err ) { /* gone */ }
       if ( origin?.type === "spell" ) {
-        const said = fromWords(plainText(origin.system?.description?.value), mods);
+        const said = fromWords(plainText(englishDescription(origin)), mods);
         if ( said.endsOnAttack && (effect.statuses?.has?.("invisible") ?? false) ) list.pop(); // invisible until it attacks
         if ( Object.keys(said.mods).length ) list.push(said.mods);
       }
@@ -469,15 +488,26 @@ export class Dnd5eAdapter extends SystemAdapter {
       const riders = [];
       const mine = [];
       if ( (item.system.activities ?? []).some?.(a => a.activation?.type === "legendary") ) legendaryItems.push(item);
+      const atAdvantage = [];
       for ( const activity of item.system.activities ?? [] ) {
         if ( activity.type === "summon" ) {
           const called = await this.#summonFrom(actor, item, activity);
           if ( called ) mine.push(called);
           continue;
         }
+        if ( activity.type === "attack" && ADVANTAGE_VARIANT.test(activity.name ?? "") ) {
+          atAdvantage.push(activity);
+          continue;
+        }
         const action = this.#fromActivity(actor, item, activity);
         if ( action?.riderFor ) riders.push(action.rider);
         else if ( action ) mine.push(action);
+      }
+      // (Its extra damage, on the plain attack, only with advantage.)
+      for ( const activity of atAdvantage ) {
+        const plain = mine.find(a => a.kind === "strike" || a.kind === "spell-attack");
+        const more = plain ? this.#parts(activity).slice(plain.damage?.length ?? 0) : [];
+        if ( more.length ) plain.bonusDamage = [...(plain.bonusDamage ?? []), { id: `advantage:${activity.id}`, when: "advantage", parts: more }];
       }
       if ( item.type === "spell" ) mine.splice(0, mine.length, ...this.#atSlotLevels(actor, item, mine));
       for ( const a of mine ) if ( riders.length && a.kind !== "heal" && a.kind !== "buff" ) a.effects = [...(a.effects ?? []), ...riders];
@@ -492,7 +522,9 @@ export class Dnd5eAdapter extends SystemAdapter {
     for ( const item of legendaryItems ) {
       if ( legendaryDone.has(item.id) ) continue;
       const activity = (item.system.activities ?? []).find?.(a => a.activation?.type === "legendary");
-      const named = legendaryAttack(plainText(item.system.description?.value, actor), out.filter(a => a.kind === "strike" && !a.legendary).map(a => a.name));
+      const attacks = out.filter(a => a.kind === "strike" && !a.legendary).map(a => a.name);
+      const said = legendaryAttack(plainText(englishDescription(item), actor, true), attacks.map(n => englishActionName(actor, n)));
+      const named = said ? attacks.find(n => englishActionName(actor, n) === said) : null;
       const base = named && out.find(a => a.name === named && !a.legendary);
       if ( base ) out.push({ ...base, id: `${actor.id}.${item.id}.legendary`, name: item.name, legendary: legendaryCost(activity, item), uses: undefined, resource: undefined, recharge: undefined });
     }
@@ -536,14 +568,17 @@ export class Dnd5eAdapter extends SystemAdapter {
     }
     if ( actor.type === "character" ) this.#bonusStrikes(actor, level, features, hits, out);
     // NPCs' Multiattack: the strikes it makes in one action.
-    const multi = actor.items.find(i => i.type === "feat" && ((i.identifier ?? i.system?.identifier) === "multiattack" || /multiattack/i.test(i.name)));
+    const multi = actor.items.find(i => i.type === "feat" && ((i.identifier ?? i.system?.identifier) === "multiattack" || /multiattack/i.test(englishName(i))));
     if ( multi ) {
       // Its everyday attacks, best first (limited uses such as a breath weapon aren't part of a Multiattack).
       const mean = a => (a.damage ?? []).reduce((s, p) => s + p.flat + p.dice.reduce((t, d) => t + d.n * (d.faces + 1) / 2, 0), 0);
       const strikes = out.filter(a => ["strike", "spell-attack", "save"].includes(a.kind) && a.economy !== "bonus" && a.uses === undefined && !a.resource && !a.legendary)
         .sort((a, b) => ((b.bonus ?? 0) + mean(b)) - ((a.bonus ?? 0) + mean(a)));
-      const options = parseMultiattackOptions(plainText(multi.system.description?.value, actor), strikes.map(s => ({ name: s.name, melee: !!s.melee })))
-        .filter(names => names.length > 1);
+      // (Read in English, its attacks by their English names; told by the names they go by here.)
+      const english = new Map(strikes.map(s => [englishActionName(actor, s.name), s.name]));
+      const options = parseMultiattackOptions(plainText(englishDescription(multi), actor, true), strikes.map(s => ({ name: englishActionName(actor, s.name), melee: !!s.melee })))
+        .filter(names => names.length > 1)
+        .map(names => names.map(n => english.get(n) ?? n));
       // Several ways to make it ("Scimitar or Pistol in any combination"): one action each, and the simulation picks.
       options.forEach((names, k) => {
         const sequence = names.map((n, i) => ({ ...strikes.find(s => s.name === n), id: `${multi.id}.${k}.${i}` }));
@@ -577,12 +612,12 @@ export class Dnd5eAdapter extends SystemAdapter {
     if ( regen ) {
       const heal = (regen.system.activities ?? []).find?.(a => a.type === "heal");
       const healed = heal ? this.#parts(heal, true).reduce((s, p) => s + p.flat + p.dice.reduce((t, d) => t + d.n * (d.faces + 1) / 2, 0), 0) : null;
-      const r = regenerationFrom(plainText(regen.system.description?.value, actor), healed);
+      const r = regenerationFrom(plainText(englishDescription(regen), actor, true), healed);
       if ( r ) out.regen = r;
     }
     const fortitude = featureItem(actor, "undead-fortitude", "undead fortitude");
     if ( fortitude ) {
-      const h = holdOnFrom(plainText(fortitude.system.description?.value, actor), fortitude.name);
+      const h = holdOnFrom(plainText(englishDescription(fortitude), actor, true), fortitude.name);
       if ( h ) out.holdOn = h;
     }
     return out;
@@ -617,7 +652,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     }
     if ( hasFeature(features, "flurry-of-blows", "flurry of blows") ) {
       const ident = i => String(i.identifier ?? i.system?.identifier ?? "");
-      const pool = actor.items.find(i => ["monks-focus", "ki", "focus-points", "ki-points"].includes(ident(i)) || /^(?:monk'?s focus|ki)\b/i.test(i.name));
+      const pool = actor.items.find(i => ["monks-focus", "ki", "focus-points", "ki-points"].includes(ident(i)) || /^(?:monk'?s focus|ki)\b/i.test(englishName(i)));
       const price = pool && Number(pool.system.uses?.max) ? this.#usesCost(pool, {}) : null;
       const count = hasFeature(features, "heightened-focus", "heightened focus") ? 3 : 2;
       Object.assign(hits.pools, price?.pools ?? {});
@@ -644,7 +679,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     const id = String(item.identifier ?? item.system?.identifier ?? "");
     if ( !["feat", "spell"].includes(item.type) || ["sneak-attack", "radiant-strikes"].includes(id) ) return null;
     const activities = [...(item.system.activities ?? [])];
-    const text = plainText(item.system.description?.value, actor);
+    const text = plainText(englishDescription(item), actor, true);
     const said = HIT_WORDS.test(text) && activities.some(a => ["damage", "save"].includes(a.type)) && !activities.some(a => ["attack", "heal", "summon"].includes(a.type));
     if ( !ON_HIT.has(id) && !said ) return null;
     if ( item.type === "spell" && !this.#spellReady(actor, item) ) return { riders: [], pools: {}, names: {} };
@@ -716,7 +751,7 @@ export class Dnd5eAdapter extends SystemAdapter {
           continue;
         }
         const harm = activities.find(a => a.type === "save" && a.damage?.parts?.length);
-        if ( id === "hellish-rebuke" || (harm && /\b(?:damaged|damages you|deals damage to you)\b/i.test(plainText(item.system.description?.value))) ) {
+        if ( id === "hellish-rebuke" || (harm && /\b(?:damaged|damages you|deals damage to you)\b/i.test(plainText(englishDescription(item)))) ) {
           const act = harm ?? activities.find(a => a.type === "save");
           if ( !act ) continue;
           const parts = this.#parts(act);
@@ -776,7 +811,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       }
     };
     const id = String(item.identifier ?? item.system?.identifier ?? "");
-    const text = plainText(item.system.description?.value, actor);
+    const text = plainText(englishDescription(item), actor, true);
     const spellAttack = Number(actor.system.attributes?.spell?.attack ?? actor.system.attributes?.spellattack ?? NaN);
     const fallbackAttack = (Number(actor.system.abilities?.[actor.system.attributes?.spellcasting ?? "int"]?.mod) || 0) + proficiency(actor.system.details?.level ?? 1);
     for ( const p of activity.profiles ?? [] ) {
@@ -859,8 +894,8 @@ export class Dnd5eAdapter extends SystemAdapter {
       const activity = item.system.activities?.get?.(String(a.id).split(".").at(-1));
       const per = activity ? this.#perLevel(activity) : [];
       // (Darts and rays: one more for each level up. Magic Missile's darts are all in its damage; a ray is an attack.)
-      const shots = moreProjectilesPerLevel(item.system.description?.value);
-      const darts = a.sequence?.length || projectileCount(item.system.description?.value, 1);
+      const shots = moreProjectilesPerLevel(englishDescription(item));
+      const darts = a.sequence?.length || projectileCount(englishDescription(item), 1);
       const grows = (per.length > 0 || shots > 0) && a.damage?.length;
       const used = new Set();
       for ( const s of slots ) {
@@ -964,8 +999,8 @@ export class Dnd5eAdapter extends SystemAdapter {
       if ( byTail ) return byTail;
     } else if ( Number(item.system.uses?.max) ) return item;
     const ident = i => String(i.identifier ?? i.system?.identifier ?? "");
-    if ( id === "stunning-strike" ) return actor.items.find(i => ["monks-focus", "ki", "focus-points", "ki-points"].includes(ident(i)) || /^(?:monk'?s focus|ki)\b/i.test(i.name)) ?? null;
-    if ( ON_HIT.has(id) ) return actor.items.find(i => ["combat-superiority", "superiority-dice"].includes(ident(i)) || /superiority/i.test(i.name)) ?? null;
+    if ( id === "stunning-strike" ) return actor.items.find(i => ["monks-focus", "ki", "focus-points", "ki-points"].includes(ident(i)) || /^(?:monk'?s focus|ki)\b/i.test(englishName(i))) ?? null;
+    if ( ON_HIT.has(id) ) return actor.items.find(i => ["combat-superiority", "superiority-dice"].includes(ident(i)) || /superiority/i.test(englishName(i))) ?? null;
     return null;
   }
 
@@ -1037,7 +1072,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       rounds = finite(d.rounds) || Math.ceil(finite(d.seconds) / 6) || finite(d.turns) || Math.ceil(byUnits) || rounds;
     }
     if ( !statuses.size && !changes.length && activity.type === "save" ) {
-      const text = plainText(item.system.description?.value).toLowerCase();
+      const text = plainText(englishDescription(item)).toLowerCase();
       const known = Object.keys(EFFECT_CONDITIONS).join("|");
       const m = new RegExp(`saving throw[^.]*?\\bor (?:be(?:come)? |be knocked |is knocked |have the |has the |fall |falls )?(${known})\\b`).exec(text)
         ?? new RegExp(`\\b(${known})\\b`).exec(String(activity.name ?? "").toLowerCase());
@@ -1048,7 +1083,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       }
     }
     const { mods, tempHp, iwr } = modsFromChanges(changes);
-    const said = words ? fromWords(plainText(item.system.description?.value), mods) : null;
+    const said = words ? fromWords(plainText(englishDescription(item)), mods) : null;
     if ( !said?.endsOnAttack ) for ( const m of helpful ) for ( const [k, v] of Object.entries(m) ) mods[k] ??= v;
     if ( said ) Object.assign(mods, said.mods);
     const grab = statuses.delete("grappled");
@@ -1107,7 +1142,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     if ( fx?.refs?.length ) base.effectRef = { uuid: item.uuid, ids: fx.refs };
     if ( mark?.length ) {
       return { ...base, kind: "control", auto: true, melee: false, ...reach, freeWhileHeld: true,
-        outcome: { ...(outcome ?? {}), rounds: outcome?.rounds ?? durationRounds(item.system.duration) ?? 600, mark, label: /hex/i.test(item.name) ? "hexed" : "marked" } };
+        outcome: { ...(outcome ?? {}), rounds: outcome?.rounds ?? durationRounds(item.system.duration) ?? 600, mark, label: /hex/i.test(englishName(item)) ? t("Hexed", "hexed") : t("Marked", "marked") } };
     }
     const friendly = self || ["ally", "willing"].includes(affects) || (affects !== "enemy" && (helps(outcome.mods ?? {}, outcome.conditions ?? {}) || outcome.iwr || (temp > 0 && !outcome.mods && !outcome.conditions)));
     if ( !friendly ) return { ...base, kind: "control", auto: true, melee: false, ...reach, outcome };
@@ -1183,7 +1218,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     };
     const reachOf = () => inFeet(range.reach, range.units) || 5;
     const casterLevel = actor.type === "character" ? (actor.system.details?.level ?? 1) : (actor.system.attributes?.spell?.level ?? actor.system.details?.spellLevel ?? 1);
-    const projectiles = item.type === "spell" ? projectileCount(item.system.description?.value, casterLevel) : 1;
+    const projectiles = item.type === "spell" ? projectileCount(englishDescription(item), casterLevel) : 1;
     const targets = areaTargets(activity.target ?? item.system.target);
 
     if ( activity.type === "attack" ) {
@@ -1286,7 +1321,8 @@ export class Dnd5eAdapter extends SystemAdapter {
 
   #leadershipEntry(actor, id, level) {
     // One entry per feature: its identifier to match on, its name to show.
-    const features = actor.items.filter(i => i.type === "feat").map(i => ({ key: String(i.identifier ?? i.system?.identifier ?? ""), name: i.name }));
+    // (Matched by identifier, else by its English name; shown by the name it goes by here.)
+    const features = actor.items.filter(i => i.type === "feat").map(i => ({ key: String(i.identifier ?? i.system?.identifier ?? "") || englishName(i), name: i.name }));
     // Animals and the mindless follow; they don't lead.
     if ( (actor.system.abilities?.int?.value ?? 10) <= 3 ) return null;
     const skills = actor.system.skills ?? {};

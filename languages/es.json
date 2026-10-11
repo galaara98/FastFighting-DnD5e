@@ -62,6 +62,38 @@
       "Celestial": "Celestial",
       "Master": "Sirve a un amo",
       "BoundToObey": "Obligado a obedecer"
-    }
+    },
+    "Skill": {
+      "per": "Persuasión",
+      "itm": "Intimidación",
+      "dec": "Engaño",
+      "ins": "Perspicacia",
+      "prc": "Percepción",
+      "arc": "Conocimiento Arcano",
+      "his": "Historia",
+      "inv": "Investigación",
+      "nat": "Naturaleza",
+      "rel": "Religión"
+    },
+    "Cond": {
+      "frightened": "asustado",
+      "poisoned": "envenenado",
+      "blinded": "cegado",
+      "restrained": "apresado",
+      "paralyzed": "paralizado",
+      "stunned": "aturdido",
+      "charmed": "hechizado",
+      "petrified": "petrificado",
+      "prone": "derribado"
+    },
+    "Coin": {
+      "pp": "ppt",
+      "gp": "po",
+      "ep": "pe",
+      "sp": "pp",
+      "cp": "pc"
+    },
+    "Hexed": "maldecido",
+    "Marked": "marcado"
   }
 }

@@ -62,6 +62,38 @@
       "Celestial": "Celestial",
       "Master": "Serves a master",
       "BoundToObey": "Bound to obey"
-    }
+    },
+    "Skill": {
+      "per": "Persuasion",
+      "itm": "Intimidation",
+      "dec": "Deception",
+      "ins": "Insight",
+      "prc": "Perception",
+      "arc": "Arcana",
+      "his": "History",
+      "inv": "Investigation",
+      "nat": "Nature",
+      "rel": "Religion"
+    },
+    "Cond": {
+      "frightened": "frightened",
+      "poisoned": "poisoned",
+      "blinded": "blinded",
+      "restrained": "restrained",
+      "paralyzed": "paralyzed",
+      "stunned": "stunned",
+      "charmed": "charmed",
+      "petrified": "petrified",
+      "prone": "prone"
+    },
+    "Coin": {
+      "pp": "pp",
+      "gp": "gp",
+      "ep": "ep",
+      "sp": "sp",
+      "cp": "cp"
+    },
+    "Hexed": "hexed",
+    "Marked": "marked"
   }
 }
