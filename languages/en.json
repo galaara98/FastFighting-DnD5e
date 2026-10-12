@@ -45,11 +45,16 @@
     },
     "Reason": {
       "Pc": "Player character",
-      "Int": "Intelligence {n}",
+      "Ability": "{name} {n}",
+      "Level": "level {n}",
+      "SaveVsLevel": "{name} save {n} vs level",
+      "Immune": "immune to {condition}",
+      "Exhaustion": "{name} {n}",
+      "Loyalty": "loyalty score {n}",
+      "NoParty": "not in the party",
       "Beast": "Beast",
       "BarelyThinks": "Barely thinks",
-      "Pack": "; hunts as a pack",
-      "WisSave": "Wisdom save",
+      "Pack": "hunts as a pack",
       "NeverFlees": "Mindless: never flees",
       "Construct": "Construct",
       "BeastFlees": "Beast: flees when hurt",
@@ -71,7 +76,8 @@
       "nat": "Nature",
       "rel": "Religion",
       "slt": "Sleight of Hand",
-      "ste": "Stealth"
+      "ste": "Stealth",
+      "med": "Medicine"
     },
     "Cond": {
       "frightened": "frightened",
@@ -84,7 +90,8 @@
       "petrified": "petrified",
       "prone": "prone",
       "invisible": "invisible",
-      "grappled": "grappled"
+      "grappled": "grappled",
+      "exhaustion": "exhaustion"
     },
     "Coin": {
       "pp": "pp",

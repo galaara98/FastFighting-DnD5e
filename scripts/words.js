@@ -44,6 +44,18 @@ export function conditionName(key) {
   return sysOr(c?.label ?? c?.name, `Cond.${key}`, key).toLocaleLowerCase();
 }
 
+/** A CONFIG entry's name: the entry itself (a key or text) or its label. */
+const labelOf = entry => sys(typeof entry === "string" ? entry : entry?.label);
+
+/** An ability's name ("Wisdom"), as the system calls it (else its key). */
+export const abilityName = key => labelOf(globalThis.CONFIG?.DND5E?.abilities?.[key]) ?? key;
+
+/** An alignment's name ("Lawful Good"), as the system calls it (else its key). */
+export const alignmentName = key => labelOf(globalThis.CONFIG?.DND5E?.alignments?.[key]) ?? key;
+
+/** A creature type's name ("Celestial"), as the system calls it (else its key). */
+export const creatureTypeName = key => labelOf(globalThis.CONFIG?.DND5E?.creatureTypes?.[key]) ?? key;
+
 /** A coin's abbreviation ("gp"), as the system writes it. */
 export const coin = c => sysOr(globalThis.CONFIG?.DND5E?.currencies?.[c]?.abbreviation, `Coin.${c}`, c);
 

@@ -3,7 +3,7 @@
  * alignment, gear.
  */
 import { describe, expect, test } from "vitest";
-import { dnd5eHints, dnd5eTactics, alignmentKey, plainText } from "../scripts/auto.js";
+import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, plainText } from "../scripts/auto.js";
 
 describe("the playstyles 5e says fit", () => {
   test("classes add up; a shield and heavy armor make a Tank likelier", () => {
@@ -33,5 +33,29 @@ describe("5e's answers to the tactics questions", () => {
     expect(alignmentKey("Caótico Malvado", { ce: "Caótico Malvado" })).toBe("ce");
     expect(alignmentKey("unaligned", { ce: "Chaotic Evil" })).toBe(null);
     expect(plainText("<p>A <em>greedy</em> sellsword.</p>")).toBe("A greedy sellsword.");
+  });
+});
+
+describe("a biography, for the keywords", () => {
+  // (The SRD 5.2 premade heroes' words, and sheet fields of the kind a player fills in.)
+  const details = {
+    biography: { value: "<p>A devout follower of her deity, Akra feels bound to bring peace to the region.</p>", public: "" },
+    appearance: "Scaled and tall", trait: "<p>I am <strong>patient</strong>.</p>", ideal: "Charity", bond: "My temple", flaw: "I am stubborn"
+  };
+
+  test("a character's appearance, personality, ideals, bonds and flaws are said of it; its biography is its story", () => {
+    const bio = biographyOf("character", details);
+    for ( const words of ["Scaled and tall", "patient", "Charity", "My temple", "I am stubborn"] ) expect(bio.about).toContain(words);
+    expect(bio.about).not.toContain("Akra");
+    expect(bio.story).toContain("bring peace");
+    expect(bio.against).toBe("");
+  });
+
+  test("a creature's biography is its lore, said of it", () => {
+    const bio = biographyOf("npc", { biography: { value: "<p>Bandits are ruthless.</p>", public: "<p>Seen on the roads.</p>" } });
+    expect(bio.about).toContain("Bandits are ruthless.");
+    expect(bio.about).toContain("Seen on the roads.");
+    expect(bio.story).toBe("");
+    expect(biographyOf("npc", null)).toEqual({ about: "", story: "", against: "" });
   });
 });

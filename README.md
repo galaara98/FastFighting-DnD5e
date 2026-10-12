@@ -8,7 +8,7 @@ Dungeons & Dragons Fifth Edition support for [FastFighting Core](https://github.
 
 - **Foundry:** v14
 - **System:** dnd5e 4.0 or later (written against 6.0)
-- **Needs:** FastFighting Core (API 12)
+- **Needs:** FastFighting Core (API 13)
 
 ## Installation
 
@@ -73,7 +73,18 @@ Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 
   - Sleight of Hand steals, against passive Perception;
   - languages;
   - Wisdom saves set how strong-willed a creature is.
-- **Personality defaults:** Intelligence, Wisdom and creature type; beasts and the mindless fight on instinct; Pack Tactics.
+- **A creature's personality** comes from what it is: its Intelligence, its Wisdom save for its challenge rating and its creature type (beasts and the mindless fight on instinct; Pack Tactics). Then its alignment moves it (good less selfish, evil more, lawful more loyal, chaotic less), and so do its kind's loyalty (a devil's hierarchy, a demon's chaos, a celestial's devotion), an immunity to being frightened (a fearless one) or charmed, its features (Brave, Martial Advantage, Aggressive, Pack Tactics, a reckless or frenzied one ...), healing others, exhaustion, and a loyalty score where the world keeps one. A creature dnd5e summoned serves its summoner. Nothing moves the mindless.
+- **A player character's personality** starts as the usual hero's (bold, loyal, unselfish, a good head), and everything on its sheet moves it a little:
+  - Intelligence, Wisdom and experience for Tactical; its Wisdom save against the usual hero's at its level, and its Constitution, for Brave;
+  - its classes (by their share of its levels) and subclasses: a paladin selfless and loyal, a berserker bold and rash, a thief or a fiend's warlock out for itself, a wizard or a lore bard a planner;
+  - its background: an acolyte selfless, a criminal less so, a sage a planner, a soldier bold and loyal;
+  - its alignment, half as much as a creature's;
+  - its features by what their effects do (an immunity to being frightened; advantage on Wisdom saves, like Gnomish Cunning; Mindless Rage's immunities count half, being on only while it rages), the rest by identifier (Brave, Aura of Courage, Relentless Endurance, Danger Sense, Indomitable ...). Its species speaks through its traits;
+  - its condition immunities, and the features and prepared spells it heals others with;
+  - skills that say something (Sleight of Hand, Deception, Medicine, Investigation, History, Insight, Perception, Intimidation, Persuasion), expertise more;
+  - exhaustion, and whether it's in the party (dnd5e's primary party).
+
+  Each trait's tooltip in the planner lists where it started and every part that moved it.
 - **Already under way:** current HP, death saves, conditions (prone, frightened, poisoned, restrained, grappled, paralyzed, stunned, unconscious and others) and exhaustion.
 
 ## The 5e rules it plays
@@ -129,7 +140,7 @@ When FastFighting sets a character up by itself (the first time it sees it: see 
 - **Kind of creature:** a beast a Brawler; undead, constructs, oozes and plants Relentless (constructs and oozes never run); a fiend Cruel; a celestial a Moralist; fey a Wildcard; a giant a Brawler.
 - **Alignment** (read by the system's own names for them, in any language): good leans Moralist, chaotic neutral Wildcard, neutral evil Mercenary, evil Cruel.
 - **Gear:** a shield or heavy armor worn makes a Tank likelier.
-- **Keywords:** its biography, and a character's personality traits, ideals, bonds and flaws.
+- **Keywords:** what's said of a character (its appearance, personality traits, ideals, bonds and flaws) counts in full, and its biography, a story with others in it, a little; a creature's biography is its lore, said of it.
 
 ## Make it So
 

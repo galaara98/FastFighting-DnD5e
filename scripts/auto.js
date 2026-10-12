@@ -2,7 +2,7 @@
  * What D&D 5e says about a character, for the one time FastFighting sets it up by itself (the core's
  * foundry/auto-config.js): the playstyles that fit it and its own answers to the tactics questions, from its classes
  * (by identifier), species (by identifier, only where an SRD trait says something), kind of creature, alignment and
- * gear; and its biography as plain text (with its personality traits, ideals, bonds and flaws) for the keywords. Pure.
+ * gear; and its biography as plain text for the keywords (biographyOf: what's said of it, and its story). Pure.
  */
 
 /** What each class leans toward (several classes add up). */
@@ -95,6 +95,23 @@ export function alignmentKey(text, names = {}) {
   if ( !said ) return null;
   for ( const [key, name] of Object.entries(names) ) if ( String(name).trim().toLowerCase() === said ) return key;
   return null;
+}
+
+/**
+ * Its biography, for the keywords (the core's {about, story, against}): what a character's sheet says of it (its
+ * appearance, personality traits, ideals, bonds and flaws) in full, and its biography as a story told about it (a
+ * backstory: its words may be about anyone in it). A creature's biography is its lore, said of it. Nothing on a 5e sheet
+ * says what it's against.
+ * @param {string} type        "character" | "npc"
+ * @param {object} details     its system.details
+ * @param {(html: string) => string} [text]   a field's HTML as plain text
+ * @returns {{about: string, story: string, against: string}}
+ */
+export function biographyOf(type, details, text = plainText) {
+  const d = details ?? {};
+  const join = values => values.map(v => text(v ?? "")).filter(Boolean).join("\n");
+  if ( type === "character" ) return { about: join([d.appearance, d.trait, d.ideal, d.bond, d.flaw]), story: join([d.biography?.value, d.biography?.public]), against: "" };
+  return { about: join([d.biography?.value, d.biography?.public, d.trait, d.ideal, d.bond, d.flaw]), story: "", against: "" };
 }
 
 /** Text from the sheet's HTML. */

@@ -5,7 +5,7 @@
 import { SystemAdapter, parseFormula, part } from "./core.js";
 import { dnd5eRules, proficiency } from "./rules.js";
 import { deriveDnd5eTraits, isMindless } from "./traits.js";
-import { dnd5eHints, dnd5eTactics, alignmentKey, plainText } from "./auto.js";
+import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, plainText as sheetText } from "./auto.js";
 import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
 import { commitDnd5eOutcome, describeDnd5eOutcome, commitDnd5eConcession } from "./commit.js";
@@ -93,6 +93,37 @@ function featureKeys(actor) {
 }
 const hasFeature = (features, id, name) => features.includes(id) || features.some(f => f.includes(name));
 const featureItem = (actor, id, name) => actor.items.find(i => i.type === "feat" && ((i.identifier ?? i.system?.identifier) === id || String(englishName(i)).toLowerCase() === name));
+
+/** The effects an item puts on its owner (not those it puts on a target), each with its changes and whether it's off. */
+const ownEffects = item => [...(item.effects ?? [])].filter(e => e.transfer !== false)
+  .map(e => ({ disabled: !!e.disabled, changes: [...(e.system?.changes ?? e.changes ?? [])].map(c => ({ key: c.key, value: c.value })) }));
+
+/** The system's names for the alignments (CONFIG.DND5E.alignments), by key, in the table's language. */
+const alignmentNames = () => Object.fromEntries(Object.entries(globalThis.CONFIG?.DND5E?.alignments ?? {}).map(([k, v]) => [k, game.i18n.localize(typeof v === "string" ? v : v?.label ?? "")]));
+
+/** Is it in the world's party (dnd5e's primary party)? Undefined when there's none to be in. */
+function inParty(actor) {
+  const party = globalThis.game?.actors?.party;
+  if ( !party ) return undefined;
+  const members = party.system?.members;
+  const ids = members?.ids instanceof Set ? members.ids : new Set([...(members ?? [])].map(m => m?.actor?.id ?? m?.id));
+  return ids.has(actor.id);
+}
+
+/**
+ * A biography's @Embed[...] of a journal page (the 2024 books put a creature's lore there) as that page's text, where
+ * Foundry has the page at hand; else nothing.
+ */
+function embedded(html) {
+  return String(html ?? "").replace(/@Embed\[([^\]\s]+)[^\]]*\](?:\{[^}]*\})?/g, (m, uuid) => {
+    try {
+      const page = globalThis.fromUuidSync?.(uuid, { strict: false });
+      return typeof page?.text?.content === "string" ? ` ${page.text.content} ` : " ";
+    } catch ( err ) {
+      return " ";
+    }
+  });
+}
 
 /**
  * One of its actions' names in English (the item it comes from by the English name Babele keeps, "Cimitarra" ->
@@ -1334,13 +1365,12 @@ export class Dnd5eAdapter extends SystemAdapter {
   #facts(actor) {
     const sys = actor.system ?? {};
     const equipped = kind => actor.items.some(i => i.type === "equipment" && i.system.equipped && i.system.type?.value === kind);
-    const names = Object.fromEntries(Object.entries(globalThis.CONFIG?.DND5E?.alignments ?? {}).map(([k, v]) => [k, game.i18n.localize(typeof v === "string" ? v : v?.label ?? "")]));
     const creature = String(sys.details?.type?.value ?? "").toLowerCase();
     return {
       classes: Object.keys(actor.classes ?? {}),
       species: actor.items.find(i => i.type === "race")?.system?.identifier ?? null,
       creature,
-      alignment: alignmentKey(sys.details?.alignment, names),
+      alignment: alignmentKey(sys.details?.alignment, alignmentNames()),
       shield: equipped("shield"),
       heavy: equipped("heavy"),
       mindless: isMindless(sys.abilities?.int?.value, creature)
@@ -1357,26 +1387,69 @@ export class Dnd5eAdapter extends SystemAdapter {
     return dnd5eTactics(this.#facts(actor));
   }
 
-  /** Its biography (and a character's personality traits, ideals, bonds and flaws) as text. */
+  /**
+   * Its biography, as text: a character's appearance and its personality traits, ideals, bonds and flaws are said of
+   * it (in full); its biography is its story (a backstory: its words may be about anyone in it). A creature's
+   * biography is its lore, said of it. (A lore page it embeds is read where Foundry has it at hand.)
+   */
   biography(actor) {
-    const d = actor.system?.details ?? {};
-    return [d.biography?.value, d.biography?.public, d.trait, d.ideal, d.bond, d.flaw].map(plainText).filter(Boolean).join(". ");
+    return biographyOf(actor.type, actor.system?.details, html => sheetText(plainText(embedded(html), actor)));
   }
 
   deriveTraits(actor) {
     const sys = actor.system;
-    const level = actor.type === "character" ? (sys.details?.level ?? 1) : Math.max(0, Number(sys.details?.cr) || 0);
+    const pc = actor.type === "character";
+    const level = pc ? (sys.details?.level ?? 1) : Math.max(0, Number(sys.details?.cr) || 0);
     const save = sys.abilities?.wis?.save;
+    // (Each feature once, by identifier, with the effects it puts on its owner: what they do says something of who has it.)
+    const seen = new Set();
+    const items = actor.items.filter(i => i.type === "feat").map(i => ({ id: String(i.identifier ?? i.system?.identifier ?? ""), name: i.name, effects: ownEffects(i) }))
+      .filter(i => !seen.has(i.id || i.name) && seen.add(i.id || i.name));
+    const background = actor.items.find(i => i.type === "background");
+    const loyalty = sys.attributes?.loyalty?.value;
     return deriveDnd5eTraits({
       type: actor.type,
       creature: String(sys.details?.type?.value ?? "").toLowerCase(),
+      subtype: String(sys.details?.type?.subtype ?? ""),
       int: sys.abilities?.int?.value ?? 10,
       wis: sys.abilities?.wis?.mod ?? 0,
       level,
       wisSave: typeof save === "number" ? save : (save?.value ?? sys.abilities?.wis?.mod ?? 0),
-      hasMaster: false,
-      features: featureKeys(actor)
+      // (One dnd5e summoned serves its summoner.)
+      hasMaster: !!actor.flags?.dnd5e?.summon?.origin,
+      features: featureKeys(actor),
+      items,
+      // Its own condition immunities, as its sheet has them (a feature's are in its effects).
+      ci: asArray(actor._source?.system?.traits?.ci?.value ?? sys.traits?.ci?.value),
+      alignment: alignmentKey(sys.details?.alignment, alignmentNames()),
+      exhaustion: Number(sys.attributes?.exhaustion) || 0,
+      heals: this.#healsOthers(actor),
+      ...(pc ? {
+        scores: Object.fromEntries(ABILITIES.map(k => [k, Number(sys.abilities?.[k]?.value) || 10])),
+        classes: Object.values(actor.classes ?? {}).map(c => ({
+          id: String(c.identifier ?? c.system?.identifier ?? ""), name: c.name, levels: Number(c.system?.levels) || 0,
+          subclass: c.subclass ? { id: String(c.subclass.identifier ?? c.subclass.system?.identifier ?? ""), name: c.subclass.name } : null
+        })),
+        background: background ? { id: String(background.identifier ?? background.system?.identifier ?? ""), name: background.name } : null,
+        skills: Object.fromEntries(Object.entries(sys.skills ?? {}).map(([k, s]) => [k, Number(s?.proficient ?? s?.value) || 0])),
+        inParty: inParty(actor)
+      } : { loyalty: Number.isFinite(loyalty) ? loyalty : null })
     });
+  }
+
+  /** The features and spells (ready to cast) it heals others with, by name: healing that reaches someone besides itself. */
+  #healsOthers(actor) {
+    const out = [];
+    for ( const item of actor.items ) {
+      if ( item.type !== "feat" && !(item.type === "spell" && this.#spellReady(actor, item)) ) continue;
+      const others = a => {
+        const affects = a.target?.affects?.type;
+        return affects ? affects !== "self" : (a.range?.units ?? item.system.range?.units) !== "self";
+      };
+      const heals = [...(item.system.activities ?? [])].some(a => a.type === "heal" && asArray(a.healing?.types).includes("healing") && others(a));
+      if ( heals && !out.includes(item.name) ) out.push(item.name);
+    }
+    return out;
   }
 
   #leadershipEntry(actor, id, level) {
