@@ -5,6 +5,7 @@
 import { SystemAdapter, parseFormula, part } from "./core.js";
 import { dnd5eRules, proficiency } from "./rules.js";
 import { deriveDnd5eTraits, isMindless } from "./traits.js";
+import { dnd5eHints, dnd5eTactics, alignmentKey, plainText } from "./auto.js";
 import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
 import { commitDnd5eOutcome, describeDnd5eOutcome, commitDnd5eConcession } from "./commit.js";
@@ -1325,6 +1326,42 @@ export class Dnd5eAdapter extends SystemAdapter {
   }
 
   /* -------------------------------------------- */
+
+  /**
+   * What a character's system says for setting it up by itself (auto.js): its classes and species by identifier, its
+   * kind of creature, its alignment (by the system's own names for them), a shield or heavy armor worn.
+   */
+  #facts(actor) {
+    const sys = actor.system ?? {};
+    const equipped = kind => actor.items.some(i => i.type === "equipment" && i.system.equipped && i.system.type?.value === kind);
+    const names = Object.fromEntries(Object.entries(globalThis.CONFIG?.DND5E?.alignments ?? {}).map(([k, v]) => [k, game.i18n.localize(typeof v === "string" ? v : v?.label ?? "")]));
+    const creature = String(sys.details?.type?.value ?? "").toLowerCase();
+    return {
+      classes: Object.keys(actor.classes ?? {}),
+      species: actor.items.find(i => i.type === "race")?.system?.identifier ?? null,
+      creature,
+      alignment: alignmentKey(sys.details?.alignment, names),
+      shield: equipped("shield"),
+      heavy: equipped("heavy"),
+      mindless: isMindless(sys.abilities?.int?.value, creature)
+    };
+  }
+
+  /** The playstyles D&D 5e says fit it (auto.js). */
+  playstyleHints(actor) {
+    return dnd5eHints(this.#facts(actor));
+  }
+
+  /** Its own answers to the tactics questions (auto.js): a class's style, a paladin's guarding, a construct's staying. */
+  tacticHints(actor) {
+    return dnd5eTactics(this.#facts(actor));
+  }
+
+  /** Its biography (and a character's personality traits, ideals, bonds and flaws) as text. */
+  biography(actor) {
+    const d = actor.system?.details ?? {};
+    return [d.biography?.value, d.biography?.public, d.trait, d.ideal, d.bond, d.flaw].map(plainText).filter(Boolean).join(". ");
+  }
 
   deriveTraits(actor) {
     const sys = actor.system;

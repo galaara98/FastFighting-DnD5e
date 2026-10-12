@@ -8,7 +8,7 @@ Dungeons & Dragons Fifth Edition support for [FastFighting Core](https://github.
 
 - **Foundry:** v14
 - **System:** dnd5e 4.0 or later (written against 6.0)
-- **Needs:** FastFighting Core (API 11)
+- **Needs:** FastFighting Core (API 12)
 
 ## Installation
 
@@ -117,6 +117,19 @@ Tactics answers:
 
 - **Shields** (keep it raised, raise it with spare actions, don't bother): a 5e shield is already in the AC, so this says how readily it **Dodges** instead: half again as readily; as it would anyway; never.
 - **Magic and specialties** (an Un-Mundane character leans on them): spells, and the activities of its features (a class's, a species', a creature's own: Second Wind, a breath weapon), Reckless Attack, Action Surge. Its weapons, Dodge, Help, Hide, Shove and potions are what anyone could do.
+
+## Set up by itself
+
+When FastFighting sets a character up by itself (the first time it sees it: see the core's README), 5e has its say:
+- **Classes, by identifier** (several add up):
+  - a Barbarian a Brawler, impatient; a Bard a People-Pleaser and a Diplomat; a Cleric an Enabler; a Druid Un-Mundane and a Lore-Collector; a Fighter a Brawler or a Tank; a Monk a Speed-Runner;
+  - a Paladin a Tank and a Martyr; a Ranger a Wallflower; a Rogue a Thief; a Sorcerer or Warlock Un-Mundane; a Wizard Un-Mundane and a Lore-Collector; an Artificer a Puzzle-Maniac.
+  - Their fighting style: a Paladin protects its friends (and goes to one who falls); Barbarians and Fighters hold the front line; Monks and Rogues skirmish; Rangers shoot; the spellcasters lead with spells. A Cleric heals readily.
+- **Species, by identifier,** only where an SRD trait leans somewhere (an orc's Relentless Endurance, a gnome's cunning).
+- **Kind of creature:** a beast a Brawler; undead, constructs, oozes and plants Relentless (constructs and oozes never run); a fiend Cruel; a celestial a Moralist; fey a Wildcard; a giant a Brawler.
+- **Alignment** (read by the system's own names for them, in any language): good leans Moralist, chaotic neutral Wildcard, neutral evil Mercenary, evil Cruel.
+- **Gear:** a shield or heavy armor worn makes a Tank likelier.
+- **Keywords:** its biography, and a character's personality traits, ideals, bonds and flaws.
 
 ## Make it So
 
