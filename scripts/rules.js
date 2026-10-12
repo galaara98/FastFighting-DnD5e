@@ -6,7 +6,7 @@
  * disadvantage, which cancel each other out. A creature at 0 HP makes death saves; three successes stabilize it,
  * three failures kill it, and taking damage while down counts as a failure (two on a critical).
  */
-import { DOWNED_MODELS, STATUS, rollD20, bestReactionStrike } from "./core.js";
+import { DOWNED_MODELS, STATUS, rollD20, bestReactionStrike, dropCondition } from "./core.js";
 import { t } from "./words.js";
 
 /** Proficiency bonus for a level or challenge rating. */
@@ -298,9 +298,26 @@ export const dnd5eRules = {
   conditionWeight(key) {
     return { paralyzed: 1, stunned: 1, unconscious: 1, petrified: 1, restrained: 0.4, blinded: 0.35, frightened: 0.25, poisoned: 0.2, charmed: 0.3, slowed: 0.3 }[key];
   },
-  /** Knocked prone, as numbers: its own attacks at disadvantage, and those against it (up close) at advantage. */
+  /**
+   * Knocked prone, as numbers: its own attacks at disadvantage, and those against it (up close) at advantage. Hidden
+   * (Invisible, from the Hide action): its attacks at advantage, those against it at disadvantage.
+   */
   conditionMods(key) {
+    if ( key === "hidden" ) return { adv: 1, defAdv: -1 };
     return key === "prone" ? { adv: -1, defAdv: 1 } : null;
+  },
+  /** Hiding takes not having a foe beside it: there's no hiding from one who's right there. */
+  usable(run, u, action) {
+    if ( !action?.hide ) return true;
+    return ![...(u.adjacent ?? [])].some(id => { const o = run.byId.get(id); return o && o.status === STATUS.STANDING && run.prep.sides[u.side]?.enemies.has(o.side); });
+  },
+  /** Hidden ends when it attacks. */
+  afterRoll(run, u, roll, ctx) {
+    if ( ctx?.kind === "attack" && u?.conds?.hidden ) dropCondition(u, "hidden");
+  },
+  /** Knocking a foe out: any melee attack that drops it can (one who spares the fallen does). */
+  pullsBlow(u, action) {
+    return !!action?.melee;
   },
 
   /** Knocked out rather than killed: stable at 0 HP, no death saves to make. */

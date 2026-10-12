@@ -12,7 +12,7 @@ import { modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 import { edgeActions, studyCheck } from "./edges.js";
 import { loreBoost } from "./lore.js";
-import { t, skillName, coin, englishName, englishDescription } from "./words.js";
+import { t, skillName, conditionName, coin, englishName, englishDescription } from "./words.js";
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 const MODES = ["walk", "fly", "swim", "climb", "burrow"];
@@ -534,18 +534,28 @@ export class Dnd5eAdapter extends SystemAdapter {
       const base = named && out.find(a => a.name === named && !a.legendary);
       if ( base ) out.push({ ...base, id: `${actor.id}.${item.id}.legendary`, name: item.name, legendary: legendaryCost(activity, item), uses: undefined, resource: undefined, recharge: undefined });
     }
-    // Anyone can Dodge (attacks against it have disadvantage until its next turn); characters and humanoids can Shove
-    // a foe prone (a Strength or Dexterity save against 8 + Strength + proficiency).
-    out.push({ id: `${actor.id}.dodge`, name: t("Dodge"), kind: "buff", targets: "self", cost: 1, traits: [], tell: "dodge", outcome: { mods: { defAdv: -1 }, rounds: 1, label: t("Dodging") } });
+    // Anyone can Dodge (attacks against it have disadvantage until its next turn): a 5e shield is already in its AC,
+    // so the shield answer says how readily it takes this turn to its own defense instead. Characters and humanoids can
+    // Shove a foe prone (a Strength or Dexterity save against 8 + Strength + proficiency).
+    out.push({ id: `${actor.id}.dodge`, name: t("Dodge"), kind: "buff", targets: "self", cost: 1, traits: [], tell: "dodge", guard: true, setup: true, outcome: { mods: { defAdv: -1 }, rounds: 1, label: t("Dodging") } });
+    // Hide (anyone; a rogue's Cunning Action makes it a bonus action): Dexterity (Stealth) against DC 15, the SRD 5.2's.
+    // Hidden, it's Invisible (its attacks with advantage, those against it at disadvantage) until it attacks. Not with a
+    // foe beside it (rules.usable), the cover the rules want being the GM's to judge. One keeping a low profile goes for it.
+    const stealth = Number(actor.system.skills?.ste?.total ?? actor.system.skills?.ste?.mod);
+    if ( Number.isFinite(stealth) && !isMindless(actor.system.abilities?.int?.value, String(actor.system.details?.type?.value ?? "").toLowerCase()) ) {
+      const cunning = featureItem(actor, "cunning-action", "cunning action");
+      out.push({ id: `${actor.id}.hide`, name: t("Hide"), kind: "buff", targets: "self", cost: 1, economy: cunning ? "bonus" : undefined, traits: [], hide: true, setup: true, leans: ["lowProfile"],
+        check: { mod: stealth, dc: 15, label: skillName("ste") }, onDegree: [null, null, { conditions: { hidden: 1 }, rounds: 10, label: conditionName("invisible") }, { conditions: { hidden: 1 }, rounds: 10, label: conditionName("invisible") }] });
+    }
     // Help, and Insight before talking (edges.js).
     out.push(...edgeActions({ id: actor.id, sys: actor.system, mindless: isMindless(actor.system.abilities?.int?.value, String(actor.system.details?.type?.value ?? "").toLowerCase()) }));
     // Reckless Attack (barbarians): advantage on its attacks, and against it, until its next turn; no action at all.
     const reckless = featureItem(actor, "reckless-attack", "reckless attack");
-    if ( reckless ) out.push({ id: `${actor.id}.reckless`, name: reckless.name, kind: "buff", targets: "self", economy: "free", oncePerTurn: true, traits: [], itemId: reckless.id, tell: "reckless",
+    if ( reckless ) out.push({ id: `${actor.id}.reckless`, name: reckless.name, kind: "buff", targets: "self", economy: "free", oncePerTurn: true, traits: [], itemId: reckless.id, tell: "reckless", special: true,
       outcome: { mods: { adv: 1, defAdv: 1 }, rounds: 1, label: t("Reckless") } });
     // Action Surge (fighters): one more action, this turn, once a rest.
     const surge = featureItem(actor, "action-surge", "action surge");
-    if ( surge ) out.push({ id: `${actor.id}.action-surge`, name: surge.name, kind: "buff", targets: "self", economy: "free", oncePerTurn: true, traits: [], itemId: surge.id, tell: "surge",
+    if ( surge ) out.push({ id: `${actor.id}.action-surge`, name: surge.name, kind: "buff", targets: "self", economy: "free", oncePerTurn: true, traits: [], itemId: surge.id, tell: "surge", special: true,
       ...this.#resource(actor, surge), outcome: { actionsNow: 1, rounds: 1, label: t("Surging") } });
     const creatureType = String(actor.system.details?.type?.value ?? "").toLowerCase();
     if ( actor.type === "character" || creatureType === "humanoid" ) {
@@ -554,6 +564,11 @@ export class Dnd5eAdapter extends SystemAdapter {
       // (Only a creature at most one size larger.)
       out.push({ id: `${actor.id}.shove`, name: t("Shove"), kind: "control", cost: 1, traits: [], melee: true, reach: 5, maxSize: sizeOf(actor.system.traits?.size) + 1,
         save: { type: ["str", "dex"], dc, basic: false }, onSave: [prone, prone, null, null] });
+      // Grapple (an Unarmed Strike, the SRD 5.2's): the same save, or Grappled (it can't move) until it breaks free,
+      // the save again at the end of each of its turns.
+      const held = { conditions: { immobilized: 1 }, rounds: 10, repeatSave: { type: ["str", "dex"], dc }, label: conditionName("grappled") };
+      out.push({ id: `${actor.id}.grapple`, name: t("Grapple"), kind: "control", cost: 1, traits: [], melee: true, reach: 5, maxSize: sizeOf(actor.system.traits?.size) + 1,
+        save: { type: ["str", "dex"], dc, basic: false }, onSave: [held, held, null, null] });
     }
     this.#sneakAttack(actor, level, features, out);
     // Improved Divine Smite (2014) and Radiant Strikes (2024): a die of radiant on every melee weapon hit.
@@ -1220,7 +1235,9 @@ export class Dnd5eAdapter extends SystemAdapter {
     const base = {
       id: `${actor.id}.${item.id}.${activity.id}`, name: several && activity.name && activity.name !== item.name ? `${item.name}: ${activity.name}` : item.name,
       cost: 1, economy, itemId: item.id, traits: [], rank: item.type === "spell" ? item.system.level : undefined, concentration, ...this.#resource(actor, item),
-      legendary
+      legendary,
+      // (A feature's: a class's, a species', a creature's own. What "magic and specialties" means, with spells.)
+      feature: item.type === "feat" || undefined
     };
     const reachOf = () => inFeet(range.reach, range.units) || 5;
     const casterLevel = actor.type === "character" ? (actor.system.details?.level ?? 1) : (actor.system.attributes?.spell?.level ?? actor.system.details?.spellLevel ?? 1);

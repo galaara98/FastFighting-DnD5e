@@ -8,7 +8,7 @@ Dungeons & Dragons Fifth Edition support for [FastFighting Core](https://github.
 
 - **Foundry:** v14
 - **System:** dnd5e 4.0 or later (written against 6.0)
-- **Needs:** FastFighting Core
+- **Needs:** FastFighting Core (API 11)
 
 ## Installation
 
@@ -91,7 +91,32 @@ Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 
   - death saves at DC 10; a 20 brings you back with 1 HP and a 1 counts as two failures;
   - damage while down is a failure, two on a critical;
   - massive damage kills outright;
-  - after the fight, allies stabilize the dying with a DC 10 Medicine check or heal them.
+  - allies stabilize the dying with a DC 10 Medicine check (an action, in the fight as after it) or heal them.
+
+## Playstyles in 5e
+
+Every perk a playstyle (or a tactics answer) can switch on does something here. Most play as they do in any system (who a character goes for, when it loses heart, whom it listens to, how it talks). These lean on 5e's own:
+
+| Perk (playstyles) | In 5e |
+| --- | --- |
+| Hard to spot (Chicken, Fragile, Wallflower) | Foes' attention slides off it, and it would rather **Hide**: Dexterity (Stealth) against DC 15 (the SRD 5.2's), as an action (a rogue's Cunning Action: a bonus action). Hidden, it's Invisible: its attacks at advantage, those against it at disadvantage, until it attacks. Not with a foe beside it; whether there's cover enough is the GM's call, so the simulation only asks that. |
+| Spoiling (Instigator most; Cruel, Wants to Lead, Wallflower, Puzzle-Maniac) | **Shove** (prone) or **Grapple** (the SRD 5.2's Unarmed Strike: a Strength or Dexterity save against 8 + Strength + proficiency, or Grappled until it breaks free), and spells and features that lay a condition, over a plain blow. |
+| Helping (Enabler, People-Pleaser, Moralist, Martyr, Redeem-Seeker, Tank) | **Help**; healing and buff spells. |
+| In a hurry (Impatient, Speed-Runner) | It doesn't Disengage (it takes the opportunity attacks), Dodge or Hide; it Dashes when it has to. |
+| Acting first (Instigator) | Its initiative. |
+| Lore-Collector | The **Study** action. |
+| Weak spots (Puzzle-Maniac) | Damage vulnerabilities. |
+| Thief | Sleight of Hand, against passive Perception. |
+| Trap avoiders | A token the GM marks as a hazard (5e has no hazard actors of its own). |
+| Finishing the fallen (Cruel) | Death saves: a blow on one who's down is a failed save (two on a critical). |
+| Sparing the fallen (Moralist, Peacekeeper, a Diplomat now and then) | Knocks a foe out with a melee blow that would kill it (the rules allow any melee attack to), and leaves the fallen be. |
+| Mending, healing, rescue | Healing spells and potions; a friend dying is stabilized with a DC 10 Medicine check, in the fight as after it. |
+| Locked doors | Strength (Athletics) or thieves' tools. |
+
+Tactics answers:
+
+- **Shields** (keep it raised, raise it with spare actions, don't bother): a 5e shield is already in the AC, so this says how readily it **Dodges** instead: half again as readily; as it would anyway; never.
+- **Magic and specialties** (an Un-Mundane character leans on them): spells, and the activities of its features (a class's, a species', a creature's own: Second Wind, a breath weapon), Reckless Attack, Action Surge. Its weapons, Dodge, Help, Hide, Shove and potions are what anyone could do.
 
 ## Make it So
 

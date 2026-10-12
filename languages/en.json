@@ -18,10 +18,12 @@
     "Passive": "passive {skill}",
     "Dodge": "Dodge",
     "Dodging": "dodging",
+    "Hide": "Hide",
     "Reckless": "reckless",
     "Surging": "surging",
     "KnockedProne": "knocked prone",
     "Shove": "Shove",
+    "Grapple": "Grapple",
     "OffHand": "{name} (off hand)",
     "MartialArts": "{name} (Martial Arts)",
     "Flurry": "Flurry of Blows",
@@ -68,7 +70,8 @@
       "inv": "Investigation",
       "nat": "Nature",
       "rel": "Religion",
-      "slt": "Sleight of Hand"
+      "slt": "Sleight of Hand",
+      "ste": "Stealth"
     },
     "Cond": {
       "frightened": "frightened",
@@ -79,7 +82,9 @@
       "stunned": "stunned",
       "charmed": "charmed",
       "petrified": "petrified",
-      "prone": "prone"
+      "prone": "prone",
+      "invisible": "invisible",
+      "grappled": "grappled"
     },
     "Coin": {
       "pp": "pp",
