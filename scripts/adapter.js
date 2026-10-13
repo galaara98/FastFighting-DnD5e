@@ -330,6 +330,18 @@ export function summonDice(formula, data) {
   }
 }
 
+/** Base weapons that show in the story as more than their damage (the core's story families), by identifier. */
+const WEAPON_LOOKS = Object.freeze({
+  pistol: "ballistic", revolver: "ballistic", musket: "ballistic", huntingrifle: "ballistic", automaticrifle: "ballistic", shotgun: "ballistic",
+  laserpistol: "laser", laserrifle: "laser"
+});
+
+/** How a weapon looks in the story: its base weapon's, or gunfire for a firearm. Undefined: its damage says. */
+export function weaponLook(item) {
+  if ( item?.type !== "weapon" ) return undefined;
+  return WEAPON_LOOKS[item.system?.type?.baseItem] ?? (item.system?.properties?.has?.("fir") ? "ballistic" : undefined);
+}
+
 export class Dnd5eAdapter extends SystemAdapter {
   static systemId = "dnd5e";
 
@@ -1345,6 +1357,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     const base = {
       id: `${actor.id}.${item.id}.${activity.id}`, name: several && activity.name && activity.name !== item.name ? `${item.name}: ${activity.name}` : item.name,
       cost: 1, economy, itemId: item.id, traits: [], rank: item.type === "spell" ? item.system.level : undefined, concentration, ...this.#resource(actor, item),
+      storyType: weaponLook(item),
       legendary,
       // (A feature's: a class's, a species', a creature's own. What "magic and specialties" means, with spells.)
       feature: item.type === "feat" || undefined

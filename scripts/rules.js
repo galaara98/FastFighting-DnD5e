@@ -32,7 +32,7 @@ function net(adv, dis) {
 }
 
 /** Damage-type imagery for the story (5e's names for the core's families). */
-const STORY_TYPES = { lightning: "electricity", thunder: "sonic", necrotic: "void", radiant: "vitality", psychic: "mental" };
+const STORY_TYPES = { lightning: "electricity", thunder: "sonic", necrotic: "void", radiant: "radiant", psychic: "mental" };
 
 export const dnd5eRules = {
   id: "dnd5e",
