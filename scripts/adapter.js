@@ -116,15 +116,19 @@ const EMBED_CAP = 5000;
 
 /**
  * A biography's @Embed[...] of a page in this world (the 2024 books put a creature's lore there) as the start of that
- * page's text (EMBED_CAP characters), where Foundry has the page at hand; else nothing. Only a link within Foundry is
- * followed: an embed names a document here, never a web address.
+ * page's text (EMBED_CAP characters), where Foundry has the page at hand and the actor's players could read it
+ * themselves; else nothing. Only a link within Foundry is followed: an embed names a document here, never a web address.
  */
-function embedded(html) {
+function embedded(html, actor = null) {
+  // (Its players: the users besides the GM who own it. A creature of the GM's own, owned by none, may read any page.
+  // A page that leaves its ownership to its journal is Foundry's to ask the journal about.)
+  const players = [...(globalThis.game?.users ?? [])].filter(u => !u.isGM && actor?.testUserPermission?.(u, "OWNER"));
+  const readable = page => !players.length || players.some(u => !!page.testUserPermission?.(u, "OBSERVER"));
   return String(html ?? "").replace(/@Embed\[([^\]\s]+)[^\]]*\](?:\{[^}]*\})?/g, (m, uuid) => {
     if ( uuid.includes("://") ) return " ";
     try {
       const page = globalThis.fromUuidSync?.(uuid, { strict: false });
-      return typeof page?.text?.content === "string" ? ` ${page.text.content.slice(0, EMBED_CAP)} ` : " ";
+      return typeof page?.text?.content === "string" && readable(page) ? ` ${page.text.content.slice(0, EMBED_CAP)} ` : " ";
     } catch ( err ) {
       return " ";
     }
@@ -1516,10 +1520,11 @@ export class Dnd5eAdapter extends SystemAdapter {
   /**
    * Its biography, as text: a character's appearance and its personality traits, ideals, bonds and flaws are said of
    * it (in full); its biography is its story (a backstory: its words may be about anyone in it). A creature's
-   * biography is its lore, said of it. (A lore page it embeds is read where Foundry has it at hand.)
+   * biography is its lore, said of it. (A lore page it embeds is read where Foundry has it at hand and its players
+   * could read it themselves.)
    */
   biography(actor) {
-    return biographyOf(actor.type, actor.system?.details, html => sheetText(plainText(embedded(html), actor)));
+    return biographyOf(actor.type, actor.system?.details, html => sheetText(plainText(embedded(html, actor), actor)));
   }
 
   deriveTraits(actor) {

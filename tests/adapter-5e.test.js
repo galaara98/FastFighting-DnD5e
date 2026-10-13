@@ -1,6 +1,7 @@
 /**
  * The adapter reading a sheet as Foundry's dnd5e prepares one: who could steal, Relentless Endurance, dnd5e's own
- * difficult terrain, and a summoning's formulas worked out with its caster's numbers.
+ * difficult terrain, a summoning's formulas worked out with its caster's numbers, and the lore pages a biography embeds
+ * (only those its players could read themselves).
  */
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { Dnd5eAdapter, summonData, summonNumber, summonDice } from "../scripts/adapter.js";
@@ -43,7 +44,7 @@ function actorOf({ id = "actor", type = "npc", creature = "humanoid", int = 10, 
 const specOf = actor => new Dnd5eAdapter().toCombatantSpec({ id: "token", name: actor.name, actor });
 
 beforeEach(() => { globalThis.Roll = { replaceFormulaData }; });
-afterEach(() => { delete globalThis.Roll; delete globalThis.fromUuid; });
+afterEach(() => { delete globalThis.Roll; delete globalThis.fromUuidSync; delete globalThis.fromUuid; });
 
 describe("who could steal", () => {
   test("a character, or a creature with the wits to: not a beast, nor the mindless, nor an animal's mind", async () => {
@@ -163,3 +164,39 @@ describe("a summoning's formulas, with its caster's numbers", () => {
   });
 });
 
+describe("a lore page a biography embeds", () => {
+  const PAGES = {
+    "JournalEntry.lore.JournalEntryPage.open": { owners: ["player"], content: "Wolves hunt in packs." },
+    "JournalEntry.lore.JournalEntryPage.secret": { owners: [], content: "The innkeeper is the werewolf." }
+  };
+  const users = [{ id: "gm", isGM: true }, { id: "player", isGM: false }, { id: "other", isGM: false }];
+  const page = ({ owners, content }) => ({ text: { content }, testUserPermission: (user, level) => level === "OBSERVER" && (user.isGM || owners.includes(user.id)) });
+  const html = "<p>Its lore. @Embed[JournalEntry.lore.JournalEntryPage.open inline] @Embed[JournalEntry.lore.JournalEntryPage.secret]</p>";
+  beforeEach(() => {
+    globalThis.game.users = users;
+    globalThis.fromUuidSync = uuid => (PAGES[uuid] ? page(PAGES[uuid]) : null);
+  });
+
+  test("a creature of the GM's own (no player owns it) reads any page", () => {
+    const bio = new Dnd5eAdapter().biography(actorOf({ details: { biography: { value: html } } }));
+    expect(bio.about).toContain("Wolves hunt in packs.");
+    expect(bio.about).toContain("The innkeeper is the werewolf.");
+  });
+
+  test("a player's character reads only the pages its players could read themselves", () => {
+    const mine = new Dnd5eAdapter().biography(actorOf({ type: "character", owners: ["player"], details: { biography: { value: html } } }));
+    expect(mine.story).toContain("Wolves hunt in packs.");
+    expect(mine.story).not.toContain("werewolf");
+    // (Another player's: neither page is theirs to read.)
+    const theirs = new Dnd5eAdapter().biography(actorOf({ type: "character", owners: ["other"], details: { biography: { value: html } } }));
+    expect(theirs.story).not.toContain("Wolves");
+    expect(theirs.story).not.toContain("werewolf");
+  });
+
+  test("never a web address; only the start of a long page", () => {
+    PAGES["JournalEntry.lore.JournalEntryPage.long"] = { owners: ["player"], content: "x".repeat(6000) };
+    const bio = new Dnd5eAdapter().biography(actorOf({ details: { biography: { value: "@Embed[https://example.com/page] @Embed[JournalEntry.lore.JournalEntryPage.long]" } } }));
+    expect(bio.about).not.toContain("example");
+    expect(bio.about.length).toBe(5000);
+  });
+});
