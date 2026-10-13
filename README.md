@@ -8,7 +8,7 @@ Dungeons & Dragons Fifth Edition support for [FastFighting Core](https://github.
 
 - **Foundry:** v14
 - **System:** dnd5e 4.0 or later (written against 6.0)
-- **Needs:** FastFighting Core (API 13)
+- **Needs:** FastFighting Core (API 14)
 
 ## Installation
 
@@ -71,7 +71,7 @@ Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 
 - **Talking:**
   - Persuasion persuades, Intimidation threatens and Deception bluffs, all against passive Insight;
   - Sleight of Hand steals, against passive Perception;
-  - languages;
+  - languages: those on its sheet, and those its custom languages name ("Common plus one other language"); none for one that understands but can't speak;
   - Wisdom saves set how strong-willed a creature is.
 - **A creature's personality** comes from what it is: its Intelligence, its Wisdom save for its challenge rating and its creature type (beasts and the mindless fight on instinct; Pack Tactics). Then its alignment moves it (good less selfish, evil more, lawful more loyal, chaotic less), and so do its kind's loyalty (a devil's hierarchy, a demon's chaos, a celestial's devotion), an immunity to being frightened (a fearless one) or charmed, its features (Brave, Martial Advantage, Aggressive, Pack Tactics, a reckless or frenzied one ...), healing others, exhaustion, and a loyalty score where the world keeps one. A creature dnd5e summoned serves its summoner. Nothing moves the mindless.
 - **A player character's personality** starts as the usual hero's (bold, loyal, unselfish, a good head), and everything on its sheet moves it a little:
@@ -135,12 +135,29 @@ When FastFighting sets a character up by itself (the first time it sees it: see 
 - **Classes, by identifier** (several add up):
   - a Barbarian a Brawler, impatient; a Bard a People-Pleaser and a Diplomat; a Cleric an Enabler; a Druid Un-Mundane and a Lore-Collector; a Fighter a Brawler or a Tank; a Monk a Speed-Runner;
   - a Paladin a Tank and a Martyr; a Ranger a Wallflower; a Rogue a Thief; a Sorcerer or Warlock Un-Mundane; a Wizard Un-Mundane and a Lore-Collector; an Artificer a Puzzle-Maniac.
-  - Their fighting style: a Paladin protects its friends (and goes to one who falls); Barbarians and Fighters hold the front line; Monks and Rogues skirmish; Rangers shoot; the spellcasters lead with spells. A Cleric heals readily.
 - **Species, by identifier,** only where an SRD trait leans somewhere (an orc's Relentless Endurance, a gnome's cunning).
 - **Kind of creature:** a beast a Brawler; undead, constructs, oozes and plants Relentless (constructs and oozes never run); a fiend Cruel; a celestial a Moralist; fey a Wildcard; a giant a Brawler.
 - **Alignment** (read by the system's own names for them, in any language): good leans Moralist, chaotic neutral Wildcard, neutral evil Mercenary, evil Cruel.
 - **Gear:** a shield or heavy armor worn makes a Tank likelier.
 - **Keywords:** what's said of a character (its appearance, personality traits, ideals, bonds and flaws) counts in full, and its biography, a story with others in it, a little; a creature's biography is its lore, said of it.
+
+### Let this character decide
+
+What "Let this character decide" stands for comes from 5e's own data wherever it says something, each answer shown to the GM with the system's name for what decided it (a class, feature, spell, skill, alignment or kind of creature). Classes, subclasses and features are known by identifier (and by what they do: healing that reaches others, healing only itself, a condition immunity, what recharges). Where the sheet says nothing, the core's reading of the character stands; for a player character only what its build clearly implies.
+- **Style:** its main class (the one with the most levels): Paladins protect, Barbarians and Fighters hold the front line, Monks and Rogues skirmish, Rangers shoot, spellcasters cast. Its fighting style before that (Protection guards, Archery shoots, a ranger with a melee style closes in), a pact blade, a cleric's or druid's armored order, Nimble Escape (a skirmisher), a creature's Spellcasting where its spells are its best attacks, a shield guardian's guarding.
+- **Target:** a paladin and Protection guard their friends; the mindless and a berserk golem go for the nearest; Rampage, Blood Frenzy and Colossus Slayer for the hurt.
+- **Resources:** what recharges, and a legendary creature's, is for this fight (spent freely); so are a short rest's: Pact Magic, Action Surge, ki or focus. A full caster's spell slots last the day (conserved).
+- **Magic and specialties:** by its main class's spellcasting (full or pact: strong; half, third or an artificer's: some); a creature's Spellcasting where its spells are its best attacks.
+- **Consumables:** an artificer, and a thief's Fast Hands, use them freely.
+- **Talking:** never for the mindless, one with no language (or that understands but can't speak) or one serving a master; a devil and a bard talk first; Persuasion, Deception and Intimidation make it likelier (expertise counts double).
+- **Healing others:** a Life Domain cleric at all costs; a cleric, Lay on Hands and a celestial readily; an evil creature sparingly; any other healer as it comes.
+- **Potions:** Regeneration needs none; Relentless Endurance, Relentless Rage or Undead Fortitude wait; a d6 Hit Die drinks at half its hit points, a d12 at a quarter.
+- **A friend down:** a paladin, a cleric, a healer, Spare the Dying, the Healer feat, a good creature or a celestial, and a hero with Medicine go to them; the mindless, constructs and evil creatures fight on; Redirect Attack looks after itself.
+- **Back up from 0 HP:** Regeneration, Undead Fortitude, Relentless Endurance, Relentless Rage and Rejuvenation rejoin at once (so do the mindless and constructs); Second Wind or its own healing heal itself first; a beast runs.
+- **Running:** never for one serving a master, the mindless, constructs, oozes, Dark Devotion, Berserk, a reckless berserker or Bloodied Fury; Pack Tactics when the pack is losing; Nimble Escape when hurt; one immune to being frightened only when losing; a beast when hurt.
+- **Dodge** (the shield answer: a 5e shield is in its AC): anyone can Dodge, but not the mindless, one with an animal's Intelligence (3 or less) or the reckless; a monk's Patient Defense makes it a bonus action (always).
+- **Others nearby:** one serving a master, the mindless, constructs and beasts stay; Pack Tactics, Aggressive, Rampage and Blood Frenzy hunt; Leadership and Aura of Authority call for help.
+- **Offer and expect:** nothing without a mind, words or a will of its own. A devil offers to spare those who pay; a true dragon wants tribute; a creature with thieves' cant wants a toll; a merchant or noble offers a tenth of its money; a good creature offers and expects no harm; a neutral evil one (a humanoid, fey or giant) wants paying; a chaotic evil one offers nothing. A demand is ten gold for each level or challenge rating.
 
 ## Make it So
 

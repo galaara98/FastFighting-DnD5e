@@ -1,9 +1,12 @@
 /**
  * What D&D 5e says about a character, for the one time FastFighting sets it up by itself (the core's
- * foundry/auto-config.js): the playstyles that fit it and its own answers to the tactics questions, from its classes
- * (by identifier), species (by identifier, only where an SRD trait says something), kind of creature, alignment and
- * gear; and its biography as plain text for the keywords (biographyOf: what's said of it, and its story). Pure.
+ * foundry/auto-config.js): the playstyles that fit it and its own answers to the tactics questions ("Let this character
+ * decide": dnd5eTactics, from its classes and subclasses, features, spells, gear, skills, languages, alignment and kind
+ * of creature); and its biography as plain text for the keywords (biographyOf: what's said of it, and its story). Pure:
+ * plain values in (the system's names for things through words.js).
  */
+import { listJoin } from "./core.js";
+import { t, abilityName, alignmentName, creatureTypeName, conditionName, skillName, languageName, legendaryActionsName } from "./words.js";
 
 /** What each class leans toward (several classes add up). */
 const CLASSES = Object.freeze({
@@ -69,24 +72,306 @@ export function dnd5eHints({ classes = [], species = null, creature = "", alignm
   return out;
 }
 
-/** A class's fighting style, the first class that has one. */
+/** A class's way of fighting: its main class's (the one with the most levels). */
 const CLASS_STYLE = Object.freeze({
   paladin: "protector", barbarian: "frontline", fighter: "frontline", monk: "skirmisher", rogue: "skirmisher", ranger: "ranged",
   wizard: "caster", sorcerer: "caster", warlock: "caster", druid: "caster", cleric: "caster", bard: "caster", artificer: "caster"
 });
 
-/** D&D 5e's own answers to the tactics questions, where it knows better than the numbers: {key: answer}. */
-export function dnd5eTactics({ classes = [], creature = "", mindless = false } = {}) {
+/** How strongly a class reaches for magic, by its spellcasting progression (dnd5e's: full, pact, half, third, artificer). */
+const PROGRESSION_SPECIALTY = Object.freeze({ full: "strong", pact: "strong", half: "some", artificer: "some", third: "some" });
+
+/*
+ * Features by identifier (the 2014 and 2024 SRD's, and a few from other books: identifiers only), and what they say.
+ */
+/** A reaction that guards a friend: the Protection and Interception fighting styles; a shield guardian's guarding. */
+const GUARDS = ["protection", "interception", "shield"];
+/** Melee fighting styles (a ranger who takes one fights up close). */
+const MELEE_STYLES = ["dueling", "great-weapon-fighting", "two-weapon-fighting"];
+/** Short-rest resources a class spends in every fight: Action Surge, ki or focus, superiority dice. */
+const EVERY_FIGHT = ["action-surge", "monks-focus", "ki", "combat-superiority", "superiority-dice"];
+/** Finishing off the hurt: Rampage, Blood Frenzy, Colossus Slayer. */
+const FINISHERS = ["rampage", "blood-frenzy", "colossus-slayer"];
+/** Fighting to the end: a cultist's Dark Devotion, a golem's Berserk, a berserker's recklessness, a boar's Bloodied Fury. */
+const FANATICS = ["dark-devotion", "berserk", "reckless", "bloodied-frenzy", "bloodied-fury"];
+/** Back on its feet: Regeneration, Undead Fortitude, Relentless Endurance, Relentless Rage, Rejuvenation, Relentless. */
+const ENDURING = ["regeneration", "undead-fortitude", "relentless-endurance", "relentless-rage", "rejuvenation", "relentless"];
+/** Hunting down whoever's near: pack hunters, the Aggressive, Rampage, Blood Frenzy. */
+const HUNTERS = ["pack-tactics", "aggressive", "rampage", "blood-frenzy"];
+/** Commanders, who'd call their troops: Leadership, Aura of Authority. */
+const COMMANDERS = ["leadership", "aura-of-authority"];
+/** A Life Domain cleric's own (its subclass's identifiers, then its features'). */
+const LIFE = ["life-domain", "life"];
+const LIFE_FEATURES = ["disciple-of-life", "preserve-life", "channel-divinity-preserve-life"];
+/** Backgrounds with money to buy their way out. */
+const MONEYED = ["merchant", "noble", "guild-artisan"];
+/** Kinds of creature that live among others and trade (2024's goblinoids are fey). */
+const PEOPLE = ["humanoid", "fey", "giant"];
+
+/**
+ * D&D 5e's own answers to the tactics questions, and what it offers and expects to end an argument: {key: {value, why}},
+ * only where its data says something (the core's reading of its hidden scores stands for the rest). `why` is the
+ * system's own name for what decided it (a class, feature, spell, skill, alignment, kind of creature).
+ *
+ * @param {object} f
+ * @param {boolean} [f.pc]          a player character
+ * @param {number} [f.level]        its level, or challenge rating
+ * @param {{id, name, levels, hd, progression, subclass: {id, name, progression}|null}[]} [f.classes]
+ * @param {string} [f.creature]     its creature type (beast, construct, fiend ...)
+ * @param {string} [f.subtype]      its subtype, as written (Devil, Goblinoid ...)
+ * @param {string|null} [f.alignment]  lg ... ce
+ * @param {boolean} [f.mindless]    barely thinks
+ * @param {number} [f.int]          its Intelligence score
+ * @param {boolean} [f.speaks]      has a language it speaks (or telepathy)
+ * @param {boolean} [f.summoned]    called by someone it serves
+ * @param {boolean} [f.legendary]   has legendary actions
+ * @param {{id, name, en}[]} [f.features]   its features: identifier, name, English name (lower case)
+ * @param {string[]} [f.recharge]   its abilities that recharge, by name
+ * @param {string[]} [f.heals]      what it heals others with, by name
+ * @param {string[]} [f.selfHeals]  what it heals only itself with, on its turn, by name (Second Wind)
+ * @param {{id, name}[]} [f.spells] its spells ready
+ * @param {number} [f.potions]      healing potions carried
+ * @param {Record<string, number>} [f.skills]  proficiency in per, dec, itm, med (1 proficient, 2 expertise)
+ * @param {string[]} [f.ci]         its condition immunities
+ * @param {{id, name}|null} [f.background]
+ * @param {number} [f.money]        in copper
+ * @param {number[]} [f.coins]      its coins' values, in copper
+ * @param {string[]} [f.languages]  its languages, by key
+ * @param {string|null} [f.coreStyle]  the core's answer for style (what its best attack is)
+ * @returns {Record<string, {value: *, why: string}>}
+ */
+export function dnd5eTactics(f = {}) {
+  const pc = !!f.pc;
+  const classes = (f.classes ?? []).map(c => (typeof c === "string" ? { id: c, name: c } : c)).filter(c => c?.id);
+  const main = [...classes].sort((a, b) => (Number(b.levels) || 0) - (Number(a.levels) || 0))[0] ?? null;
+  const ofClass = id => classes.find(c => c.id === id) ?? null;
+  const features = (f.features ?? []).filter(x => x?.id || x?.en);
+  // (By identifier; else by its English name, the identifier's words.)
+  const feature = ids => features.find(x => ids.includes(x.id) || ids.some(id => x.en === id.replace(/-/g, " "))) ?? null;
+  const creature = String(f.creature ?? "");
+  const kind = creature ? creatureTypeName(creature) : "";
+  const align = String(f.alignment ?? "");
+  const good = align.length === 2 && align.endsWith("g");
+  const evil = align.length === 2 && align.endsWith("e");
+  const alignName = align ? alignmentName(align) : "";
+  const heals = (f.heals ?? []).filter(Boolean);
+  const healNames = listJoin(heals.slice(0, 3));
+  const skills = f.skills ?? {};
+  // (A subtype word as its sheet writes it: "Devil".)
+  const subtype = word => String(f.subtype ?? "").split(/[^\p{L}-]+/u).find(w => w.toLowerCase() === word) ?? null;
+
   const out = {};
-  const style = classes.map(c => CLASS_STYLE[c]).find(Boolean);
-  if ( style ) out.style = style;
-  // (A paladin guards its friends and goes to one who falls; a cleric heals readily.)
-  if ( classes.includes("paladin") ) Object.assign(out, { target: "protect", allyDying: "rescue" });
-  if ( classes.includes("cleric") ) out.healAggro = "aggressive";
-  // (Constructs and oozes, and the mindless, never run.)
-  if ( ["construct", "ooze"].includes(creature) || mindless ) out.retreat = "never";
-  if ( creature === "beast" ) out.beyond = "stay";
+  // The first to speak to a question has its say (with something to say, and a reason).
+  const say = (key, value, why) => { if ( !(key in out) && value !== undefined && why ) out[key] = { value, why: String(why) }; };
+
+  // What it is, before anything it can do: one serving a master, one that barely thinks, a construct, one with no words.
+  const master = f.summoned ? t("Reason.Master") : null;
+  const blank = f.mindless ? t("Reason.BarelyThinks") : null;
+  const construct = creature === "construct" ? kind : null;
+  const wordless = f.speaks === false ? t("Reason.NoLanguage") : null;
+  const beast = creature === "beast";
+
+  // The features that say most.
+  const guard = feature(GUARDS);
+  const nimble = feature(["nimble-escape"]);
+  const casting = pc ? null : feature(["spellcasting", "innate-spellcasting"]);
+  const paladin = ofClass("paladin");
+  const cleric = ofClass("cleric");
+  const life = classes.find(c => LIFE.includes(c.subclass?.id))?.subclass ?? feature(LIFE_FEATURES);
+  const devil = subtype("devil");
+
+  // Its way of fighting: a guardian's reaction, its fighting style, slipping away, its spells, its main class.
+  if ( guard ) say("style", "protector", guard.name);
+  const archery = feature(["archery"]);
+  if ( archery ) say("style", "ranged", archery.name);
+  const melee = main?.id === "ranger" ? feature(MELEE_STYLES) : null;
+  if ( melee ) say("style", "frontline", melee.name);
+  if ( nimble ) say("style", "skirmisher", nimble.name);
+  if ( casting && f.coreStyle === "caster" ) say("style", "caster", casting.name);
+  const blade = main?.id === "warlock" ? feature(["pact-of-the-blade"]) : null;
+  if ( blade ) say("style", "frontline", blade.name);
+  // (A cleric or druid trained for armor and arms: Divine Order: Protector, Primal Order: Warden.)
+  const armored = main?.id === "cleric" ? feature(["divine-order-protector"]) : main?.id === "druid" ? feature(["primal-order-warden"]) : null;
+  if ( armored ) say("style", "frontline", armored.name);
+  if ( CLASS_STYLE[main?.id] ) say("style", CLASS_STYLE[main.id], main.name);
+  const aggressive = feature(["aggressive"]);
+  if ( aggressive ) say("style", "frontline", aggressive.name);
+
+  // Whom it goes for: those it guards (a paladin's friends), the nearest (the mindless, a berserk golem), the hurt.
+  if ( guard ) say("target", "protect", guard.name);
+  if ( paladin ) say("target", "protect", paladin.name);
+  const berserk = feature(["berserk"]);
+  if ( berserk ) say("target", "nearest", berserk.name);
+  if ( blank ) say("target", "nearest", blank);
+  const finisher = feature(FINISHERS);
+  if ( finisher ) say("target", "weakest", finisher.name);
+  const slayer = feature(["mage-slayer"]);
+  if ( slayer ) say("target", "casters", slayer.name);
+
+  // Its limited means: what recharges (and a legendary creature's) is for this fight; a short rest's, for every fight;
+  // a full caster's spell slots last the day.
+  if ( !pc && f.recharge?.length ) say("resourceUse", "nova", f.recharge[0]);
+  if ( f.legendary ) say("resourceUse", "nova", legendaryActionsName());
+  if ( pc && main ) {
+    const progression = main.progression ?? "none";
+    if ( progression === "pact" ) say("resourceUse", "nova", feature(["pact-magic"])?.name ?? main.name);
+    else if ( progression === "none" ) say("resourceUse", "nova", feature(EVERY_FIGHT)?.name);
+    else if ( progression === "full" ) say("resourceUse", "conserve", main.name);
+  }
+
+  // Magic: a caster's class, by how much it casts (its subclass's, an Eldritch Knight's); a creature's spellcasting.
+  if ( pc && main ) {
+    say("specialty", PROGRESSION_SPECIALTY[main.progression], main.name);
+    say("specialty", PROGRESSION_SPECIALTY[main.subclass?.progression], main.subclass?.name);
+  }
+  if ( casting && f.coreStyle === "caster" ) say("specialty", "strong", casting.name);
+
+  // Gear: an artificer's, and a thief's Fast Hands, are made for it.
+  const artificer = ofClass("artificer");
+  if ( artificer ) say("consumables", "freely", artificer.name);
+  const hands = feature(["fast-hands"]);
+  if ( hands ) say("consumables", "freely", hands.name);
+
+  // Talking: never without a mind, words or a will of its own; a devil bargains, a bard talks first; its social skills.
+  for ( const why of [blank, wordless, master] ) if ( why ) say("talk", "never", why);
+  if ( devil ) say("talk", "first", devil);
+  if ( main?.id === "bard" ) say("talk", "first", main.name);
+  const social = ["per", "dec", "itm"].filter(k => Number(skills[k]) >= 1);
+  const sway = social.reduce((n, k) => n + (Number(skills[k]) >= 2 ? 2 : 1), 0);
+  if ( social.length ) say("talk", sway >= 3 ? "first" : "opportune", listJoin(social.map(skillName)));
+
+  // Healing others: a Life Domain cleric at all costs; a cleric, a paladin's Lay on Hands, a celestial readily; the evil
+  // keep it for themselves; anyone else as it comes.
+  if ( heals.length ) {
+    if ( life ) say("healAggro", "allCosts", life.name);
+    if ( cleric ) say("healAggro", "aggressive", cleric.name);
+    const layOn = feature(["lay-on-hands"]);
+    if ( layOn ) say("healAggro", "aggressive", layOn.name);
+    if ( creature === "celestial" ) say("healAggro", "aggressive", kind);
+    if ( !pc && evil ) say("healAggro", "conservative", alignName);
+    say("healAggro", "balanced", healNames);
+  }
+
+  // Its own potions: one that heals itself needs none; one hard to put down waits; frail ones drink early.
+  if ( Number(f.potions) > 0 ) {
+    const regen = feature(["regeneration"]);
+    if ( regen ) say("potionThreshold", "never", regen.name);
+    const tough = feature(["relentless-endurance", "relentless-rage", "undead-fortitude"]);
+    if ( tough ) say("potionThreshold", "25", tough.name);
+    const die = { d6: "50", d12: "25" }[main?.hd];
+    if ( pc && die ) say("potionThreshold", die, t("Reason.HitDie", { name: main.name, die: main.hd }));
+  }
+
+  // A friend down: a paladin, a cleric and a healer go to them; the evil and the mindless fight on; a goblin boss puts
+  // a friend between itself and harm.
+  if ( blank ) say("allyDying", "fight", blank);
+  if ( construct ) say("allyDying", "fight", construct);
+  const redirect = feature(["redirect-attack"]);
+  if ( redirect ) say("allyDying", "protectSelf", redirect.name);
+  if ( paladin ) say("allyDying", "rescue", paladin.name);
+  if ( cleric ) say("allyDying", "rescue", cleric.name);
+  if ( !pc && evil ) say("allyDying", "fight", alignName);
+  if ( heals.length ) say("allyDying", "rescue", healNames);
+  const spare = (f.spells ?? []).find(s => s?.id === "spare-the-dying") ?? feature(["healer"]);
+  if ( spare ) say("allyDying", "rescue", spare.name);
+  if ( !pc && good ) say("allyDying", "rescue", alignName);
+  if ( creature === "celestial" ) say("allyDying", "rescue", kind);
+  if ( pc && Number(skills.med) >= 1 ) say("allyDying", "rescue", skillName("med"));
+
+  // Back up from 0 HP: what keeps it going rejoins at once; one that heals itself does that first; a beast runs.
+  const enduring = feature(ENDURING);
+  if ( enduring ) say("selfRevived", "rejoin", enduring.name);
+  for ( const why of [blank, construct] ) if ( why ) say("selfRevived", "rejoin", why);
+  const selfHeals = (f.selfHeals ?? []).filter(Boolean);
+  if ( selfHeals.length ) say("selfRevived", "healSelf", listJoin(selfHeals.slice(0, 2)));
+  if ( heals.length ) say("selfRevived", "healSelf", healNames);
+  if ( beast ) say("selfRevived", "retreat", t("Reason.BeastFlees"));
+
+  // Running: never for what serves, barely thinks, or is built or devoted to fight on; a pack runs when it's losing,
+  // a goblin slips away hurt; nothing frightens the fearless; a beast flees when hurt.
+  for ( const why of [master, blank] ) if ( why ) say("retreat", "never", why);
+  if ( ["construct", "ooze"].includes(creature) ) say("retreat", "never", kind);
+  const fanatic = feature(FANATICS);
+  if ( fanatic ) say("retreat", "never", fanatic.name);
+  const pack = feature(["pack-tactics"]);
+  if ( pack ) say("retreat", "losing", pack.name);
+  if ( nimble ) say("retreat", "hurt", nimble.name);
+  if ( (f.ci ?? []).includes("frightened") ) say("retreat", "losing", t("Reason.Immune", { condition: conditionName("frightened") }));
+  if ( beast ) say("retreat", "hurt", t("Reason.BeastFlees"));
+
+  // Its own defense (a 5e shield is in its AC: this is how readily it Dodges): anyone can Dodge but the mindless, an
+  // animal's mind and the reckless; a monk's Patient Defense makes it a bonus action.
+  if ( blank ) say("shield", "never", blank);
+  const int = Number(f.int);
+  if ( Number.isFinite(int) && int <= 3 ) say("shield", "never", t("Reason.Ability", { name: abilityName("int"), n: int }));
+  const reckless = feature(["reckless-attack", "reckless"]);
+  if ( reckless ) say("shield", "never", reckless.name);
+  const patient = feature(["patient-defense", "monks-focus"]);
+  if ( patient ) say("shield", "always", patient.name);
+  say("shield", "spare", t("Dodge"));
+
+  // Others nearby: what serves, barely thinks or was built stays; pack hunters and the bloodthirsty hunt; a commander
+  // calls its troops; a beast stays.
+  for ( const why of [master, blank, construct] ) if ( why ) say("beyond", "stay", why);
+  const hunter = feature(HUNTERS);
+  if ( hunter ) say("beyond", "hunt", hunter.name);
+  const commander = feature(COMMANDERS);
+  if ( commander ) say("beyond", "seekHelp", commander.name);
+  if ( beast ) say("beyond", "stay", kind);
+
+  // What it offers and expects to end an argument: nothing, without a mind, words or a will of its own; a devil's
+  // bargain; a dragon's tribute; a thief's toll; a merchant or noble buys its way out; a creature's alignment.
+  for ( const why of [blank, wordless, master] ) {
+    if ( why ) { say("offer", { kind: "" }, why); say("expect", { kind: "" }, why); }
+  }
+  const gp = (f.coins ?? []).includes(100) ? 100 : null;
+  // (So much gold by its level or challenge rating, as the core reckons a demand.)
+  const toll = gp ? { kind: "money", amount: 10 * Math.max(1, Math.round(Number(f.level) || 0)), coin: gp } : null;
+  if ( devil ) {
+    say("offer", { kind: "noHarm" }, devil);
+    if ( toll ) say("expect", toll, devil);
+  }
+  // (A true dragon, not a kobold or a dim wyrmling.)
+  if ( creature === "dragon" && toll && Number(f.int) >= 10 ) say("expect", toll, kind);
+  if ( !pc && toll && (f.languages ?? []).includes("cant") ) say("expect", toll, languageName("cant"));
+  const moneyed = MONEYED.includes(f.background?.id) ? f.background : null;
+  const share = gp ? Math.floor((Number(f.money) || 0) / gp / 10) : 0;
+  if ( moneyed && share >= 1 ) say("offer", { kind: "money", amount: share, coin: gp }, moneyed.name);
+  if ( !pc && good ) {
+    say("offer", { kind: "noHarm" }, alignName);
+    say("expect", { kind: "noHarm" }, alignName);
+  }
+  if ( !pc && align === "ne" && toll && PEOPLE.includes(creature) ) say("expect", toll, alignName);
+  if ( !pc && align === "ce" ) say("offer", { kind: "" }, alignName);
   return out;
+}
+
+/** "Understands Common but can't speak" (not "can't speak in wolf form"). */
+const MUTE = /\b(?:can['’]?t|cannot|doesn['’]t|does not) speak\b(?! in\b)|\bno puede hablar\b/i;
+
+/**
+ * The languages it speaks, by key: its sheet's, and those its custom languages name ("Common plus one other language"),
+ * by the system's names for them; none if it can't speak ("Understands Common but can't speak").
+ * @param {{value, custom, communication}} languages   its system.traits.languages
+ * @param {Record<string, string>} names               the system's languages, by key
+ */
+export function spokenLanguages(languages, names = {}) {
+  const custom = String(languages?.custom ?? "");
+  if ( MUTE.test(custom) ) return [];
+  const value = languages?.value;
+  const out = new Set(value instanceof Set ? value : Array.isArray(value) ? value : []);
+  const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  for ( const [key, name] of Object.entries(names) ) {
+    if ( name && new RegExp(`(?<![\\p{L}])${escape(String(name))}(?![\\p{L}])`, "iu").test(custom) ) out.add(key);
+  }
+  return [...out];
+}
+
+/** Does it speak at all (a language, a custom one, telepathy)? */
+export function speaksAtAll(languages, names = {}) {
+  if ( Number(languages?.communication?.telepathy?.value) > 0 ) return true;
+  const custom = String(languages?.custom ?? "").trim();
+  return spokenLanguages(languages, names).length > 0 || (!!custom && !MUTE.test(custom));
 }
 
 /** The alignment's key (lg ... ce) from what the sheet says, by the system's own names for them; null if none fits. */

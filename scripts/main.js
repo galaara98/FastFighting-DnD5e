@@ -9,7 +9,7 @@ import { registerLoreBoost } from "./lore.js";
 export const MODULE_ID = "fast-fighting-dnd5e";
 
 /** The core API this helper is written against (older cores have no api.version: that is 1). */
-const NEEDS_API = 13;
+const NEEDS_API = 14;
 
 /**
  * The last translation module we knew of for this game system, by language: in a language other than English, this

@@ -22,10 +22,11 @@ describe("the playstyles 5e says fit", () => {
 });
 
 describe("5e's answers to the tactics questions", () => {
-  test("a class's style; a paladin guards; a construct never runs", () => {
-    expect(dnd5eTactics({ classes: ["paladin"] })).toMatchObject({ style: "protector", target: "protect", allyDying: "rescue" });
-    expect(dnd5eTactics({ classes: ["wizard"] }).style).toBe("caster");
-    expect(dnd5eTactics({ creature: "construct" }).retreat).toBe("never");
+  test("a class's style; a paladin guards; a construct never runs (more in tactics-5e.test.js)", () => {
+    const paladin = dnd5eTactics({ classes: [{ id: "paladin", name: "Paladin", levels: 1 }] });
+    expect(paladin).toMatchObject({ style: { value: "protector", why: "Paladin" }, target: { value: "protect", why: "Paladin" }, allyDying: { value: "rescue", why: "Paladin" } });
+    expect(dnd5eTactics({ classes: [{ id: "wizard", name: "Wizard", levels: 1 }] }).style.value).toBe("caster");
+    expect(dnd5eTactics({ creature: "construct" }).retreat.value).toBe("never");
   });
 
   test("an alignment by the system's own names for them", () => {

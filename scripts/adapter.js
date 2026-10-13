@@ -5,7 +5,7 @@
 import { SystemAdapter, parseFormula, part } from "./core.js";
 import { dnd5eRules, proficiency } from "./rules.js";
 import { deriveDnd5eTraits, isMindless } from "./traits.js";
-import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, plainText as sheetText } from "./auto.js";
+import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, speaksAtAll, plainText as sheetText } from "./auto.js";
 import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
 import { commitDnd5eOutcome, describeDnd5eOutcome, commitDnd5eConcession } from "./commit.js";
@@ -13,7 +13,7 @@ import { modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 import { edgeActions, studyCheck } from "./edges.js";
 import { loreBoost } from "./lore.js";
-import { t, skillName, conditionName, coin, englishName, englishDescription } from "./words.js";
+import { t, skillName, conditionName, coin, englishName, englishDescription, languageNames } from "./words.js";
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 const MODES = ["walk", "fly", "swim", "climb", "burrow"];
@@ -403,7 +403,8 @@ export class Dnd5eAdapter extends SystemAdapter {
           steal: { dc: passive("prc"), label: t("Passive", { skill: skillName("prc") }) }
         },
         resolve: (defenses.wis ?? 0) - (proficiency(level) + 1),
-        languages: asArray(sys.traits?.languages?.value),
+        // (Those it speaks: its sheet's, and those its custom languages name; none if it can't speak.)
+        languages: spokenLanguages(sys.traits?.languages, languageNames()),
         mindless: isMindless(sys.abilities?.int?.value, creature)
       },
       valuables: this.#valuables(actor),
@@ -1382,9 +1383,61 @@ export class Dnd5eAdapter extends SystemAdapter {
     return dnd5eHints(this.#facts(actor));
   }
 
-  /** Its own answers to the tactics questions (auto.js): a class's style, a paladin's guarding, a construct's staying. */
-  tacticHints(actor) {
-    return dnd5eTactics(this.#facts(actor));
+  /**
+   * Its own answers to the tactics questions, and what it offers and expects (auto.js dnd5eTactics), each with the
+   * system's name for what decided it: its classes and subclasses, features, spells, potions, skills, languages,
+   * alignment, kind of creature and money.
+   */
+  tacticHints(actor, spec = null, calc = null) {
+    return dnd5eTactics(this.#tacticFacts(actor, spec, calc));
+  }
+
+  /** What dnd5eTactics reads (see there). */
+  #tacticFacts(actor, spec, calc) {
+    const sys = actor.system ?? {};
+    const pc = actor.type === "character";
+    const creature = String(sys.details?.type?.value ?? (pc ? "humanoid" : "")).toLowerCase();
+    const id = item => String(item.identifier ?? item.system?.identifier ?? "");
+    const activities = item => [...(item.system?.activities ?? [])];
+    const healing = a => a.type === "heal" && asArray(a.healing?.types).includes("healing");
+    // (Only itself: a heal on its own turn that reaches no one else, Second Wind.)
+    const onlySelf = a => (a.target?.affects?.type ? a.target.affects.type === "self" : a.range?.units === "self");
+    const feats = actor.items.filter(i => i.type === "feat");
+    const background = actor.items.find(i => i.type === "background");
+    const languages = sys.traits?.languages ?? {};
+    const names = languageNames();
+    const valuables = spec?.valuables ?? this.#valuables(actor);
+    return {
+      pc,
+      level: pc ? (sys.details?.level ?? 1) : Math.max(0, Number(sys.details?.cr) || 0),
+      classes: Object.values(actor.classes ?? {}).map(c => ({
+        id: id(c), name: c.name, levels: Number(c.system?.levels) || 0,
+        hd: String(c.system?.hd?.denomination ?? c.system?.hitDice ?? ""), progression: c.system?.spellcasting?.progression ?? "none",
+        subclass: c.subclass ? { id: id(c.subclass), name: c.subclass.name, progression: c.subclass.system?.spellcasting?.progression ?? "none" } : null
+      })),
+      creature,
+      subtype: String(sys.details?.type?.subtype ?? ""),
+      alignment: alignmentKey(sys.details?.alignment, alignmentNames()),
+      mindless: isMindless(sys.abilities?.int?.value, creature),
+      int: Number(sys.abilities?.int?.value ?? 10),
+      speaks: speaksAtAll(languages, names),
+      summoned: !!actor.flags?.dnd5e?.summon?.origin,
+      legendary: Number(sys.resources?.legact?.max) > 0,
+      features: feats.map(i => ({ id: id(i), name: i.name, en: String(englishName(i)).toLowerCase() })),
+      recharge: actor.items.filter(i => (i.system?.uses?.recovery ?? []).some(r => r.period === "recharge")).map(i => i.name),
+      heals: this.#healsOthers(actor),
+      selfHeals: feats.filter(i => activities(i).some(a => healing(a) && ["action", "bonus"].includes(a.activation?.type) && onlySelf(a))).map(i => i.name),
+      spells: actor.items.filter(i => i.type === "spell" && this.#spellReady(actor, i)).map(i => ({ id: id(i), name: i.name })),
+      potions: actor.items.filter(i => i.type === "consumable" && i.system.type?.value === "potion" && activities(i).some(healing))
+        .reduce((n, i) => n + Math.max(0, Number(i.system.quantity ?? 1) || 0), 0),
+      skills: Object.fromEntries(["per", "dec", "itm", "med"].map(k => [k, Number(sys.skills?.[k]?.proficient ?? sys.skills?.[k]?.value) || 0])),
+      ci: asArray(sys.traits?.ci?.value),
+      background: background ? { id: id(background), name: background.name } : null,
+      money: Number(valuables?.money) || 0,
+      coins: (valuables?.denominations ?? []).map(d => d.value),
+      languages: spokenLanguages(languages, names),
+      coreStyle: calc?.style ?? null
+    };
   }
 
   /**

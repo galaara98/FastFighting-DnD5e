@@ -29,6 +29,7 @@
     "Flurry": "Flurry of Blows",
     "Bolstered": "bolstered",
     "LegendaryResistance": "Legendary Resistance",
+    "LegendaryActions": "Legendary Actions",
     "Help": "Help",
     "Helped": "helped",
     "SeesThrough": "sees through them",
@@ -62,7 +63,9 @@
       "Fiend": "Fiend",
       "Celestial": "Celestial",
       "Master": "Serves a master",
-      "BoundToObey": "Bound to obey"
+      "BoundToObey": "Bound to obey",
+      "NoLanguage": "No language",
+      "HitDie": "{name} ({die})"
     },
     "Skill": {
       "per": "Persuasion",

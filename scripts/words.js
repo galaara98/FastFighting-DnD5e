@@ -59,6 +59,34 @@ export const creatureTypeName = key => labelOf(globalThis.CONFIG?.DND5E?.creatur
 /** A coin's abbreviation ("gp"), as the system writes it. */
 export const coin = c => sysOr(globalThis.CONFIG?.DND5E?.currencies?.[c]?.abbreviation, `Coin.${c}`, c);
 
+/**
+ * Every language the system knows, by key, with its name ({common: "Common", cant: "Thieves' Cant" ...}).
+ * CONFIG.DND5E.languages nests them in kinds (standard, rare), which aren't languages themselves.
+ */
+export function languageNames() {
+  const out = {};
+  const walk = tree => {
+    for ( const [key, entry] of Object.entries(tree ?? {}) ) {
+      if ( !(entry?.selectable === false) ) {
+        const name = labelOf(entry);
+        if ( name ) out[key] = name;
+      }
+      if ( entry && typeof entry === "object" ) walk(entry.children);
+    }
+  };
+  walk(globalThis.CONFIG?.DND5E?.languages);
+  return out;
+}
+
+/** A language's name ("Thieves' Cant"), as the system calls it (else its key). */
+export const languageName = key => languageNames()[key] ?? key;
+
+/** "Legendary Actions", as the system calls them. */
+export function legendaryActionsName() {
+  const key = "DND5E.LegendaryAction.LabelPl";
+  return sysOr(hasWords(key) ? key : null, "LegendaryActions", key);
+}
+
 /*
  * In a translated world (a Babele translation of the 5e compendiums: translate-dnd5e-sdr2-es and the like), an item
  * taken from a compendium reads in the table's language, and the rules it states are worded that way. The rules are
