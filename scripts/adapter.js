@@ -110,11 +110,25 @@ function inParty(actor) {
   return ids.has(actor.id);
 }
 
+/** How much of an embedded page a biography reads (a page can be a whole chapter). */
+const EMBED_CAP = 5000;
+
 /**
- * A biography with its @Embed[...] left out: text is read as it's written, and a link is never followed (an embed could
- * pull in any page, however large, or one its reader may not see).
+ * A biography's @Embed[...] of a page in this world (the 2024 books put a creature's lore there) as the start of that
+ * page's text (EMBED_CAP characters), where Foundry has the page at hand; else nothing. Only a link within Foundry is
+ * followed: an embed names a document here, never a web address.
  */
-const withoutEmbeds = html => String(html ?? "").replace(/@Embed\[[^\]]*\](?:\{[^}]*\})?/g, " ");
+function embedded(html) {
+  return String(html ?? "").replace(/@Embed\[([^\]\s]+)[^\]]*\](?:\{[^}]*\})?/g, (m, uuid) => {
+    if ( uuid.includes("://") ) return " ";
+    try {
+      const page = globalThis.fromUuidSync?.(uuid, { strict: false });
+      return typeof page?.text?.content === "string" ? ` ${page.text.content.slice(0, EMBED_CAP)} ` : " ";
+    } catch ( err ) {
+      return " ";
+    }
+  });
+}
 
 /**
  * One of its actions' names in English (the item it comes from by the English name Babele keeps, "Cimitarra" ->
@@ -1437,7 +1451,7 @@ export class Dnd5eAdapter extends SystemAdapter {
    * biography is its lore, said of it. (A lore page it embeds is read where Foundry has it at hand.)
    */
   biography(actor) {
-    return biographyOf(actor.type, actor.system?.details, html => sheetText(plainText(withoutEmbeds(html), actor)));
+    return biographyOf(actor.type, actor.system?.details, html => sheetText(plainText(embedded(html), actor)));
   }
 
   deriveTraits(actor) {
