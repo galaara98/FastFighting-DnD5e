@@ -44,12 +44,19 @@ describe("a biography, for the keywords", () => {
     appearance: "Scaled and tall", trait: "<p>I am <strong>patient</strong>.</p>", ideal: "Charity", bond: "My temple", flaw: "I am stubborn"
   };
 
-  test("a character's appearance, personality, ideals, bonds and flaws are said of it; its biography is its story", () => {
+  test("a character's appearance, personality, ideals and flaws are said of it; its biography is its story", () => {
     const bio = biographyOf("character", details);
-    for ( const words of ["Scaled and tall", "patient", "Charity", "My temple", "I am stubborn"] ) expect(bio.about).toContain(words);
+    for ( const words of ["Scaled and tall", "patient", "Charity", "I am stubborn"] ) expect(bio.about).toContain(words);
     expect(bio.about).not.toContain("Akra");
     expect(bio.story).toContain("bring peace");
     expect(bio.against).toBe("");
+  });
+
+  test("its bonds are about others (whom and what it's tied to): left out", () => {
+    for ( const type of ["character", "npc"] ) {
+      const bio = biographyOf(type, { ...details, bond: "I would die for my sister, a coward" });
+      expect(Object.values(bio).join(" ")).not.toContain("coward");
+    }
   });
 
   test("a creature's biography is its lore, said of it", () => {

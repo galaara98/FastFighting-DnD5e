@@ -384,9 +384,9 @@ export function alignmentKey(text, names = {}) {
 
 /**
  * Its biography, for the keywords (the core's {about, story, against}): what a character's sheet says of it (its
- * appearance, personality traits, ideals, bonds and flaws) in full, and its biography as a story told about it (a
- * backstory: its words may be about anyone in it). A creature's biography is its lore, said of it. Nothing on a 5e sheet
- * says what it's against.
+ * appearance, personality traits, ideals and flaws) in full, and its biography as a story told about it (a backstory:
+ * its words may be about anyone in it). A creature's biography is its lore, said of it. Never its bonds: those are about
+ * others (the people, places and things it's tied to). Nothing on a 5e sheet says what it's against.
  * @param {string} type        "character" | "npc"
  * @param {object} details     its system.details
  * @param {(html: string) => string} [text]   a field's HTML as plain text
@@ -395,8 +395,8 @@ export function alignmentKey(text, names = {}) {
 export function biographyOf(type, details, text = plainText) {
   const d = details ?? {};
   const join = values => values.map(v => text(v ?? "")).filter(Boolean).join("\n");
-  if ( type === "character" ) return { about: join([d.appearance, d.trait, d.ideal, d.bond, d.flaw]), story: join([d.biography?.value, d.biography?.public]), against: "" };
-  return { about: join([d.biography?.value, d.biography?.public, d.trait, d.ideal, d.bond, d.flaw]), story: "", against: "" };
+  if ( type === "character" ) return { about: join([d.appearance, d.trait, d.ideal, d.flaw]), story: join([d.biography?.value, d.biography?.public]), against: "" };
+  return { about: join([d.biography?.value, d.biography?.public, d.trait, d.ideal, d.flaw]), story: "", against: "" };
 }
 
 /** Text from the sheet's HTML. */

@@ -1518,10 +1518,10 @@ export class Dnd5eAdapter extends SystemAdapter {
   }
 
   /**
-   * Its biography, as text: a character's appearance and its personality traits, ideals, bonds and flaws are said of
-   * it (in full); its biography is its story (a backstory: its words may be about anyone in it). A creature's
-   * biography is its lore, said of it. (A lore page it embeds is read where Foundry has it at hand and its players
-   * could read it themselves.)
+   * Its biography, as text: a character's appearance and its personality traits, ideals and flaws are said of it (in
+   * full); its biography is its story (a backstory: its words may be about anyone in it); its bonds, being about others,
+   * are left out. A creature's biography is its lore, said of it. (A lore page it embeds is read where Foundry has it at
+   * hand and its players could read it themselves.)
    */
   biography(actor) {
     return biographyOf(actor.type, actor.system?.details, html => sheetText(plainText(embedded(html, actor), actor)));

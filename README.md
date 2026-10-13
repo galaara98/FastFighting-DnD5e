@@ -140,7 +140,7 @@ When FastFighting sets a character up by itself (the first time it sees it: see 
 - **Kind of creature:** a beast a Brawler; undead, constructs, oozes and plants Relentless (constructs and oozes never run); a fiend Cruel; a celestial a Moralist; fey a Wildcard; a giant a Brawler.
 - **Alignment** (read by the system's own names for them, in any language): good leans Moralist, chaotic neutral Wildcard, neutral evil Mercenary, evil Cruel.
 - **Gear:** a shield or heavy armor worn makes a Tank likelier.
-- **Keywords:** what's said of a character (its appearance, personality traits, ideals, bonds and flaws) counts in full, and its biography, a story with others in it, a little; a creature's biography is its lore, said of it. A lore page a biography embeds is read only where the character's players could read it themselves.
+- **Keywords:** what's said of a character (its appearance, personality traits, ideals and flaws) counts in full, and its biography, a story with others in it, a little; its bonds are about others, and left out. A creature's biography is its lore, said of it. A lore page a biography embeds is read only where the character's players could read it themselves.
 
 ### Let this character decide
 
