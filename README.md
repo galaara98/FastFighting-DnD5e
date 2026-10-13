@@ -70,7 +70,7 @@ Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 
   - condition immunities, so a spell isn't wasted on a creature immune to everything it would do.
 - **Talking:**
   - Persuasion persuades, Intimidation threatens and Deception bluffs, all against passive Insight;
-  - Sleight of Hand steals, against passive Perception;
+  - Sleight of Hand steals, against passive Perception (a character, or a creature with the wits to: not a beast, nor one with an animal's Intelligence or none);
   - languages: those on its sheet, and those its custom languages name ("Common plus one other language"); none for one that understands but can't speak;
   - Wisdom saves set how strong-willed a creature is.
 - **A creature's personality** comes from what it is: its Intelligence, its Wisdom save for its challenge rating and its creature type (beasts and the mindless fight on instinct; Pack Tactics). Then its alignment moves it (good less selfish, evil more, lawful more loyal, chaotic less), and so do its kind's loyalty (a devil's hierarchy, a demon's chaos, a celestial's devotion), an immunity to being frightened (a fearless one) or charmed, its features (Brave, Martial Advantage, Aggressive, Pack Tactics, a reckless or frenzied one ...), healing others, exhaustion, and a loyalty score where the world keeps one. A creature dnd5e summoned serves its summoner. Nothing moves the mindless.

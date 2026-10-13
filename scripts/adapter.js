@@ -380,7 +380,10 @@ export class Dnd5eAdapter extends SystemAdapter {
       fateLabel: this.#fateLabel(),
       // Anyone can try to stabilize the dying with a DC 10 Wisdom (Medicine) check.
       firstAid: (actor.type === "character" || creature === "humanoid") && skillMod("med") !== null ? { mod: skillMod("med") } : null,
-      theft: skillMod("slt") !== null ? { skill: skill("slt")?.label ?? skillName("slt"), mod: skillMod("slt") } : null,
+      // Lifting something off someone (Dexterity (Sleight of Hand)): a character, or a creature with the wits to; not a
+      // beast, nor the mindless or one with an animal's mind (Intelligence 3 or less).
+      theft: skillMod("slt") !== null && (actor.type === "character" || (creature !== "beast" && (sys.abilities?.int?.value ?? 10) > 3))
+        ? { skill: skill("slt")?.label ?? skillName("slt"), mod: skillMod("slt") } : null,
       // A locked door: a Strength (Athletics) check to force it, or thieves' tools to pick it (proficiency, and the tools
       // themselves for a character).
       doorWork: {
