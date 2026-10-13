@@ -4,7 +4,7 @@
 > - **Programming:** I am a skilled programmer by profession, but AI was used heavily as a co-pilot.
 > - **Strings:** ALL initial strings were created by AI. An AI-made Spanish translation was used to test localization and has since been removed.
 
-Dungeons & Dragons Fifth Edition support for [FastFighting Core](https://github.com/galaara98/FastFighting), the Foundry VTT module that simulates a battle (or a tense standoff) thousands of times, tells the story of one fair draw, and commits it to the tokens with **Make it So**.
+Dungeons & Dragons Fifth Edition support for [FastFighting Core](https://github.com/galaara98/FastFighting), the Foundry VTT module that simulates a battle (or a tense standoff) thousands of times, tells the story of one fair draw, and commits it to the tokens with **Do it For Real Now**.
 
 - **Foundry:** v14
 - **System:** dnd5e 4.0 or later (written against 6.0)
@@ -38,8 +38,8 @@ Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 
   - Improved Divine Smite (Radiant Strikes): a d8 of radiant on every melee weapon hit.
 - **Reactions:** Shield (perhaps a miss after all), Uncanny Dodge (half the blow), Hellish Rebuke, Counterspell (2014: by the slot's level or a check; 2024: the caster's Constitution save), a Battle Master's Parry and Riposte, a monk's Deflect Attacks (or Missiles), and any reaction spell whose effect raises AC. Spells spend the cheapest slot that works.
 - **Summons:** a summon activity's creatures (Spiritual Weapon, Flaming Sphere, Animate Objects, Conjure Animals, a magic item's elementals ...), read like any creature as dnd5e would summon them (at the casting's level), with the caster's spell attack and save DC where the spell says, and more damage for a higher slot. How many come, and their bonuses, are worked out with the caster's own numbers as dnd5e works them out (@scaling, its spellcasting modifier, class levels, hit points; the creature's own where a bonus counts them), as arithmetic only, never run as code. A spell that names a challenge rating and type gets one from the installed books. A spiritual weapon or a flaming sphere can't be attacked, and acts only when the caster spends its bonus action. Rituals and what can't fight (Find Familiar, Mage Hand) are left out.
-- **Regeneration, Undead Fortitude and Relentless Endurance:** a troll's (or a vampire's) Regeneration, read from its words: so many hit points a turn, stopped by the damage it names; a zombie's Undead Fortitude: the Constitution save against 5 + the damage, never against radiant damage or a critical hit; an orc's Relentless Endurance: 1 hit point instead of 0, no save, once a long rest (Make it So spends it), never when the blow kills it outright.
-- **Recharge and legendary creatures:** "Recharge 5–6" abilities come back on a d6; legendary actions (by their cost, including one that only names its attack, "makes a tail attack") are taken between other creatures' turns; Legendary Resistance turns a failed save that matters into a success, and Make it So spends it.
+- **Regeneration, Undead Fortitude and Relentless Endurance:** a troll's (or a vampire's) Regeneration, read from its words: so many hit points a turn, stopped by the damage it names; a zombie's Undead Fortitude: the Constitution save against 5 + the damage, never against radiant damage or a critical hit; an orc's Relentless Endurance: 1 hit point instead of 0, no save, once a long rest (Do it For Real Now spends it), never when the blow kills it outright.
+- **Recharge and legendary creatures:** "Recharge 5–6" abilities come back on a d6; legendary actions (by their cost, including one that only names its attack, "makes a tail attack") are taken between other creatures' turns; Legendary Resistance turns a failed save that matters into a success, and Do it For Real Now spends it.
 - **Saves:** Magic Resistance (advantage against spells), Evasion, and a paladin's Aura of Protection (Charisma to its own and nearby friends' saves, 10 feet, 30 from 18th level).
 - **Bonus-action strikes:** a light weapon in each hand gives a bonus-action attack with the second (without its ability modifier, unless the character has the Two-Weapon Fighting style); a monk's Martial Arts (an unarmed strike) and Flurry of Blows (two unarmed strikes, three with Heightened Focus, for a point of Focus or ki).
 - **Size:** Shove only works on a creature up to one size larger.
@@ -63,9 +63,9 @@ Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 
   - gaining an edge, good for one roll and aimed where it counts: anyone with a mind can **Help** (advantage on a friend's next attack at a foe within 5 feet of the helper, or its next ability check toward whoever it's set on: its words, a Medicine check); a creature proficient in Insight that can talk may first read the one it means to talk round (**Insight** against DC 15: advantage on its next words to them); **Guidance** (2014: a d4 on one ability check; 2024: on every check with the skill), **Bardic Inspiration** (the bard's own die on one attack, check or save), **Guiding Bolt** (the next attack at the target has advantage), **Vicious Mockery** (disadvantage on its next attack), **Steady Aim** and 2014 **True Strike** (advantage on your next attack) are each spent by the roll they help;
   - a Lore-Collector sizes a foe up with the **Study** action: its best of Arcana, History, Investigation, Nature and Religion; it has to work to pay off, by the **Lore-Collector advantage** setting (1.25× to 3× as likely to succeed, through its next turn; default 2.5×, since it costs the whole turn; ordinary attacks get all they can by about 1.75×, the rest helps long-shot rolls); what it learns holds for every foe of the same sort;
   - already on a creature when the fight starts: what dnd5e's numbers leave out (Bless's d4 on attacks and saves, invisibility, a Faerie Fire outline); flat bonuses such as Shield of Faith's AC are already in them;
-  - still running when the fight ends: Make it So leaves the spell's own effect on, for the rounds left.
+  - still running when the fight ends: Do it For Real Now leaves the spell's own effect on, for the rounds left.
 - **Senses:** darkvision and truesight (in the dark), blindsight and tremorsense (no sight needed), with their ranges; blinded and deafened.
-- **Fate:** a character's (Heroic) Inspiration is spent to keep someone from dying, and Make it So takes it away.
+- **Fate:** a character's (Heroic) Inspiration is spent to keep someone from dying, and Do it For Real Now takes it away.
 - **Defenses:**
   - damage immunities, resistances and vulnerabilities;
   - condition immunities, so a spell isn't wasted on a creature immune to everything it would do.
@@ -161,9 +161,9 @@ What "Let this character decide" stands for comes from 5e's own data wherever it
 - **Others nearby:** one serving a master, the mindless, constructs and beasts stay; Pack Tactics, Aggressive, Rampage and Blood Frenzy hunt; Leadership and Aura of Authority call for help.
 - **Offer and expect:** nothing without a mind, words or a will of its own. A devil offers to spare those who pay; a true dragon wants tribute; a creature with thieves' cant wants a toll; a merchant or noble offers a tenth of its money; a good creature offers and expects no harm; a neutral evil one (a humanoid, fey or giant) wants paying; a chaotic evil one offers nothing. A demand is ten gold for each level or challenge rating.
 
-## Make it So
+## Do it For Real Now
 
-Make it So writes the outcome back to each token:
+Do it For Real Now writes the outcome back to each token:
 - HP and temporary HP;
 - death saves;
 - unconscious, prone and lingering conditions;
@@ -178,7 +178,7 @@ It also:
 
 For bargaining in a standoff, a character can ask for something of a kind: dnd5e's item types, the materials its item properties name (adamantine, silvered) and its rarities, in its own words.
 
-Undo reverses all of it.
+Rewind This Encounter reverses all of it.
 
 D&D 5e has no loot actors, so the "loot pile" setting leaves gear on the corpse.
 
