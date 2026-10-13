@@ -1560,6 +1560,11 @@ export class Dnd5eAdapter extends SystemAdapter {
     };
   }
 
+  /** dnd5e regions: its own difficult terrain (Spike Growth's, Plant Growth's, or one the GM draws). */
+  describeRegionBehavior(behavior) {
+    return behavior?.type === "dnd5e.difficultTerrain" ? { difficult: true } : null;
+  }
+
   /** The dnd5e system's own words for armor class and hit points (in the client's language). */
   term(key) {
     const own = { ac: "DND5E.AC", hp: "DND5E.HP" }[key];

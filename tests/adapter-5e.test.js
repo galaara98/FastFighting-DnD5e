@@ -1,5 +1,6 @@
 /**
- * The adapter reading a sheet as Foundry's dnd5e prepares one: who could steal, and Relentless Endurance.
+ * The adapter reading a sheet as Foundry's dnd5e prepares one: who could steal, Relentless Endurance, and dnd5e's own
+ * difficult terrain.
  */
 import { describe, expect, test } from "vitest";
 import { Dnd5eAdapter } from "../scripts/adapter.js";
@@ -56,6 +57,15 @@ describe("Relentless Endurance", () => {
     const spec = await specOf(actorOf({ type: "character", items: [relentless(1)] }));
     expect(spec.holdOn).toBeUndefined();
     expect(spec.resources["feature:relentless-endurance"]).toBeUndefined();
+  });
+});
+
+describe("dnd5e's regions", () => {
+  test("its difficult terrain (Spike Growth's, Plant Growth's) is difficult; the rest isn't its to say", () => {
+    const adapter = new Dnd5eAdapter();
+    expect(adapter.describeRegionBehavior({ type: "dnd5e.difficultTerrain", system: { magical: true, types: new Set(["plants"]) } })).toEqual({ difficult: true });
+    expect(adapter.describeRegionBehavior({ type: "dnd5e.rotateArea", system: {} })).toBeNull();
+    expect(adapter.describeRegionBehavior({ type: "teleportToken", system: {} })).toBeNull();
   });
 });
 

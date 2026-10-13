@@ -43,6 +43,7 @@ Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 
 - **Saves:** Magic Resistance (advantage against spells), Evasion, and a paladin's Aura of Protection (Charisma to its own and nearby friends' saves, 10 feet, 30 from 18th level).
 - **Bonus-action strikes:** a light weapon in each hand gives a bonus-action attack with the second (without its ability modifier, unless the character has the Two-Weapon Fighting style); a monk's Martial Arts (an unarmed strike) and Flurry of Blows (two unarmed strikes, three with Heightened Focus, for a point of Focus or ki).
 - **Size:** Shove only works on a creature up to one size larger.
+- **Terrain:** dnd5e's own difficult terrain regions (Spike Growth's, Plant Growth's, or one the GM draws) are difficult terrain.
 - **Spells:**
   - attack, save and damage activities, plus the conditions their effects impose (Hold Person's paralysis, a Web's restraint, and so on);
   - spell slots, pact slots and innate uses, and one slot a turn (Healing Word and Guiding Bolt can't share a turn; Healing Word and a cantrip can);
