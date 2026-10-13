@@ -1,8 +1,8 @@
 /**
  * What D&D 5e says about a character, for the one time FastFighting sets it up by itself (the core's
  * foundry/auto-config.js): the playstyles that fit it and its own answers to the tactics questions ("Let this character
- * decide": dnd5eTactics, from its classes and subclasses, features, spells, gear, skills, languages, alignment and kind
- * of creature); and its biography as plain text for the keywords (biographyOf: what's said of it, and its story). Pure:
+ * decide": dnd5eTactics, from its classes and subclasses, features, spells, attacks, gear, skills, languages, alignment
+ * and kind of creature); and its biography as plain text for the keywords (biographyOf: what's said of it, and its story). Pure:
  * plain values in (the system's names for things through words.js).
  */
 import { listJoin } from "./core.js";
@@ -107,6 +107,17 @@ const LIFE_FEATURES = ["disciple-of-life", "preserve-life", "channel-divinity-pr
 const MONEYED = ["merchant", "noble", "guild-artisan"];
 /** Kinds of creature that live among others and trade (2024's goblinoids are fey). */
 const PEOPLE = ["humanoid", "fey", "giant"];
+/**
+ * Fighting styles made for one kind of weapon, and its attacks that fit: Archery a bow's or crossbow's shot, Great Weapon
+ * Fighting a two-handed weapon, Dueling a one-handed one.
+ */
+const STYLE_WEAPONS = Object.freeze([
+  ["archery", a => a.weapon === "ranged"],
+  ["great-weapon-fighting", a => a.weapon === "melee" && a.twoHanded],
+  ["dueling", a => a.weapon === "melee" && !a.twoHanded]
+]);
+/** Features built on using magic items: a thief's (2014 and 2024). */
+const ITEM_USERS = ["fast-hands", "use-magic-device"];
 
 /**
  * D&D 5e's own answers to the tactics questions, and what it offers and expects to end an argument: {key: {value, why}},
@@ -138,6 +149,9 @@ const PEOPLE = ["humanoid", "fey", "giant"];
  * @param {number[]} [f.coins]      its coins' values, in copper
  * @param {string[]} [f.languages]  its languages, by key
  * @param {string|null} [f.coreStyle]  the core's answer for style (what its best attack is)
+ * @param {{id, name, item, multiattack, weapon, twoHanded, consumable}[]} [f.attacks]  the attacks it makes with its
+ *   action (adapter.js): its action's id and name, its item's identifier, whether it's its Multiattack, a weapon's
+ *   ("melee" or "ranged": a bow's or crossbow's shot), a two-handed one, and whether it spends a consumable
  * @returns {Record<string, {value: *, why: string}>}
  */
 export function dnd5eTactics(f = {}) {
@@ -179,6 +193,20 @@ export function dnd5eTactics(f = {}) {
   const cleric = ofClass("cleric");
   const life = classes.find(c => LIFE.includes(c.subclass?.id))?.subclass ?? feature(LIFE_FEATURES);
   const devil = subtype("devil");
+  const attacks = (f.attacks ?? []).filter(a => a?.id);
+
+  // Its signature attack: a creature's Multiattack (when it makes it one way), a warlock's Eldritch Blast with Agonizing
+  // Blast, the one weapon its fighting style is made for.
+  const multiattack = attacks.filter(a => a.multiattack);
+  if ( multiattack.length === 1 ) say("preferredAction", multiattack[0].id, multiattack[0].name);
+  const agonizing = feature(["agonizing-blast"]);
+  const blast = agonizing ? attacks.find(a => a.item === "eldritch-blast") : null;
+  if ( blast ) say("preferredAction", blast.id, agonizing.name);
+  for ( const [id, fits] of STYLE_WEAPONS ) {
+    const style = feature([id]);
+    const fit = style ? attacks.filter(fits) : [];
+    if ( fit.length === 1 ) say("preferredAction", fit[0].id, style.name);
+  }
 
   // Its way of fighting: a guardian's reaction, its fighting style, slipping away, its spells, its main class.
   if ( guard ) say("style", "protector", guard.name);
@@ -226,11 +254,15 @@ export function dnd5eTactics(f = {}) {
   }
   if ( casting && f.coreStyle === "caster" ) say("specialty", "strong", casting.name);
 
-  // Gear: an artificer's, and a thief's Fast Hands, are made for it.
+  // Gear: an artificer's, and a thief's Fast Hands and Use Magic Device, are made for it; a creature's flask or bomb is
+  // for throwing; a merchant knows what it all costs.
   const artificer = ofClass("artificer");
   if ( artificer ) say("consumables", "freely", artificer.name);
-  const hands = feature(["fast-hands"]);
+  const hands = feature(ITEM_USERS);
   if ( hands ) say("consumables", "freely", hands.name);
+  const bomb = pc ? null : attacks.find(a => a.consumable);
+  if ( bomb ) say("consumables", "freely", bomb.name);
+  if ( f.background?.id === "merchant" ) say("consumables", "sparing", f.background.name);
 
   // Talking: never without a mind, words or a will of its own; a devil bargains, a bard talks first; its social skills.
   for ( const why of [blank, wordless, master] ) if ( why ) say("talk", "never", why);

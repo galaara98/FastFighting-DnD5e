@@ -145,11 +145,12 @@ When FastFighting sets a character up by itself (the first time it sees it: see 
 ### Let this character decide
 
 What "Let this character decide" stands for comes from 5e's own data wherever it says something, each answer shown to the GM with the system's name for what decided it (a class, feature, spell, skill, alignment or kind of creature). Classes, subclasses and features are known by identifier (and by what they do: healing that reaches others, healing only itself, a condition immunity, what recharges). Where the sheet says nothing, the core's reading of the character stands; for a player character only what its build clearly implies.
+- **Signature attack:** a creature's Multiattack (when it makes it one way); a warlock's Eldritch Blast with Agonizing Blast; the one weapon its fighting style is made for (Archery a bow or crossbow, Great Weapon Fighting a two-handed weapon, Dueling a one-handed one).
 - **Style:** its main class (the one with the most levels): Paladins protect, Barbarians and Fighters hold the front line, Monks and Rogues skirmish, Rangers shoot, spellcasters cast. Its fighting style before that (Protection guards, Archery shoots, a ranger with a melee style closes in), a pact blade, a cleric's or druid's armored order, Nimble Escape (a skirmisher), a creature's Spellcasting where its spells are its best attacks, a shield guardian's guarding.
 - **Target:** a paladin and Protection guard their friends; the mindless and a berserk golem go for the nearest; Rampage, Blood Frenzy and Colossus Slayer for the hurt.
 - **Resources:** what recharges, and a legendary creature's, is for this fight (spent freely); so are a short rest's: Pact Magic, Action Surge, ki or focus. A full caster's spell slots last the day (conserved).
 - **Magic and specialties:** by its main class's spellcasting (full or pact: strong; half, third or an artificer's: some); a creature's Spellcasting where its spells are its best attacks.
-- **Consumables:** an artificer, and a thief's Fast Hands, use them freely.
+- **Consumables:** an artificer, a thief's Fast Hands or Use Magic Device, and a creature with a flask or bomb to throw use them freely; a merchant sparingly.
 - **Talking:** never for the mindless, one with no language (or that understands but can't speak) or one serving a master; a devil and a bard talk first; Persuasion, Deception and Intimidation make it likelier (expertise counts double).
 - **Healing others:** a Life Domain cleric at all costs; a cleric, Lay on Hands and a celestial readily; an evil creature sparingly; any other healer as it comes.
 - **Potions:** Regeneration needs none; Relentless Endurance, Relentless Rage or Undead Fortitude wait; a d6 Hit Die drinks at half its hit points, a d12 at a quarter.

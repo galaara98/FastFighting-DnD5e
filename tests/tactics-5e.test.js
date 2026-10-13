@@ -76,7 +76,20 @@ const KNIGHT = npc({ level: 3, creature: "humanoid", alignment: "lg", features: 
 const CULTIST = npc({ level: 0.125, creature: "humanoid", skills: { dec: 1 }, features: [feat("dark-devotion", "Dark Devotion")] });
 const GUARD = npc({ level: 0.125, creature: "humanoid" });
 
-const EVERYONE = [AKRA, RANDAL, RISWYNN, ZANNA, GOBLIN, GOBLIN_BOSS, WOLF, BEAR, ZOMBIE, GUARDIAN, DEVIL, DRAGON, KOBOLD, BANDIT_CAPTAIN, PRIEST, DEVA, TROLL, MAGE, LICH, GNOLL, KNIGHT, CULTIST, GUARD];
+/** An attack it makes with its action, as the adapter reads it from its CombatantSpec. */
+const atk = (id, name, extra = {}) => ({ id, name, item: id, multiattack: false, weapon: "", twoHanded: false, consumable: false, ...extra });
+const OGRE = npc({ level: 2, creature: "giant", int: 5, attacks: [atk("ogre.multiattack", "Multiattack", { multiattack: true, item: "" }), atk("greatclub", "Greatclub", { weapon: "melee", twoHanded: true })] });
+const WARLOCK = pc({
+  classes: [cls("warlock", "Warlock", 2, { progression: "pact" })], features: [feat("pact-magic", "Pact Magic"), feat("agonizing-blast", "Agonizing Blast")],
+  attacks: [atk("eldritch-blast", "Eldritch Blast"), atk("dagger", "Dagger", { weapon: "melee" })]
+});
+const ARCHER = pc({
+  classes: [cls("ranger", "Ranger", 2, { hd: "d10", progression: "half" })], features: [feat("archery", "Archery")],
+  attacks: [atk("longbow", "Longbow", { weapon: "ranged" }), atk("shortsword", "Shortsword", { weapon: "melee" }), atk("dagger-thrown", "Dagger", { item: "dagger" })]
+});
+const SAPPER = npc({ level: 1, creature: "humanoid", attacks: [atk("alchemists-fire", "Alchemist's Fire", { consumable: true }), atk("club", "Club", { weapon: "melee" })] });
+
+const EVERYONE = [AKRA, RANDAL, RISWYNN, ZANNA, GOBLIN, GOBLIN_BOSS, WOLF, BEAR, ZOMBIE, GUARDIAN, DEVIL, DRAGON, KOBOLD, BANDIT_CAPTAIN, PRIEST, DEVA, TROLL, MAGE, LICH, GNOLL, KNIGHT, CULTIST, GUARD, OGRE, WARLOCK, ARCHER, SAPPER];
 
 describe("the test world's heroes", () => {
   test("Akra, a Life Domain cleric: a caster who rations her slots and heals at all costs", () => {
@@ -176,6 +189,29 @@ describe("classes, subclasses and features", () => {
     expect(merchant(5).offer).toBeUndefined();
   });
 
+  test("its signature attack: Eldritch Blast with Agonizing Blast; the one weapon its fighting style is made for", () => {
+    expect(dnd5eTactics(WARLOCK).preferredAction).toEqual({ value: "eldritch-blast", why: "Agonizing Blast" });
+    // (Eldritch Blast without the invocation is just one more cantrip.)
+    expect(dnd5eTactics({ ...WARLOCK, features: [feat("pact-magic", "Pact Magic")] }).preferredAction).toBeUndefined();
+    // Archery: its bow, not a dagger thrown.
+    expect(dnd5eTactics(ARCHER).preferredAction).toEqual({ value: "longbow", why: "Archery" });
+    const fighter = (style, attacks) => dnd5eTactics(pc({ classes: [cls("fighter", "Fighter", 5, { hd: "d10" })], features: [style], attacks })).preferredAction;
+    const greatsword = atk("greatsword.extra", "Greatsword ×2", { item: "greatsword", weapon: "melee", twoHanded: true });
+    const longsword = atk("longsword.extra", "Longsword ×2", { item: "longsword", weapon: "melee" });
+    expect(fighter(feat("great-weapon-fighting", "Great Weapon Fighting"), [greatsword, longsword])).toEqual({ value: "greatsword.extra", why: "Great Weapon Fighting" });
+    expect(fighter(feat("dueling", "Dueling"), [greatsword, longsword])).toEqual({ value: "longsword.extra", why: "Dueling" });
+    // (Two weapons it could duel with: no telling which.)
+    expect(fighter(feat("dueling", "Dueling"), [longsword, atk("mace", "Mace", { weapon: "melee" })])).toBeUndefined();
+  });
+
+  test("gear: a thief's Use Magic Device, a creature's flask to throw, a merchant's eye for what it costs", () => {
+    expect(dnd5eTactics(pc({ classes: [cls("rogue", "Rogue", 13)], features: [feat("use-magic-device", "Use Magic Device")] })).consumables).toEqual({ value: "freely", why: "Use Magic Device" });
+    expect(dnd5eTactics(SAPPER).consumables).toEqual({ value: "freely", why: "Alchemist's Fire" });
+    // (A hero's flask says nothing of how readily it's thrown.)
+    expect(dnd5eTactics({ ...SAPPER, pc: true }).consumables).toBeUndefined();
+    expect(dnd5eTactics(pc({ background: { id: "merchant", name: "Merchant" } })).consumables).toEqual({ value: "sparing", why: "Merchant" });
+  });
+
   test("a feature without an identifier is known by its English name, and shown by its own", () => {
     const pack = { id: "", name: "Tácticas de manada", en: "pack tactics" };
     expect(dnd5eTactics(npc({ creature: "beast", int: 3, speaks: false, features: [pack] })).beyond).toEqual({ value: "hunt", why: "Tácticas de manada" });
@@ -227,6 +263,13 @@ describe("creatures", () => {
       talk: { value: "first", why: "Devil" }, offer: { value: { kind: "noHarm" }, why: "Devil" }, expect: { value: money(30), why: "Devil" },
       retreat: { value: "losing", why: text("FFDND5E.Reason.Immune", { condition: "frightened" }) }, allyDying: { value: "fight", why: "Lawful Evil" }
     });
+  });
+
+  test("a creature's Multiattack is what it does with its action, when it makes it one way", () => {
+    expect(dnd5eTactics(OGRE).preferredAction).toEqual({ value: "ogre.multiattack", why: "Multiattack" });
+    // (Scimitar or Pistol in any combination: no telling which.)
+    const choices = [atk("captain.multiattack", "Multiattack (Scimitar)", { multiattack: true }), atk("captain.multiattack.1", "Multiattack (Pistol)", { multiattack: true })];
+    expect(dnd5eTactics({ ...BANDIT_CAPTAIN, attacks: choices }).preferredAction).toBeUndefined();
   });
 
   test("a dragon breathes as soon as it can and wants tribute; a kobold, a dragon too, wants none", () => {
@@ -298,10 +341,11 @@ describe("every answer is one of its question's choices, with a reason", () => {
       for ( const [k, { value, why }] of Object.entries(out) ) {
         expect([k, typeof why === "string" && why.length > 0]).toEqual([k, true]);
         if ( k === "offer" || k === "expect" ) expect([k, value, validMotive(k, value)]).toEqual([k, value, true]);
+        else if ( k === "preferredAction" ) expect((who.attacks ?? []).map(a => a.id)).toContain(value);
         else expect([k, TACTIC_CHOICES[k]]).toEqual([k, expect.arrayContaining([value])]);
       }
-      // (The core takes each answer, with its reason.)
-      const { lets, why } = withHints({}, out, { actions: [] });
+      // (The core takes each answer, with its reason: its signature attack among its own actions.)
+      const { lets, why } = withHints({}, out, { actions: (who.attacks ?? []).map(a => ({ id: a.id })) });
       expect(Object.keys(lets).sort()).toEqual(Object.keys(out).sort());
       expect(Object.keys(why).sort()).toEqual(Object.keys(out).sort());
     }
@@ -348,6 +392,36 @@ describe("the adapter reads the sheet", () => {
       traits: { languages: { value: new Set(), custom: "Understands Common plus one other language but can’t speak" }, ci: { value: new Set(["poisoned"]) } }
     }, [item("feat", "undead-fortitude", "Undead Fortitude")]);
     expect(values(new Dnd5eAdapter().tacticHints(zombie, { valuables: valuables(0) }, {}))).toMatchObject({ talk: "never", retreat: "never", selfRevived: "rejoin" });
+  });
+
+  /** Its weapon attacks as its CombatantSpec has them (the plain one, and the Attack action with Extra Attack). */
+  const strikes = (actorId, weapon, melee) => {
+    const plain = { id: `${actorId}.${weapon}.attack`, name: weapon, kind: "strike", weapon: true, melee, itemId: weapon };
+    return [plain, { ...plain, id: `${plain.id}.extra`, name: `${weapon} ×2`, sequence: [plain, plain] }];
+  };
+  const weapon = (id, type, properties = []) => item("weapon", id, id, { type: { value: type }, properties: new Set(properties) });
+
+  test("a fighter with Great Weapon Fighting: its greatsword, with Extra Attack, rather than its longbow", () => {
+    const fighter = Object.assign(actorOf("character", {
+      details: { level: 5 }, abilities: { int: { value: 10 } }, skills: {}, traits: { languages: { value: new Set(["common"]) }, ci: { value: new Set() } }
+    }, [item("feat", "great-weapon-fighting", "Great Weapon Fighting"), weapon("greatsword", "martialM", ["two", "hvy"]), weapon("longbow", "martialR", ["two", "hvy", "amm"])]), { id: "hero" });
+    const actions = [...strikes("hero", "greatsword", true), ...strikes("hero", "longbow", false)];
+    const out = new Dnd5eAdapter().tacticHints(fighter, { valuables: valuables(0), actions }, {});
+    expect(out.preferredAction).toEqual({ value: "hero.greatsword.attack.extra", why: "Great Weapon Fighting" });
+  });
+
+  test("a creature's Multiattack, from its spec; every answer with a reason the core keeps", () => {
+    const ogre = Object.assign(actorOf("npc", {
+      details: { cr: 2, type: { value: "giant" }, alignment: "Chaotic Evil" }, abilities: { int: { value: 5 } }, skills: {},
+      traits: { languages: { value: new Set(["common", "giant"]) }, ci: { value: new Set() } }, resources: { legact: { max: 0 } }
+    }, [item("feat", "multiattack", "Multiattack"), weapon("greatclub", "martialM", ["two"])]), { id: "ogre" });
+    const club = strikes("ogre", "greatclub", true)[0];
+    const spec = { valuables: valuables(0), actions: [club, { ...club, id: "ogre.multiattack", name: "Multiattack", sequence: [club, club] }] };
+    const out = new Dnd5eAdapter().tacticHints(ogre, spec, {});
+    expect(out.preferredAction).toEqual({ value: "ogre.multiattack", why: "Multiattack" });
+    for ( const [k, { why }] of Object.entries(out) ) expect([k, typeof why === "string" && why.length > 0]).toEqual([k, true]);
+    const kept = withHints({}, out, spec);
+    expect(Object.keys(kept.why).sort()).toEqual(Object.keys(out).sort());
   });
 });
 

@@ -1462,8 +1462,8 @@ export class Dnd5eAdapter extends SystemAdapter {
 
   /**
    * Its own answers to the tactics questions, and what it offers and expects (auto.js dnd5eTactics), each with the
-   * system's name for what decided it: its classes and subclasses, features, spells, potions, skills, languages,
-   * alignment, kind of creature and money.
+   * system's name for what decided it: its classes and subclasses, features, spells, attacks, potions, skills,
+   * languages, alignment, kind of creature and money.
    */
   tacticHints(actor, spec = null, calc = null) {
     return dnd5eTactics(this.#tacticFacts(actor, spec, calc));
@@ -1513,8 +1513,35 @@ export class Dnd5eAdapter extends SystemAdapter {
       money: Number(valuables?.money) || 0,
       coins: (valuables?.denominations ?? []).map(d => d.value),
       languages: spokenLanguages(languages, names),
-      coreStyle: calc?.style ?? null
+      coreStyle: calc?.style ?? null,
+      attacks: this.#attackFacts(actor, spec?.actions ?? [])
     };
+  }
+
+  /**
+   * Its attacks as dnd5eTactics reads them, from its CombatantSpec's actions (those that take its action): each by its
+   * item's identifier, a weapon's as a melee attack or a bow's or crossbow's shot (with Extra Attack, the attacks it
+   * makes with it), a consumable's, and its Multiattack.
+   */
+  #attackFacts(actor, actions) {
+    const offense = actions.filter(a => ["strike", "spell-attack", "save", "auto", "control"].includes(a.kind) && a.economy !== "bonus" && !a.legendary);
+    const ids = new Set(offense.map(a => a.id));
+    const out = [];
+    for ( const a of offense ) {
+      // (Its Attack action with Extra Attack stands for its single attack.)
+      if ( ids.has(`${a.id}.extra`) ) continue;
+      const multiattack = String(a.id).startsWith(`${actor.id}.multiattack`);
+      const item = multiattack ? null : actor.items.get?.(a.itemId);
+      const props = new Set(asArray(item?.system?.properties));
+      const shot = /R$/.test(String(item?.system?.type?.value ?? ""));
+      out.push({
+        id: a.id, name: a.name, multiattack, item: String(item?.identifier ?? item?.system?.identifier ?? ""),
+        weapon: !multiattack && a.kind === "strike" && a.weapon ? (a.melee ? "melee" : shot ? "ranged" : "") : "",
+        twoHanded: props.has("two"),
+        consumable: !multiattack && /^item:/.test(a.resource ?? "")
+      });
+    }
+    return out;
   }
 
   /**
