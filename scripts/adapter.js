@@ -13,7 +13,7 @@ import { modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 import { edgeActions, studyCheck } from "./edges.js";
 import { loreBoost } from "./lore.js";
-import { formulaNumber } from "./arithmetic.js";
+import { formulaNumber, plainDice } from "./arithmetic.js";
 import { t, skillName, conditionName, coin, englishName, englishDescription, languageNames } from "./words.js";
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
@@ -279,6 +279,51 @@ async function creatureByCr(cr, types = []) {
     return null;
   })().catch(() => null));
   return CREATURE_CACHE.get(key);
+}
+
+/**
+ * What dnd5e works a summoning's formulas out with when it summons (the activity's roll data): the caster's own numbers
+ * (@attributes.spell.mod, @abilities.wis.mod, @classes.ranger.levels, @prof), the item's at the level it's cast at
+ * (@item.level: here its own), the activity's ability modifier (@mod), and the casting's scaling (@scaling: 1 at the
+ * item's own level, one more for each level above it; @scaling.increase: the levels above, so 0 here; a cantrip's by its
+ * caster's level). Without an activity's own: the caster's, with the item's, and its scaling from its flags.
+ */
+export function summonData(actor, item, activity) {
+  try {
+    const data = activity?.getRollData?.({ deterministic: true });
+    if ( data ) return data;
+  } catch ( err ) { /* worked out below */ }
+  let own = {};
+  try {
+    own = actor?.getRollData?.({ deterministic: true }) ?? {};
+  } catch ( err ) { /* none to read */ }
+  const increase = Number(item?.flags?.dnd5e?.scaling) || 0;
+  return { ...own, item: { ...(item?.system ?? {}) }, scaling: { increase, value: increase + 1, toString: () => String(increase + 1) } };
+}
+
+/** A summoning's formula as a number, its @data filled in (Foundry's own substitution): arithmetic only, never run as code. */
+export function summonNumber(formula, data, fallback = 1) {
+  try {
+    return formulaNumber(Roll.replaceFormulaData(String(formula || fallback), data, { missing: "0" }), fallback);
+  } catch ( err ) {
+    return fallback;
+  }
+}
+
+/**
+ * A summoning's damage bonus ("@mod + (@scaling)d12") as dice and a flat number, its @data filled in; null when it's
+ * none, or anything but dice and numbers added up.
+ */
+export function summonDice(formula, data) {
+  if ( !formula ) return null;
+  try {
+    const text = plainDice(Roll.replaceFormulaData(String(formula), data, { missing: "0" })).replace(/\[[^\]]*\]/g, "");
+    if ( !/^[\d\s+\-d]*$/i.test(text) ) return null;
+    const p = parseFormula(text);
+    return p.dice.some(d => d.n > 0) || p.flat ? { ...p, dice: p.dice.filter(d => d.n > 0) } : null;
+  } catch ( err ) {
+    return null;
+  }
 }
 
 export class Dnd5eAdapter extends SystemAdapter {
@@ -878,19 +923,18 @@ export class Dnd5eAdapter extends SystemAdapter {
     // Only what can be called in the middle of a fight (Find Familiar takes an hour).
     const activation = item.system.activation?.type ?? activity.activation?.type ?? "action";
     if ( !["action", "bonus"].includes(activation) ) return null;
-    const level = Number(item.system.level) || 0;
-    // (A player's item holds these formulas: worked out as arithmetic only, never run as code.)
-    const value = (formula, fallback = 1) => {
-      try {
-        return formulaNumber(Roll.replaceFormulaData(String(formula || fallback), { item: { level } }, { missing: "0" }), fallback);
-      } catch ( err ) {
-        return fallback;
-      }
-    };
+    // (The level dnd5e calls it at: a spell's own, a feature's by its class or character level.)
+    const level = Number(activity.relevantLevel ?? item.system.level) || 0;
+    // A player's item holds these formulas: worked out as arithmetic only, never run as code, with what dnd5e works them
+    // out with (summonData).
+    const data = summonData(actor, item, activity);
+    const value = (formula, fallback = 1, more = data) => summonNumber(formula, more, fallback);
     const id = String(item.identifier ?? item.system?.identifier ?? "");
     const text = plainText(englishDescription(item), actor, true);
     const spellAttack = Number(actor.system.attributes?.spell?.attack ?? actor.system.attributes?.spellattack ?? NaN);
-    const fallbackAttack = (Number(actor.system.abilities?.[actor.system.attributes?.spellcasting ?? "int"]?.mod) || 0) + proficiency(actor.system.details?.level ?? 1);
+    const prof = Number(data.attributes?.prof) || proficiency(actor.system.details?.level ?? 1);
+    const castingMod = Number(actor.system.abilities?.[actor.system.attributes?.spellcasting ?? "int"]?.mod) || 0;
+    const fallbackAttack = castingMod + prof;
     for ( const p of activity.profiles ?? [] ) {
       if ( (Number.isFinite(p.level?.min) && level < p.level.min) || (Number.isFinite(p.level?.max) && level > p.level.max) ) continue;
       const count = Math.max(0, p.count ? value(p.count, 1) : 1);
@@ -904,10 +948,16 @@ export class Dnd5eAdapter extends SystemAdapter {
       // proficiency, so formulas such as "(4 + 2 * (@flags.dnd5e.summon.level - 5))d8" come out right.
       let creature = src;
       try {
-        const data = src.toObject();
-        foundry.utils.setProperty(data, "flags.dnd5e.summon", { level, mod: fallbackAttack - proficiency(actor.system.details?.level ?? 1), prof: proficiency(actor.system.details?.level ?? 1), origin: item.uuid });
-        creature = new CONFIG.Actor.documentClass(data);
+        const copy = src.toObject();
+        foundry.utils.setProperty(copy, "flags.dnd5e.summon", { level, mod: Number(data.mod ?? castingMod) || 0, prof, origin: item.uuid });
+        creature = new CONFIG.Actor.documentClass(copy);
       } catch ( err ) { /* read it as it is */ }
+      // (Its bonuses may count the creature's own numbers, as dnd5e's do: "- (@summon.attributes.hp.value / 2)".)
+      let own = {};
+      try {
+        own = creature.getRollData?.({ deterministic: true }) ?? {};
+      } catch ( err ) { /* none to read */ }
+      const withSummon = { ...data, summon: own };
       this.#summoning = true;
       let spec = null;
       try {
@@ -917,20 +967,20 @@ export class Dnd5eAdapter extends SystemAdapter {
       }
       // Something that can't fight (Mage Hand) is no help in one.
       if ( !spec || !spec.actions.some(a => a.damage?.length || a.kind === "control") ) continue;
-      const extraAttack = activity.bonuses?.attackDamage ? parseFormula(Roll.replaceFormulaData(activity.bonuses.attackDamage, { item: { level } }, { missing: "0" })) : null;
-      const extraSave = activity.bonuses?.saveDamage ? parseFormula(Roll.replaceFormulaData(activity.bonuses.saveDamage, { item: { level } }, { missing: "0" })) : null;
+      const extraAttack = summonDice(activity.bonuses?.attackDamage, withSummon);
+      const extraSave = summonDice(activity.bonuses?.saveDamage, withSummon);
       for ( const a of spec.actions ) {
         const attacks = a.kind === "strike" || a.kind === "spell-attack";
         if ( activity.match?.attacks && attacks ) a.bonus = Number.isFinite(spellAttack) ? spellAttack : fallbackAttack;
         if ( activity.match?.saves && a.save ) a.save = { ...a.save, dc: actor.system.attributes?.spell?.dc ?? a.save.dc };
-        if ( extraAttack && attacks && a.damage?.length && extraAttack.dice.some(d => d.n > 0) ) a.damage = [...a.damage, { ...extraAttack, type: a.damage[0].type }];
-        if ( extraSave && a.kind === "save" && a.damage?.length && extraSave.dice.some(d => d.n > 0) ) a.damage = [...a.damage, { ...extraSave, type: a.damage[0].type }];
+        if ( extraAttack && attacks && a.damage?.length ) a.damage = [...a.damage, { ...extraAttack, type: a.damage[0].type }];
+        if ( extraSave && a.kind === "save" && a.damage?.length ) a.damage = [...a.damage, { ...extraSave, type: a.damage[0].type }];
       }
       if ( activity.bonuses?.hp ) {
-        const hp = value(activity.bonuses.hp, 0);
-        spec.hp = { ...spec.hp, value: spec.hp.value + hp, max: spec.hp.max + hp };
+        const hp = value(activity.bonuses.hp, 0, withSummon);
+        spec.hp = { ...spec.hp, value: Math.max(1, spec.hp.value + hp), max: Math.max(1, spec.hp.max + hp) };
       }
-      if ( activity.bonuses?.ac ) spec.defenses = { ...spec.defenses, ac: spec.defenses.ac + value(activity.bonuses.ac, 0) };
+      if ( activity.bonuses?.ac ) spec.defenses = { ...spec.defenses, ac: spec.defenses.ac + value(activity.bonuses.ac, 0, withSummon) };
       const thing = NOT_CREATURES.has(id);
       if ( thing ) spec.untargetable = true;
       const concentration = !!(item.system.properties?.has?.("concentration") || item.system.duration?.concentration) || undefined;

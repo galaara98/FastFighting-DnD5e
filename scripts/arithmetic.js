@@ -76,6 +76,14 @@ function evaluate(list) {
 }
 
 /**
+ * A dice formula with its dice counts worked out ("(5 - 3)d8" -> "2d8", "(1)d12" -> "1d12"; none below 0), for the
+ * core's dice parser, which reads plain terms and drops brackets. Arithmetic only, as formulaNumber.
+ */
+export function plainDice(formula) {
+  return String(formula ?? "").replace(/\(([^()]*)\)\s*d\s*(\d+)/gi, (m, count, faces) => `${Math.max(0, formulaNumber(count, 0))}d${faces}`);
+}
+
+/**
  * The number a formula comes to (rounded down), or `fallback` when it isn't one: arithmetic only, dice averaged.
  * @param {string} formula   with its @data already filled in (Roll.replaceFormulaData)
  * @param {number} [fallback]
@@ -86,7 +94,7 @@ export function formulaNumber(formula, fallback = 0) {
   try {
     let v;
     if ( /\d*d\d+/.test(text) ) {
-      const part = parseFormula(text);
+      const part = parseFormula(plainDice(text));
       v = part ? meanPart(part) : NaN;
     } else {
       const list = tokens(text);

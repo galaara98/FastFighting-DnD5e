@@ -1,9 +1,24 @@
 /**
- * The adapter reading a sheet as Foundry's dnd5e prepares one: who could steal, Relentless Endurance, and dnd5e's own
- * difficult terrain.
+ * The adapter reading a sheet as Foundry's dnd5e prepares one: who could steal, Relentless Endurance, dnd5e's own
+ * difficult terrain, and a summoning's formulas worked out with its caster's numbers.
  */
-import { describe, expect, test } from "vitest";
-import { Dnd5eAdapter } from "../scripts/adapter.js";
+import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { Dnd5eAdapter, summonData, summonNumber, summonDice } from "../scripts/adapter.js";
+
+/** Foundry's Roll.replaceFormulaData, as it fills a formula's @data in: a number or text as it is, an object by its own words. */
+function replaceFormulaData(formula, data, { missing } = {}) {
+  return String(formula).replace(/@([a-z.0-9_-]+)/gi, (match, term) => {
+    const value = term.split(".").reduce((o, k) => o?.[k], data);
+    if ( value === null || value === undefined ) return missing !== undefined ? String(missing) : match;
+    if ( typeof value === "string" ) return value.trim();
+    if ( typeof value === "number" || typeof value === "boolean" ) return String(Number(value));
+    if ( typeof value.toString === "function" && value.toString !== Object.prototype.toString ) return value.toString();
+    return `ᚖ${JSON.stringify(value)}ᚖ`;
+  });
+}
+
+/** dnd5e's @scaling: its value by itself (1 at an item's own level), and how many levels up. */
+const scaling = increase => ({ increase, get value() { return increase + 1; }, toString() { return this.value; } });
 
 const listOf = list => Object.assign(list, { get: id => list.find(i => i.id === id), getName: name => list.find(i => i.name === name) });
 const item = (type, identifier, name, system = {}) => ({ id: identifier, type, name, identifier, flags: {}, effects: [], system: { identifier, activities: [], ...system } });
@@ -27,6 +42,8 @@ function actorOf({ id = "actor", type = "npc", creature = "humanoid", int = 10, 
 }
 const specOf = actor => new Dnd5eAdapter().toCombatantSpec({ id: "token", name: actor.name, actor });
 
+beforeEach(() => { globalThis.Roll = { replaceFormulaData }; });
+afterEach(() => { delete globalThis.Roll; delete globalThis.fromUuid; });
 
 describe("who could steal", () => {
   test("a character, or a creature with the wits to: not a beast, nor the mindless, nor an animal's mind", async () => {
@@ -66,6 +83,83 @@ describe("dnd5e's regions", () => {
     expect(adapter.describeRegionBehavior({ type: "dnd5e.difficultTerrain", system: { magical: true, types: new Set(["plants"]) } })).toEqual({ difficult: true });
     expect(adapter.describeRegionBehavior({ type: "dnd5e.rotateArea", system: {} })).toBeNull();
     expect(adapter.describeRegionBehavior({ type: "teleportToken", system: {} })).toBeNull();
+  });
+});
+
+describe("a summoning's formulas, with its caster's numbers", () => {
+  // (As dnd5e's activity has them: the caster's roll data, the item's at the level it's cast at, its scaling, @mod.)
+  const caster = {
+    attributes: { spell: { mod: 3 }, hp: { max: 40, value: 31 }, prof: 3 }, abilities: { wis: { mod: 2 } }, classes: { ranger: { levels: 5 } },
+    prof: { toString: () => "3" }, mod: 3
+  };
+  const cast = (level, up = 0) => ({ ...caster, item: { level: level + up }, scaling: scaling(up) });
+
+  test("its count and bonuses: @scaling, @scaling.increase, the caster's spellcasting, abilities, class levels, hit points", () => {
+    const data = cast(3);
+    // (A count of "@scaling" was 0 before, and nothing was called: Horn of Valhalla, Pipes of the Sewers.)
+    expect(summonNumber("@scaling", data)).toBe(1);
+    expect(summonNumber("1 + @scaling.increase * 2", data)).toBe(1);
+    expect(summonNumber("1 + @scaling.increase * 2", cast(3, 1))).toBe(3); // (Animate Dead one level up)
+    expect(summonNumber("floor(@attributes.spell.mod / 2)", data, 0)).toBe(1);
+    expect(summonNumber("@abilities.wis.mod", data, 0)).toBe(2);
+    expect(summonNumber("@classes.ranger.levels", data, 0)).toBe(5);
+    expect(summonNumber("@attributes.hp.max", data, 0)).toBe(40); // (Bigby's Hand: the caster's hit point maximum)
+    expect(summonNumber("@prof", data, 0)).toBe(3);
+    expect(summonNumber("10 * (@item.level - 3)", cast(3, 2), 0)).toBe(20);
+  });
+
+  test("the creature's own numbers, where a bonus counts them (@summon)", () => {
+    const data = { ...cast(3), summon: { attributes: { hp: { value: 30 } } } };
+    expect(summonNumber("- (@summon.attributes.hp.value / 2)", data, 0)).toBe(-15);
+    expect(summonNumber("-@summon.attributes.hp.value + floor(@attributes.hp.value / 2)", data, 0)).toBe(-15);
+  });
+
+  test("a damage bonus as dice and a flat number; none when it comes to nothing", () => {
+    expect(summonDice("@mod + (@scaling)d12", cast(6))).toMatchObject({ dice: [{ n: 1, faces: 12 }], flat: 3 });
+    expect(summonDice("(@item.level - 5)d8", cast(5, 2))).toMatchObject({ dice: [{ n: 2, faces: 8 }], flat: 0 });
+    expect(summonDice("(@item.level - 6)d12", cast(6))).toBeNull();
+    expect(summonDice("@abilities.wis.mod", cast(1))).toMatchObject({ dice: [], flat: 2 });
+    expect(summonDice("", cast(1))).toBeNull();
+  });
+
+  test("still arithmetic only: what the data fills in is never run as code", () => {
+    const data = { ...cast(3), name: 'constructor.constructor("globalThis.pwnedBySummon = 1")()' };
+    expect(summonNumber("@name", data, 1)).toBe(1);
+    expect(summonDice("@name", data)).toBeNull();
+    expect(globalThis.pwnedBySummon).toBeUndefined();
+  });
+
+  test("what dnd5e works them out with: the activity's own roll data; else the caster's, with the item's and its scaling", () => {
+    const own = cast(3);
+    expect(summonData({}, {}, { getRollData: () => own })).toBe(own);
+    const item = { system: { level: 5 }, flags: { dnd5e: { scaling: 2 } } };
+    const data = summonData({ getRollData: () => caster }, item, {});
+    expect(summonNumber("@item.level", data, 0)).toBe(5);
+    expect(summonNumber("@scaling", data, 0)).toBe(3);
+    expect(summonNumber("@scaling.increase", data, 0)).toBe(2);
+    expect(summonNumber("@attributes.spell.mod", data, 0)).toBe(3);
+  });
+
+  test("in a creature's spec: called as many as its count says, with the caster's hit points and damage added", async () => {
+    // (A wolf with a bite: what's called.)
+    const bite = {
+      id: "bite", type: "attack", activation: { type: "action" }, attack: { type: { value: "melee" } }, labels: { modifier: "+4" },
+      getDamageConfig: () => ({ rolls: [{ parts: ["1d6 + 2"], options: { types: ["piercing"] } }] }), getRollData: () => ({})
+    };
+    const wolf = actorOf({ id: "wolf", creature: "beast", int: 3, hp: 11, items: [item("weapon", "bite", "Bite", { activities: [bite], range: {} })] });
+    globalThis.fromUuid = async uuid => (uuid === "Actor.wolf" ? wolf : null);
+    const summon = {
+      id: "call", type: "summon", activation: { type: "action" }, match: {},
+      profiles: [{ count: "@scaling", uuid: "Actor.wolf", level: {} }],
+      bonuses: { hp: "@attributes.hp.max", attackDamage: "@mod + (@scaling)d12" },
+      getRollData: () => cast(3)
+    };
+    const spell = item("spell", "call-wolf", "Call Wolf", { level: 3, activities: [summon], duration: { units: "minute", value: 1 } });
+    const spec = await specOf(actorOf({ items: [spell] }));
+    const called = spec.actions.find(a => a.kind === "summon");
+    expect(called.creatures).toHaveLength(1);
+    expect(called.creatures[0].hp).toMatchObject({ value: 51, max: 51 });
+    expect(called.creatures[0].actions.find(a => a.name === "Bite").damage[1]).toMatchObject({ dice: [{ n: 1, faces: 12 }], flat: 3, type: "piercing" });
   });
 });
 
