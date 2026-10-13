@@ -267,6 +267,54 @@ describe("mending", () => {
     expect(holdOnFrom("If damage reduces the zombie to 0 Hit Points, it makes a Constitution saving throw (DC 5 plus the damage taken) unless the damage is Radiant or from a Critical Hit.", "Undead Fortitude"))
       .toEqual({ save: "con", base: 5, except: ["radiant"], notOnCrit: true, label: "Undead Fortitude" });
   });
+
+  const POOL = "feature:relentless-endurance";
+  const RELENTLESS = { save: "con", base: -Infinity, except: [], notOnCrit: false, label: "Relentless Endurance", pool: POOL };
+
+  test("Relentless Endurance: no roll to make, only its use to spend; nothing once it's spent, or when the blow kills outright", () => {
+    const orc = (hp, left = 1) => ({ spec: { holdOn: RELENTLESS }, hp, maxHp: 20, resources: { [POOL]: left } });
+    const asked = { kind: "save", label: "Relentless Endurance" };
+    const u = orc(-3);
+    expect(dnd5eRules.adjustRoll(null, u, { degree: 2 }, asked).degree).toBe(2);
+    expect(u.resources[POOL]).toBe(0);
+    expect(dnd5eRules.adjustRoll(null, u, { degree: 2 }, asked).degree).toBe(1);
+    // (20 past 0, its whole maximum: killed outright, and the use is kept.)
+    const struck = orc(-20);
+    expect(dnd5eRules.adjustRoll(null, struck, { degree: 2 }, asked).degree).toBe(1);
+    expect(struck.resources[POOL]).toBe(1);
+    // Every other roll is as it was: its other saves, its attacks, a zombie's Undead Fortitude.
+    const roll = { degree: 1 };
+    expect(dnd5eRules.adjustRoll(null, orc(-3), roll, { kind: "save", label: "Fireball" })).toBe(roll);
+    expect(dnd5eRules.adjustRoll(null, orc(-3), roll, { kind: "attack", label: "Relentless Endurance" })).toBe(roll);
+    expect(dnd5eRules.adjustRoll(null, { spec: { holdOn: { save: "con", base: 5, label: "Undead Fortitude" } }, hp: -3, maxHp: 20, resources: {} }, roll, { kind: "save", label: "Undead Fortitude" })).toBe(roll);
+  });
+
+  test("Relentless Endurance in a fight: up at 1 hit point the first time, down the second", async () => {
+    const { replay } = await import("../../fast-fighting/scripts/engine/simulator.js");
+    const { parseFormula } = await import("../scripts/core.js");
+    const traits = { tactical: { base: 50, fudge: 0 }, brave: { base: 95, fudge: 0 }, selfish: { base: 20, fudge: 0 }, loyal: { base: 60, fudge: 0 } };
+    const blow = (bonus, damage) => ({ id: `blow${bonus}`, name: "Greataxe", kind: "strike", bonus, melee: true, reach: 5, damage: [parseFormula(damage, "slashing")] });
+    const fighter = (id, side, over) => ({
+      id, name: id, side, kind: "npc", level: 1, hp: { value: 20, max: 20, temp: 0 }, defenses: { ac: 10, str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 },
+      initiative: { mod: 0 }, speeds: { walk: 30 }, iwr: {}, traits, flags: {}, diesAtZero: true, actions: [blow(-50, "1")], ...over
+    });
+    const fight = (orcHp, damage) => replay({
+      combatants: [
+        fighter("orc", "friendly", { hp: { value: orcHp, max: 20, temp: 0 }, holdOn: RELENTLESS, resources: { [POOL]: 1 } }),
+        fighter("brute", "hostile", { initiative: { mod: 30 }, actions: [blow(50, damage)] })
+      ],
+      sides: { friendly: { label: "Party", enemies: ["hostile"] }, hostile: { label: "Foes", enemies: ["friendly"] } },
+      options: { positioning: false, opening: "fight", maxRounds: 8 }
+    }, dnd5eRules, 7);
+    const r = fight(5, "8");
+    expect(r.log.filter(e => e.type === "holdOn" && e.label === "Relentless Endurance")).toHaveLength(1);
+    expect(r.units.orc.status).toBe("dead");
+    expect(r.units.orc.final.resources[POOL]).toBe(0);
+    // (A blow that leaves 20 past 0: killed outright.)
+    const outright = fight(5, "25");
+    expect(outright.log.some(e => e.type === "holdOn")).toBe(false);
+    expect(outright.units.orc.final.resources[POOL]).toBe(1);
+  });
 });
 
 describe("upcasting", () => {

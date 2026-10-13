@@ -325,6 +325,7 @@ export class Dnd5eAdapter extends SystemAdapter {
 
     const hits = { riders: [], pools: {}, names: {} };
     const actions = await this.#actions(actor, level, features, hits);
+    const mending = this.#mending(actor, hits);
     const resources = { ...hits.pools };
     for ( const a of actions ) if ( a.resource && a.pool !== undefined ) resources[a.resource] = a.pool;
     for ( const a of actions ) delete a.pool;
@@ -370,7 +371,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       // At 0 HP a 5e creature is dying until it has three successes (or is stabilized).
       stable: (hp.value ?? 0) <= 0 ? (sys.attributes?.death?.success ?? 0) >= 3 : undefined,
       deathSaves: { success: sys.attributes?.death?.success ?? 0, failure: sys.attributes?.death?.failure ?? 0 },
-      ...this.#mending(actor),
+      ...mending,
       ...this.#saveFeatures(actor, features, level),
       conditions: this.#conditions(actor),
       perception: skillMod("prc") ?? 0,
@@ -668,8 +669,11 @@ export class Dnd5eAdapter extends SystemAdapter {
     return out;
   }
 
-  /** Regeneration (a troll's, a vampire's) and Undead Fortitude, by identifier or name, read from their words. */
-  #mending(actor) {
+  /**
+   * Regeneration (a troll's, a vampire's) and Undead Fortitude, by identifier or name, read from their words; and
+   * Relentless Endurance (an orc's), whose use goes in `hits` as a pool of its own.
+   */
+  #mending(actor, hits) {
     const out = {};
     const regen = featureItem(actor, "regeneration", "regeneration");
     if ( regen ) {
@@ -682,6 +686,16 @@ export class Dnd5eAdapter extends SystemAdapter {
     if ( fortitude ) {
       const h = holdOnFrom(plainText(englishDescription(fortitude), actor, true), fortitude.name);
       if ( h ) out.holdOn = h;
+    }
+    // Relentless Endurance: 1 hit point instead of 0, with no save to make (any roll meets it), once a long rest, and
+    // not when the blow kills it outright (rules.adjustRoll). While it has the use: a pool, for Make it So to spend.
+    const relentless = out.holdOn ? null : featureItem(actor, "relentless-endurance", "relentless endurance");
+    const left = relentless ? Math.max(0, (Number(relentless.system.uses?.max) || 1) - (Number(relentless.system.uses?.spent) || 0)) : 0;
+    if ( left ) {
+      const pool = `feature:${relentless.id}`;
+      out.holdOn = { save: "con", base: -Infinity, except: [], notOnCrit: false, label: relentless.name, pool };
+      hits.pools[pool] = left;
+      hits.names[pool] = relentless.name;
     }
     return out;
   }

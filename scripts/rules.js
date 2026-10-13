@@ -169,6 +169,19 @@ export const dnd5eRules = {
     return c.status;
   },
 
+  /**
+   * Relentless Endurance (spec.holdOn with a pool, adapter.js), which the core asks for as a save under its name: no
+   * roll to make, only its use to spend, while it has one; and nothing when the blow kills it outright (what's left of
+   * the damage past 0 at least its hit point maximum, as onDropped has it).
+   */
+  adjustRoll(run, u, roll, { kind, label } = {}) {
+    const h = u?.spec?.holdOn;
+    if ( kind !== "save" || !h?.pool || label !== h.label ) return roll;
+    if ( -(u.hp ?? 0) >= (u.maxHp ?? 0) || !((u.resources?.[h.pool] ?? 0) > 0) ) return { ...roll, degree: 1 };
+    u.resources[h.pool] -= 1;
+    return roll;
+  },
+
   /** Healing at 0 HP: conscious again (still prone), death saves reset. */
   onHealed(c, amount) {
     const wasDown = c.status === STATUS.DOWN;

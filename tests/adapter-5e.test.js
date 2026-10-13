@@ -1,5 +1,5 @@
 /**
- * The adapter reading a sheet as Foundry's dnd5e prepares one: who could steal.
+ * The adapter reading a sheet as Foundry's dnd5e prepares one: who could steal, and Relentless Endurance.
  */
 import { describe, expect, test } from "vitest";
 import { Dnd5eAdapter } from "../scripts/adapter.js";
@@ -38,6 +38,24 @@ describe("who could steal", () => {
     expect(await theft({ creature: "undead", int: 3 })).toBeNull(); // (a zombie)
     expect(await theft({ creature: "monstrosity", int: 3 })).toBeNull(); // (an owlbear)
     expect(await theft({ creature: "ooze", int: 1 })).toBeNull();
+  });
+});
+
+describe("Relentless Endurance", () => {
+  const relentless = spent => item("feat", "relentless-endurance", "Relentless Endurance", { uses: { max: 1, spent } });
+
+  test("by its identifier: it holds on at 1 hit point with no save to make, while it has its use (a pool, for Make it So to spend)", async () => {
+    const spec = await specOf(actorOf({ type: "character", items: [relentless(0)] }));
+    const pool = "feature:relentless-endurance";
+    expect(spec.holdOn).toEqual({ save: "con", base: -Infinity, except: [], notOnCrit: false, label: "Relentless Endurance", pool });
+    expect(spec.resources[pool]).toBe(1);
+    expect(spec.resourceNames[pool]).toBe("Relentless Endurance");
+  });
+
+  test("not once it's used, until a long rest", async () => {
+    const spec = await specOf(actorOf({ type: "character", items: [relentless(1)] }));
+    expect(spec.holdOn).toBeUndefined();
+    expect(spec.resources["feature:relentless-endurance"]).toBeUndefined();
   });
 });
 
