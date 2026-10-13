@@ -13,6 +13,7 @@ import { modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 import { edgeActions, studyCheck } from "./edges.js";
 import { loreBoost } from "./lore.js";
+import { formulaNumber } from "./arithmetic.js";
 import { t, skillName, conditionName, coin, englishName, englishDescription, languageNames } from "./words.js";
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
@@ -861,10 +862,10 @@ export class Dnd5eAdapter extends SystemAdapter {
     const activation = item.system.activation?.type ?? activity.activation?.type ?? "action";
     if ( !["action", "bonus"].includes(activation) ) return null;
     const level = Number(item.system.level) || 0;
+    // (A player's item holds these formulas: worked out as arithmetic only, never run as code.)
     const value = (formula, fallback = 1) => {
       try {
-        const v = Roll.safeEval(Roll.replaceFormulaData(String(formula || fallback), { item: { level } }, { missing: "0" }));
-        return Number.isFinite(v) ? Math.floor(v) : fallback;
+        return formulaNumber(Roll.replaceFormulaData(String(formula || fallback), { item: { level } }, { missing: "0" }), fallback);
       } catch ( err ) {
         return fallback;
       }
