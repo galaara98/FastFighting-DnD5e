@@ -1014,12 +1014,13 @@ export class Dnd5eAdapter extends SystemAdapter {
       if ( activity.bonuses?.ac ) spec.defenses = { ...spec.defenses, ac: spec.defenses.ac + value(activity.bonuses.ac, 0, withSummon) };
       const thing = NOT_CREATURES.has(id);
       if ( thing ) spec.untargetable = true;
+      spec.sourceUuid = src.uuid;
       const concentration = !!(item.system.properties?.has?.("concentration") || item.system.duration?.concentration) || undefined;
       // "As a Bonus Action on your later turns, you can move the weapon and attack": it acts only when told to.
       const told = thing || /\bbonus action\b[^.]*\b(?:move|attack|command|direct)/i.test(text);
       return {
         id: `${actor.id}.${item.id}.${activity.id}`, name: item.name, kind: "summon", cost: 1, economy: activation === "bonus" ? "bonus" : undefined,
-        itemId: item.id, traits: [], rank: item.type === "spell" ? level : undefined, concentration, ...this.#resource(actor, item),
+        itemId: item.id, activityId: activity.id, profileId: p._id, traits: [], rank: item.type === "spell" ? level : undefined, concentration, ...this.#resource(actor, item),
         creatures: Array.from({ length: Math.min(count, 8) }, () => spec),
         rounds: durationRounds(item.system.duration) ?? 10,
         sustain: told ? { bonus: 1 } : undefined
@@ -1699,6 +1700,31 @@ export class Dnd5eAdapter extends SystemAdapter {
 
   get supportsLive() {
     return true;
+  }
+
+  /**
+   * A live battle: what a summoning called, placed the way dnd5e summons (its own actor for the creature, its changes for
+   * the casting: hit points, bonuses, the caster's numbers), at the spots given rather than where a player clicks. The
+   * core's own way when the activity can't be found.
+   */
+  async placeSummons(scene, summonerDoc, action, creatures, places) {
+    const item = summonerDoc.actor?.items.get(action.itemId);
+    const activity = item?.system.activities?.get?.(action.activityId);
+    const profile = activity?.profiles?.find(p => p._id === action.profileId);
+    const source = creatures[0]?.sourceUuid;
+    const Actor5e = globalThis.dnd5e?.documents?.Actor5e;
+    if ( !activity?.getChanges || !activity.getTokenData || !profile || !source || !Actor5e?.fetchExisting ) return super.placeSummons(scene, summonerDoc, action, creatures, places);
+    const had = new Set(game.actors.map(a => a.id));
+    const actor = await Actor5e.fetchExisting(source, { folderId: summonerDoc.actor.folder?.id ?? null, origin: { key: "flags.dnd5e.summon.origin", value: item.uuid } });
+    if ( !actor ) return { tokens: [], records: [] };
+    const options = { profile: profile._id };
+    const data = [];
+    for ( const place of places.slice(0, creatures.length) ) {
+      const changes = await activity.getChanges(actor, profile, options);
+      data.push(await activity.getTokenData({ actor, placement: { x: place.x, y: place.y, elevation: summonerDoc.elevation ?? 0 }, ...changes }));
+    }
+    const tokens = data.length ? await scene.createEmbeddedDocuments("Token", data, { dnd5e: { autoRollNPCHP: "no" } }) : [];
+    return { tokens, records: [{ createdTokens: tokens.map(t => t.uuid), createdActors: had.has(actor.id) ? [] : [actor.uuid] }] };
   }
 
   /** A live battle: one turn's changes, and only those (commit.js commitDnd5eChanges). */
