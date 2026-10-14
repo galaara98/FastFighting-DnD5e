@@ -1375,8 +1375,10 @@ export class Dnd5eAdapter extends SystemAdapter {
       const melee = activity.attack?.type?.value !== "ranged";
       const bonus = numberOf(activity.labels?.modifier) ?? numberOf(activity.labels?.toHit) ?? 0;
       const riders = this.#riders(this.#effects(item, activity, { words: item.type === "spell" }));
+      // (A ranged weapon that isn't thrown, a bow, a crossbow, a sling, sends a shot; a dart, a rock, a javelin flies itself.)
+      const shoots = /R$/.test(String(item.system?.type?.value ?? "")) && !asArray(item.system?.properties).includes("thr");
       const attack = {
-        ...base, kind: item.type === "spell" ? "spell-attack" : "strike", weapon: item.type === "weapon", bonus, melee,
+        ...base, kind: item.type === "spell" ? "spell-attack" : "strike", weapon: item.type === "weapon", bonus, melee, thrown: !melee && !shoots,
         reach: melee ? reachOf() : undefined,
         range: melee ? null : { increment: rangeFeet ?? 30, max: longFeet || rangeFeet || 30 },
         damage, effects: riders.length ? riders : undefined
