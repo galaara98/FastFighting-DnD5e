@@ -222,7 +222,7 @@ export const dnd5eRules = {
       c.dying = 0;
       return t("Death.Stable");
     }
-    return t(natural >= 10 ? "Death.Success" : "Death.Failure", { s: c.deathSuccesses ?? 0, f: c.deathFailures ?? 0 });
+    return { text: t(natural >= 10 ? "Death.Success" : "Death.Failure", { s: c.deathSuccesses ?? 0, f: c.deathFailures ?? 0 }), better: natural >= 10 };
   },
 
   /** Stabilizing a dying creature: a DC 10 Wisdom (Medicine) check. */
