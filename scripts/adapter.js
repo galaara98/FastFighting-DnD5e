@@ -924,6 +924,18 @@ export class Dnd5eAdapter extends SystemAdapter {
         const die = this.#superiorityDie(actor);
         if ( id === "parry" ) out.push({ id: `${actor.id}.${item.id}`, label: item.name, on: "hit", melee: true, resource: key, reduce: part([{ n: 1, faces: die }], dex, "untyped") });
         else out.push({ id: `${actor.id}.${item.id}`, label: item.name, on: "missed", melee: true, resource: key, strike: true });
+      } else if ( id === "death-burst" ) {
+        // A mephit's or a magmin's Death Burst: as it dies, a save against what bursts from it, for everyone near (no
+        // reaction spent: it's its nature). One that does no damage (a dust mephit's blinding) isn't played yet.
+        const act = activities.find(a => a.type === "save" && a.damage?.parts?.length);
+        if ( !act ) continue;
+        const save = { type: asArray(act.save?.ability)[0] ?? "dex", dc: act.save?.dc?.value ?? 10, basic: act.damage?.onSave !== "none" };
+        out.push({ id: `${actor.id}.${item.id}`, label: item.name, on: "slain", free: true, areaBurst: { damage: this.#parts(act), save, range: Number(act.target?.template?.size) || 5 } });
+      } else if ( id === "protection" || id === "fighting-style-protection" ) {
+        // The Protection fighting style: with a shield, Disadvantage on an attack at a friend within 5 feet (about 5
+        // off the roll, as a bonus to the friend's AC against it).
+        if ( !actor.items.some(i => i.system?.type?.value === "shield" && i.system?.equipped) ) continue;
+        out.push({ id: `${actor.id}.${item.id}`, label: item.name, on: "allyTargeted", range: 5, ac: 5 });
       }
     }
     return out.length ? out : null;

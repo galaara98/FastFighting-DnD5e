@@ -60,6 +60,28 @@ describe("who could steal", () => {
   });
 });
 
+describe("reactions at the master list's newer moments", () => {
+  test("a Death Burst (by its identifier): as it dies, a save against what bursts from it, for everyone near; no reaction spent", async () => {
+    const burst = { type: "save", save: { ability: new Set(["dex"]), dc: { value: 11 } }, damage: { onSave: "half", parts: [{}] }, target: { template: { size: 10 } },
+      getDamageConfig: () => ({ rolls: [{ parts: ["2d6"], options: { types: ["fire"] } }] }) };
+    const magmin = actorOf({ items: [item("feat", "death-burst", "Death Burst", { activities: [burst] })] });
+    const [r] = (await specOf(magmin)).reactions;
+    expect(r).toMatchObject({ on: "slain", free: true, label: "Death Burst", areaBurst: { save: { type: "dex", dc: 11, basic: true }, range: 10 } });
+    expect(r.areaBurst.damage[0]).toMatchObject({ type: "fire", dice: [{ n: 2, faces: 6 }] });
+    // (One that does no damage, a dust mephit's blinding, isn't played yet.)
+    const dust = actorOf({ items: [item("feat", "death-burst", "Death Burst", { activities: [{ type: "save", save: { ability: new Set(["con"]), dc: { value: 10 } }, damage: { parts: [] } }] })] });
+    expect((await specOf(dust)).reactions ?? []).toEqual([]);
+  });
+
+  test("the Protection fighting style covers a friend attacked within 5 feet, only with a shield in hand", async () => {
+    const style = item("feat", "protection", "Protection");
+    const shield = { ...item("equipment", "shield", "Shield", { type: { value: "shield" }, equipped: true }), id: "shield-item" };
+    const [r] = (await specOf(actorOf({ type: "character", items: [style, shield] }))).reactions;
+    expect(r).toMatchObject({ on: "allyTargeted", range: 5, ac: 5, label: "Protection" });
+    expect((await specOf(actorOf({ type: "character", items: [style] }))).reactions ?? []).toEqual([]);
+  });
+});
+
 describe("Relentless Endurance", () => {
   const relentless = spent => item("feat", "relentless-endurance", "Relentless Endurance", { uses: { max: 1, spent } });
 
