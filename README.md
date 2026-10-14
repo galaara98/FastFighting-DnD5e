@@ -64,7 +64,7 @@ Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 
   - a Lore-Collector sizes a foe up with the **Study** action: its best of Arcana, History, Investigation, Nature and Religion; it has to work to pay off, by the **Lore-Collector advantage** setting (1.25× to 3× as likely to succeed, through its next turn; default 2.5×, since it costs the whole turn; ordinary attacks get all they can by about 1.75×, the rest helps long-shot rolls); what it learns holds for every foe of the same sort;
   - already on a creature when the fight starts: what dnd5e's numbers leave out (Bless's d4 on attacks and saves, invisibility, a Faerie Fire outline); flat bonuses such as Shield of Faith's AC are already in them;
   - still running when the fight ends: Do it For Real Now leaves the spell's own effect on, for the rounds left.
-- **Senses:** darkvision and truesight (in the dark), blindsight and tremorsense (no sight needed), with their ranges; blinded and deafened.
+- **Senses:** sorted into the core's with their ranges: darkvision and truesight see in the dark; blindsight and tremorsense are felt; blinded and deafened.
 - **Fate:** a character's (Heroic) Inspiration is spent to keep someone from dying, and Do it For Real Now takes it away.
 - **Defenses:**
   - damage immunities, resistances and vulnerabilities;

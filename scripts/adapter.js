@@ -436,7 +436,6 @@ export class Dnd5eAdapter extends SystemAdapter {
       ...this.#saveFeatures(actor, features, level),
       conditions: this.#conditions(actor),
       perception: skillMod("prc") ?? 0,
-      darkvision: Number(sys.attributes?.senses?.ranges?.darkvision ?? sys.attributes?.senses?.darkvision) > 0, // any range will do
       senses: this.#senses(sys),
       mods: await this.#activeMods(actor),
       fateLabel: this.#fateLabel(),
@@ -511,15 +510,18 @@ export class Dnd5eAdapter extends SystemAdapter {
     return list.length ? list : null;
   }
 
-  /** Darkvision and truesight see in the dark; blindsight and tremorsense need no sight at all. In feet. */
+  /**
+   * Its senses, sorted into the core's (spec.senses), the farthest of each in feet: darkvision and truesight see in
+   * the dark (lowlight); blindsight and tremorsense are felt.
+   */
   #senses(sys) {
     const s = sys.attributes?.senses ?? {};
     const ranges = s.ranges ?? s;
     const units = s.units ?? "ft";
-    const out = [];
-    for ( const [type, how] of [["darkvision", { dark: true }], ["truesight", { dark: true }], ["blindsight", { blind: true }], ["tremorsense", { blind: true }]] ) {
+    const out = {};
+    for ( const [type, sense] of [["darkvision", "lowlight"], ["truesight", "lowlight"], ["blindsight", "feel"], ["tremorsense", "feel"]] ) {
       const feet = inFeet(ranges[type], units);
-      if ( feet > 0 ) out.push({ type, range: feet, ...how });
+      if ( feet > 0 ) out[sense] = Math.max(out[sense] ?? 0, feet);
     }
     return out;
   }
