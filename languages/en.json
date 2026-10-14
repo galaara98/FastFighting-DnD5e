@@ -112,6 +112,7 @@
       "incapacitated": "halted",
       "slowed": "slowed",
       "controlled": "charmed"
-    }
+    },
+    "OpportunityAttack": "Opportunity Attack"
   }
 }

@@ -147,6 +147,106 @@ export async function commitDnd5eOutcome(tokenDoc, spec, final, options = {}) {
   return undo;
 }
 
+/**
+ * A live battle: one turn's changes (the core's engine/changes.js) written onto a token, and only those, so writing
+ * them twice changes nothing more. Hit points; death saves where the turn left them; slots, Inspiration, Legendary
+ * Resistance, a feature's or an item's uses and consumables spent this turn; statuses set and lifted; a death, running,
+ * surrendering, a change of side.
+ * @returns {Promise<object>} an undo record (as commitDnd5eOutcome's)
+ */
+export async function commitDnd5eChanges(tokenDoc, spec, changes, final, options = {}) {
+  const actor = tokenDoc.actor;
+  const undo = emptyRecord(tokenDoc, actor);
+  const update = {};
+  const set = (path, value) => {
+    const before = foundry.utils.getProperty(actor, path);
+    if ( before === value ) return;
+    update[path] = value;
+    undo.actorUpdate[path] = before ?? 0;
+  };
+  if ( changes.hp ) set("system.attributes.hp.value", changes.hp.to);
+  if ( changes.temp ) set("system.attributes.hp.temp", changes.temp.to ?? 0);
+  // Death saves: where the turn left them (none for anyone standing or stable).
+  if ( actor.type === "character" && (changes.hp || changes.fell || changes.revived || changes.stable || changes.dying) ) {
+    const s = final.system ?? {};
+    const down = final.status === STATUS.DOWN && !final.stable;
+    set("system.attributes.death.success", down ? (s.deathSuccesses ?? 0) : 0);
+    set("system.attributes.death.failure", down ? (s.deathFailures ?? 0) : 0);
+  }
+  // What it spent this turn (from as it was when the turn began to as it is now).
+  const spentOf = c => Math.max(0, (Number(c.from) || 0) - (Number(c.to) || 0));
+  for ( const [key, c] of Object.entries(changes.resources ?? {}) ) {
+    if ( key === "pact" ) set("system.spells.pact.value", c.to);
+    else if ( key === "fate" ) set("system.attributes.inspiration", (c.to ?? 0) > 0);
+    else if ( key === "legres" ) set("system.resources.legres.spent", Math.max(0, (actor.system.resources?.legres?.spent ?? 0) + spentOf(c)));
+    else if ( key.startsWith("slots:") ) set(`system.spells.spell${key.split(":")[1]}.value`, c.to);
+    else if ( key.startsWith("feature:") || key.startsWith("item:") ) {
+      const item = actor.items.get(key.split(":")[1]);
+      const used = spentOf(c);
+      if ( !item || !used ) continue;
+      if ( key.startsWith("feature:") && item.system.uses ) {
+        undo.itemUpdates.push({ id: item.id, update: { "system.uses.spent": item.system.uses.spent ?? 0 } });
+        await item.update({ "system.uses.spent": (item.system.uses.spent ?? 0) + used });
+      } else if ( key.startsWith("item:") ) {
+        const quantity = Math.max(0, (item.system.quantity ?? 1) - used);
+        if ( quantity <= 0 ) {
+          undo.deletedItems.push(item.toObject());
+          await item.delete();
+        } else {
+          undo.itemUpdates.push({ id: item.id, update: { "system.quantity": item.system.quantity } });
+          await item.update({ "system.quantity": quantity });
+        }
+      }
+    }
+  }
+  for ( const [id, c] of Object.entries(changes.uses ?? {}) ) {
+    const action = spec.actions.find(a => a.id === id);
+    const item = action?.itemId ? actor.items.get(action.itemId) : null;
+    const used = spentOf(c);
+    if ( !item?.system.uses || !used ) continue;
+    undo.itemUpdates.push({ id: item.id, update: { "system.uses.spent": item.system.uses.spent ?? 0 } });
+    await item.update({ "system.uses.spent": (item.system.uses.spent ?? 0) + used });
+  }
+  // Statuses before hit points (dnd5e adds and lifts Bloodied by itself on an HP change).
+  const dead = final.status === STATUS.DEAD;
+  if ( !dead && (changes.fell || changes.status?.to === STATUS.DOWN) ) {
+    await setStatus(actor, "unconscious", true, undo);
+    await setStatus(actor, "prone", true, undo);
+  }
+  if ( changes.revived ) await setStatus(actor, "unconscious", false, undo);
+  if ( changes.prone && !dead && !changes.fell ) await setStatus(actor, "prone", !!changes.prone.to, undo);
+  if ( changes.conditions && !dead ) {
+    for ( const k of Object.keys(changes.conditions.set) ) if ( LINGERING[k] ) await setStatus(actor, LINGERING[k], true, undo);
+    for ( const k of changes.conditions.cleared ) if ( LINGERING[k] ) await setStatus(actor, LINGERING[k], false, undo);
+  }
+  if ( changes.died ) {
+    await setStatus(actor, "dead", true, undo, { overlay: true });
+    const combatant = game.combat?.getCombatantsByToken?.(tokenDoc)?.[0];
+    if ( combatant && !combatant.defeated ) {
+      await combatant.update({ defeated: true });
+      undo.combatant = { uuid: combatant.uuid, defeated: false };
+    }
+  } else if ( changes.status?.to === STATUS.FLED && options.fledMode !== "leave" && spec.kind !== "pc" ) {
+    undo.tokenUpdate = { hidden: tokenDoc.hidden };
+    await tokenDoc.update({ hidden: true });
+  } else if ( changes.status?.to === STATUS.SURRENDERED ) {
+    const [effect] = await actor.createEmbeddedDocuments("ActiveEffect", [{
+      name: game.i18n.localize("FFDND5E.Surrendered"),
+      img: "icons/svg/cancel.svg",
+      description: game.i18n.localize("FFDND5E.SurrenderedHint"),
+      flags: { [MODULE_ID]: { surrendered: true } }
+    }]);
+    if ( effect ) undo.createdEffects.push(effect.id);
+  }
+  const side = changes.side ? sideChange(final) : null;
+  if ( side ) {
+    undo.tokenUpdate = { ...(undo.tokenUpdate ?? {}), disposition: tokenDoc.disposition };
+    await tokenDoc.update({ disposition: CONST.TOKEN_DISPOSITIONS[DISPOSITIONS[side]] });
+  }
+  if ( Object.keys(update).length ) await actor.update(update);
+  return undo;
+}
+
 /** Buffs and debuffs still running when the fight ends stay on, copied from their spell, for the rounds left. */
 async function lingeringEffects(actor, final, options, undo) {
   for ( const e of final.effects ?? [] ) {

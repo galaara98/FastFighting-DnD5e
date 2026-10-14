@@ -8,7 +8,8 @@ import { deriveDnd5eTraits, isMindless } from "./traits.js";
 import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, speaksAtAll, plainText as sheetText } from "./auto.js";
 import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
-import { commitDnd5eOutcome, describeDnd5eOutcome, commitDnd5eConcession } from "./commit.js";
+import { commitDnd5eOutcome, commitDnd5eChanges, describeDnd5eOutcome, commitDnd5eConcession } from "./commit.js";
+import { readDnd5eTurn } from "./read-turn.js";
 import { modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "./effects.js";
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 import { edgeActions, studyCheck } from "./edges.js";
@@ -1682,6 +1683,30 @@ export class Dnd5eAdapter extends SystemAdapter {
 
   async commitOutcome(tokenDoc, spec, final, options) {
     return commitDnd5eOutcome(tokenDoc, spec, final, options);
+  }
+
+  get supportsLive() {
+    return true;
+  }
+
+  /** A live battle: one turn's changes, and only those (commit.js commitDnd5eChanges). */
+  async commitChanges(tokenDoc, spec, changes, final, options) {
+    return commitDnd5eChanges(tokenDoc, spec, changes, final, options);
+  }
+
+  /** A player's turn in a live battle, read from the cards dnd5e made for it (read-turn.js). */
+  readTurn(messages, context) {
+    return readDnd5eTurn(messages, context);
+  }
+
+  /** Its reactions, for its player to say always / ask / never: its own, and the Opportunity Attack everyone has. */
+  reactionsOf(spec) {
+    return [...(spec?.reactions ?? []).map(r => ({ id: r.id, label: r.label ?? r.id })), { id: "opportunity", label: t("OpportunityAttack") }];
+  }
+
+  /** Heroic Inspiration (or, under the 2014 rules, Inspiration) buys a reroll. */
+  rerollResource() {
+    return this.#fateLabel();
   }
 
   describeOutcome(spec, final) {
