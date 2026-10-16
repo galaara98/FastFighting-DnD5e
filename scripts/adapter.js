@@ -202,6 +202,8 @@ const meanOf = parts => parts.reduce((s, p) => s + (p.flat ?? 0) + (p.dice ?? []
  */
 const FEET = { ft: 1, m: 10 / 3, mi: 5280, km: 10000 / 3 };
 const inFeet = (value, units) => (Number(value) || 0) * (FEET[units] ?? 1);
+/** A summoning's range in feet (its activity's own, else its item's), or 0 where it gives none in feet (self, touch, special). */
+const summonRange = (item, activity) => inFeet(activity?.range?.value, activity?.range?.units) || inFeet(item.system.range?.value, item.system.range?.units);
 
 const asArray = v => (v instanceof Set ? [...v] : Array.isArray(v) ? v : v ? [v] : []);
 const numberOf = v => {
@@ -1099,6 +1101,8 @@ export class Dnd5eAdapter extends SystemAdapter {
         id: `${actor.id}.${item.id}.${activity.id}`, name: item.name, kind: "summon", cost: 1, economy: activation === "bonus" ? "bonus" : undefined,
         itemId: item.id, activityId: activity.id, profileId: p._id, traits: [], rank: item.type === "spell" ? level : undefined, concentration, ...this.#resource(actor, item),
         creatures: Array.from({ length: Math.min(count, 8) }, () => spec),
+        // (How far off they appear: the spell's range; the core's, where it has none in feet.)
+        ...(summonRange(item, activity) ? { range: { increment: summonRange(item, activity), max: summonRange(item, activity), noPenalty: true } } : {}),
         rounds: durationRounds(item.system.duration) ?? 10,
         sustain: told ? { bonus: 1 } : undefined
       };
