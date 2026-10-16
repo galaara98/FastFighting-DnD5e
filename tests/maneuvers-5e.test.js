@@ -112,7 +112,8 @@ describe("a fall", () => {
     expect(dnd5eRules.fallDamage(35)[0].dice).toEqual([{ n: 3, faces: 6 }]);
     expect(dnd5eRules.fallDamage(500)[0].dice).toEqual([{ n: 20, faces: 6 }]);
     expect(dnd5eRules.fallDamage(5)).toEqual([]);
-    expect(dnd5eRules.fallProne).toBe(true);
+    expect(dnd5eRules.fallProne(null, 4)).toBe(true);
+    expect(dnd5eRules.fallProne(null, 0)).toBe(false);
   });
 });
 

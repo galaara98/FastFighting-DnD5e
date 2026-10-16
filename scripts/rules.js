@@ -100,13 +100,16 @@ export const dnd5eRules = {
   handsKnown: true,
   /**
    * A fall (shoved off a ledge: the core's behavior/forced.js): 1d6 bludgeoning for each 10 feet, at most 20d6, and it
-   * lands prone (the SRD's, 5.1 and 5.2 alike).
+   * lands prone if it took any of it (the SRD's, 5.1 and 5.2 alike).
    */
   fallDamage(feet) {
     const dice = Math.min(20, Math.floor((Number(feet) || 0) / 10));
     return dice > 0 ? [part([{ n: dice, faces: 6 }], 0, "bludgeoning")] : [];
   },
-  fallProne: true,
+  /** Prone from it only if it hurt (the SRD: a fall that does no damage, nor a resisted one to nothing, leaves it standing). */
+  fallProne(t, dealt) {
+    return dealt > 0;
+  },
 
   /* Holds ----------------------------------------------------------------- */
   /** Breaking free of a grapple, webs, a net or bonds, and freeing a friend (holds.js): each try an action. */
