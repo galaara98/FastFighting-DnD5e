@@ -3,7 +3,7 @@
  * live battle's changes back. Written against dnd5e 6 on Foundry v14; values are read defensively so older data still
  * works.
  */
-import { SystemAdapter, parseFormula, part } from "./core.js";
+import { SystemAdapter, parseFormula, part, simpleAffliction } from "./core.js";
 import { dnd5eRules, proficiency } from "./rules.js";
 import { deriveDnd5eTraits, isMindless } from "./traits.js";
 import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, speaksAtAll, plainText as sheetText } from "./auto.js";
@@ -263,6 +263,28 @@ export function regenerationFrom(text, healed = null) {
 export function lastingHealingFrom(text) {
   const m = /\bregains? (\d+) hit points? at the start of each of (?:its|their|your) turns\b/i.exec(text ?? "");
   return m ? Number(m[1]) : 0;
+}
+
+/**
+ * A save repeated until three of one or the other, from its words (2024's Contagion: "repeat the saving throw at the end
+ * of each of its turns until it gets three successes or failures"): the core's tally ({cure, keep}), or null.
+ */
+export function tallyFrom(text) {
+  return /\buntil it gets three successes or (?:three )?failures\b/i.test(text ?? "") ? { cure: 3, keep: 3 } : null;
+}
+
+/**
+ * What a failed save lays, as the core's simple affliction tallied (simpleAffliction's tally: three successes end it,
+ * three failures settle it for the fight; Contagion's Poisoned): its first condition at its first stage, the save it's
+ * laid with repeated at the end of each of its turns. "Disadvantage on saving throws made with the chosen ability":
+ * its caster's choice taken as the save that ends it (weakSave, rules.js). Kept off one immune to that condition.
+ */
+export function tallied({ id, name, conditions, save, tally, text = "" }) {
+  const key = Object.keys(conditions ?? {})[0];
+  if ( !key || !tally ) return null;
+  const type = asArray(save.type)[0];
+  const weak = /\bdisadvantage on saving throws made with the chosen ability\b/i.test(text);
+  return { kind: "affliction", ...simpleAffliction({ id, name, key, most: 1, save: { type, dc: save.dc }, tally, traits: [key] }), ...(weak ? { weakSave: type } : {}) };
 }
 
 /**
@@ -1658,6 +1680,11 @@ export class Dnd5eAdapter extends SystemAdapter {
         const clear = { move: forced.move };
         return { ...common, kind: "control", save, damage: damage.length ? damage : undefined, onSave: [outcome, outcome, clear, clear] };
       }
+      // A save it repeats until three of one or the other (2024's Contagion): what it lays, as the core's tallied
+      // affliction, on a failure (with the damage, if any: none on a success unless the save halves it).
+      const words = control?.conditions ? plainText(englishDescription(item), actor, true) : "";
+      const lasting = control?.conditions ? tallied({ id: `${actor.id}.${item.id}`, name: item.name, conditions: control.conditions, save, tally: tallyFrom(words), text: words }) : null;
+      if ( lasting ) return { ...common, kind: "save", damage, save, effects: [lasting] };
       if ( damage.length ) {
         // (Grappled on a failure, as the 2024 creatures' Constrict has it: the engine's grab.)
         const riders = [...(forced ? [{ kind: "move", move: forced.move, critOnly: false }] : []), ...(control?.grab ? [{ kind: "grabbed" }] : []),

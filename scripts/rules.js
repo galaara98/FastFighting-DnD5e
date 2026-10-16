@@ -27,6 +27,9 @@ const exhaustion = u => u?.conds?.exhaustion ?? 0;
 /** d20 tests take -2 per level of exhaustion (2024 rules); 0 when fresh. */
 const tired = u => (exhaustion(u) ? -2 * exhaustion(u) : 0);
 
+/** An affliction on it, taken hold, that weakens saves of this ability (Contagion's: adapter.js tallied). */
+const weakened = (u, type) => (u?.afflictions ?? []).some(a => a.spec?.weakSave === type && a.stage > 0 && !(a.onsetLeft > 0));
+
 /** Advantage and disadvantage cancel: any of one and none of the other decides. */
 function net(adv, dis) {
   if ( adv && !dis ) return 1;
@@ -154,6 +157,16 @@ export const dnd5eRules = {
   },
   attackPenalty() {
     return 0;
+  },
+
+  /**
+   * An affliction (a tallied one, Contagion's: adapter.js) takes hold when what carries it lands: the spell's own save
+   * or attack already decided it, so the core's roll on exposure doesn't. Its later saves are counted (the core's
+   * tally); were one staged, a failure would worsen it and a success ease it.
+   */
+  afflictionStep(degree, phase) {
+    if ( phase === "exposure" ) return 1;
+    return degree <= 1 ? 1 : -1;
   },
 
   /** Half damage on a successful save ("basic"), or none when the effect says so. */
@@ -324,7 +337,8 @@ export const dnd5eRules = {
       // Paralyzed, stunned or unconscious creatures automatically fail Strength and Dexterity saves.
       const helpless = ["paralyzed", "stunned", "unconscious", "incapacitated", "petrified"].some(k => has(unit, k));
       if ( helpless && (type === "str" || type === "dex") ) return { bonus: -99, advantage: 0 };
-      const dis = type === "dex" && has(unit, "restrained");
+      // (Contagion's Poisoned: Disadvantage on the saves of the ability its caster chose, its weakSave.)
+      const dis = (type === "dex" && has(unit, "restrained")) || weakened(unit, type);
       return { bonus: tired(unit) + (type === "dex" ? coverBonus(cover) : 0), advantage: dis ? -1 : 0 };
     },
     check({ unit }) {

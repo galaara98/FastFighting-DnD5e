@@ -57,6 +57,7 @@ Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 
   - for foes: Bane (−1d4), Faerie Fire (advantage against it), Slow, Ray of Enfeeblement, Vicious Mockery's disadvantage, Ray of Frost's slowing;
   - Hunter's Mark and Hex: extra damage on your own hits, moved to a new foe when the first one drops, at no new slot;
   - Hold Person, Hideous Laughter, Confusion, Command, Entangle, Fear, Grease, Sleep and the like, with the save they repeat each turn;
+  - 2024's Contagion: Poisoned (its Constitution saves at Disadvantage, the caster's choice taken as the save that ends it), the save repeated at the end of each of its turns until three made end it or three failed keep it for the fight;
   - Charm Person and the Dominate spells turn the target to your side (saved with advantage in a fight, as the spells say), until it shakes it off, your concentration breaks, or (for a charm) your side harms it;
   - class features: Rage (its damage and its resistance to weapons), Reckless Attack, Action Surge, Bardic Inspiration, Turn Undead, Intimidating Presence and others with effects;
   - concentration: one spell at a time; damage calls for a Constitution save (DC 10 or half the damage), and being incapacitated ends it;
