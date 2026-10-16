@@ -104,13 +104,15 @@ const STATUS_MODS = { invisible: { adv: 1, defAdv: -1 } };
  * lands in), and with `prone` it ends up Prone as well:
  *  - on a failed save: a spell's or a feature's (Thunderwave, Gust of Wind, a breath), or the save a smite calls for;
  *  - with `hit`, on a hit with its own attack;
- *  - with `lends`, on a hit with the spell it works through (Repelling Blast: Eldritch Blast, or the cantrip it's laid on).
+ *  - with `lends`, on a hit with the spell it works through (Repelling Blast: Eldritch Blast, or the cantrip it's laid on);
+ *  - with `success`, on a successful save instead (a bulette's Deadly Leap: whoever saves is pushed out of its way, and
+ *    a failure is what its data lays, Prone).
  * save: only its activity with a save of that ability (another is something else: a creature it's flung into).
  * byWords: as far as its words say ("pushed up to 60 feet"), an older creature's going farther; `feet` where they don't.
  * perMod: that many feet more for each point of its caster's spellcasting modifier (a summoned hand's).
- * Not here: a push on a success (a bulette's Deadly Leap, out of its way), a push chosen instead of something else
- * (Brutal Strike's, an Open Hand Technique's), one that puts it anywhere (Telekinesis), and attacks whose identifier
- * other creatures' attacks share without the push ("tail", "charge", "hooves", "warhammer", "breath-weapons").
+ * Not here: a push chosen instead of something else (Brutal Strike's, an Open Hand Technique's), one that puts it
+ * anywhere (Telekinesis), and attacks whose identifier other creatures' attacks share without the push ("tail",
+ * "charge", "hooves", "warhammer", "breath-weapons"). A weapon's Push mastery is its own (masteryOf).
  */
 export const FORCED_MOVES = Object.freeze({
   thunderwave: Object.freeze({ feet: 10 }),
@@ -123,10 +125,35 @@ export const FORCED_MOVES = Object.freeze({
   "repulsion-breath": Object.freeze({ feet: 30, byWords: true }),
   "cold-gale": Object.freeze({ feet: 30 }),
   "hammer-throw": Object.freeze({ feet: 15, hit: true }),
-  "forceful-hand": Object.freeze({ feet: 5, perMod: 5 })
+  "forceful-hand": Object.freeze({ feet: 5, perMod: 5 }),
+  // A bulette's leap: out of its way, 5 feet.
+  "deadly-leap": Object.freeze({ feet: 5, success: true })
 });
 const forcedEntry = id => (Object.hasOwn(FORCED_MOVES, id) ? FORCED_MOVES[id] : null);
 const identOf = item => String(item?.identifier ?? item?.system?.identifier ?? "");
+
+/** Weapon Mastery's Push (the SRD 5.2's): a hit pushes a creature up to 10 feet straight away, if it's Large or smaller. */
+export const PUSH_MASTERY = Object.freeze({ feet: 10, maxSize: 3 });
+
+/**
+ * The mastery a weapon's wielder uses with it (dnd5e's: the weapon's own, where its wielder has mastery of that kind
+ * of weapon), or null. A Tactical Master's other choices aren't taken: the weapon's own is.
+ */
+export function masteryOf(actor, item) {
+  if ( item?.type !== "weapon" || !item.system?.mastery ) return null;
+  // (dnd5e 4 and later work it out themselves: none without the wielder's mastery.)
+  const options = item.system.masteryOptions;
+  if ( options !== undefined ) return options?.[0]?.value ?? null;
+  const known = actor?.system?.traits?.weaponProf?.mastery?.value;
+  const base = item.system.type?.baseItem;
+  return base && asArray(known).includes(base) ? item.system.mastery : null;
+}
+
+/** The abilities a save is made with: one, or several (the target's choice: its best, as a bulette's leap has it). */
+const saveAbility = (activity, fallback) => {
+  const all = asArray(activity?.save?.ability);
+  return all.length > 1 ? all : all[0] ?? fallback;
+};
 
 /**
  * The push an entry of FORCED_MOVES makes (the core's move: {kind: "push", feet}), as far as its words say (byWords:
@@ -528,6 +555,9 @@ export class Dnd5eAdapter extends SystemAdapter {
       // Investigation, Nature, Religion).
       sizeUp: isMindless(sys.abilities?.int?.value, creature) ? undefined : studyCheck(sys, loreBoost()),
       creatureTraits: [creature],
+      // A halfling's Nimbleness: through the space of any creature larger than it (rules.passThrough), by identifier or
+      // the flag its effect sets.
+      throughLarger: hasFeature(features, "halfling-nimbleness", "halfling nimbleness") || !!actor.flags?.dnd5e?.halflingNimbleness || undefined,
       // What kind of creature (the planner groups neutrals by it): its type, narrowed by a subtype (humanoid (goblinoid)).
       creatureKind: [creature, String(sys.details?.type?.subtype ?? "").trim().toLowerCase()].filter(Boolean).join(":") || null,
       size: sizeOf(sys.traits?.size),
@@ -1471,8 +1501,9 @@ export class Dnd5eAdapter extends SystemAdapter {
   }
 
   /**
-   * What moves whoever this activity lands on (FORCED_MOVES): {move, prone, hit: on a hit rather than a failed save}, or
-   * null. Its item's own entry, by identifier (only its save of that ability, where the entry names one); else, for a
+   * What moves whoever this activity lands on (FORCED_MOVES): {move, prone, hit: on a hit rather than a failed save,
+   * success: on a successful save rather than a failed one}, or null. Its item's own entry, by identifier (only its save
+   * of that ability, where the entry names one); else, for a
    * spell's attack, one a feature of its owner's lends it: 2024's Repelling Blast is laid on a cantrip of its owner's
    * choice (an enchantment from the feature on that spell), 2014's (and one laid on none) works through Eldritch Blast.
    */
@@ -1482,7 +1513,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       const fits = own.hit ? activity.type === "attack" : activity.type === "save" && (!own.save || asArray(activity.save?.ability)[0] === own.save);
       if ( !fits ) return null;
       const text = own.byWords ? plainText(`${englishDescription(item)} ${activity.target?.affects?.special ?? ""}`, actor, true) : "";
-      return { move: forcedMoveOf(own, { text, mod: actor.flags?.dnd5e?.summon?.mod }), prone: !!own.prone, hit: !!own.hit };
+      return { move: forcedMoveOf(own, { text, mod: actor.flags?.dnd5e?.summon?.mod }), prone: !!own.prone, hit: !!own.hit, success: !!own.success };
     }
     if ( activity.type !== "attack" || item.type !== "spell" ) return null;
     for ( const feature of actor.items ) {
@@ -1498,7 +1529,7 @@ export class Dnd5eAdapter extends SystemAdapter {
   /** A save beside an attack on the same item (a wolf's bite, a spider's venom) happens on a hit: a rider. */
   #saveRider(actor, item, activity) {
     const save = {
-      type: asArray(activity.save?.ability)[0] ?? "con",
+      type: saveAbility(activity, "con"),
       dc: activity.save?.dc?.value ?? (8 + proficiency(actor.system.details?.level ?? 1) + 3),
       basic: activity.damage?.onSave !== "none"
     };
@@ -1561,6 +1592,8 @@ export class Dnd5eAdapter extends SystemAdapter {
       const bonus = numberOf(activity.labels?.modifier) ?? numberOf(activity.labels?.toHit) ?? 0;
       const fx = this.#effects(item, activity, { words: item.type === "spell" });
       const riders = this.#riders(fx);
+      // A weapon's Push mastery: pushed 10 feet away by the hit (Large or smaller only: its maxSize).
+      if ( masteryOf(actor, item) === "push" ) riders.push({ kind: "move", move: { kind: "push", feet: PUSH_MASTERY.feet }, critOnly: false, maxSize: PUSH_MASTERY.maxSize });
       // Pushed away by the blow (a fire giant's hammer; Repelling Blast's, every beam that hits), knocked down too where
       // it says.
       if ( forced?.hit ) {
@@ -1581,7 +1614,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     }
 
     if ( activity.type === "save" ) {
-      const type = asArray(activity.save?.ability)[0] ?? "dex";
+      const type = saveAbility(activity, "dex");
       const dc = activity.save?.dc?.value ?? (8 + proficiency(actor.system.details?.level ?? 1) + 3);
       const damage = this.#parts(activity);
       const control = this.#effects(item, activity, { words: item.type === "spell" || item.type === "feat" });
@@ -1593,6 +1626,12 @@ export class Dnd5eAdapter extends SystemAdapter {
       };
       // (Pushed away on a failure, and knocked down where it says: FORCED_MOVES.)
       const outcome = proneToo(this.#outcome(control, save), forced?.prone);
+      // Pushed out of the way on a success instead (a bulette's Deadly Leap), a failure laying what it lays: the core's
+      // control, an outcome for each degree, with the damage the save halves.
+      if ( forced?.success ) {
+        const clear = { move: forced.move };
+        return { ...common, kind: "control", save, damage: damage.length ? damage : undefined, onSave: [outcome, outcome, clear, clear] };
+      }
       if ( damage.length ) {
         // (Grappled on a failure, as the 2024 creatures' Constrict has it: the engine's grab.)
         const riders = [...(forced ? [{ kind: "move", move: forced.move, critOnly: false }] : []), ...(control?.grab ? [{ kind: "grabbed" }] : []),

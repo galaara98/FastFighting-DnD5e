@@ -42,6 +42,7 @@ Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 
 - **Recharge and legendary creatures:** "Recharge 5–6" abilities come back on a d6; legendary actions (by their cost, including one that only names its attack, "makes a tail attack") are taken between other creatures' turns; Legendary Resistance turns a failed save that matters into a success, and Do it For Real Now spends it.
 - **Saves:** Magic Resistance (advantage against spells), Evasion, and a paladin's Aura of Protection (Charisma to its own and nearby friends' saves, 10 feet, 30 from 18th level).
 - **Bonus-action strikes:** a light weapon in each hand gives a bonus-action attack with the second (without its ability modifier, unless the character has the Two-Weapon Fighting style); a monk's Martial Arts (an unarmed strike) and Flurry of Blows (two unarmed strikes, three with Heightened Focus, for a point of Focus or ki).
+- **Pushes:** spells and features that push, by identifier (Thunderwave, Gust of Wind, Thunderous Smite, Repelling Blast, a bronze dragon's breath ...); a bulette's Deadly Leap, which pushes whoever saves out of its way; and a weapon's Push mastery (10 feet, a creature Large or smaller), for a wielder with mastery of that weapon.
 - **Size:** Shove only works on a creature up to one size larger.
 - **Terrain:** dnd5e's own difficult terrain regions (Spike Growth's, Plant Growth's, or one the GM draws) are difficult terrain.
 - **Spells:**
@@ -96,6 +97,7 @@ Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 
   - saves and checks simply meet the DC or don't;
   - half damage on a successful save, or none when the spell says so.
 - **Doors:** a wooden door is AC 15 with 18 hit points, locked against a DC 15 Strength (Athletics) check or thieves' tools (proficiency, and the tools themselves for a character); opening one is a free object interaction, forcing or picking it takes an action.
+- **Moving past others:** through an ally's space, one that's down or Incapacitated, a Tiny creature's or one two sizes off, as Difficult Terrain; round any other foe. A halfling's Nimbleness takes it through any creature larger than it.
 - **Opportunity attacks:** anyone with a melee weapon swings once (its reaction) at a foe leaving its reach. Disengage gets you out safely; rogues (Cunning Action) and goblins (Nimble Escape) do it as a bonus action.
 - **Breaking free** (each try an action, and so is freeing a friend):
   - a grapple: an Athletics or Acrobatics check, whichever is better, against the grappler's escape DC: the one its attack gives ("escape DC 13"), else 8 + its Strength modifier + proficiency (2024), or 10 + its Athletics (2014's contest, as a passive check). Grappled on the sheet with no grabber known: the hardest grab among the foes within reach, else a typical DC for its level;

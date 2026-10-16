@@ -11,7 +11,7 @@ import { beginRun, beginRound, takeTurn, prepareBattle } from "../../FastFightin
 import { withManeuver } from "../../FastFighting/scripts/engine/maneuvers.js";
 import { holdsOf } from "../../FastFighting/scripts/engine/behavior/holds.js";
 import { canMove } from "../../FastFighting/scripts/engine/battle-state.js";
-import { Dnd5eAdapter, FORCED_MOVES, forcedMoveOf } from "../scripts/adapter.js";
+import { Dnd5eAdapter, FORCED_MOVES, forcedMoveOf, masteryOf, PUSH_MASTERY } from "../scripts/adapter.js";
 import { dnd5eRules } from "../scripts/rules.js";
 import { parseFormula } from "../scripts/core.js";
 
@@ -130,6 +130,22 @@ describe("getting past another creature", () => {
     expect(dnd5eRules.passThrough(null, me, c("hostile", 0))).toBe("difficult");
     expect(dnd5eRules.passThrough(null, me, c("hostile", 4))).toBe("difficult");
     expect(dnd5eRules.passThrough(null, me, c("hostile", 3))).toBe("around");
+  });
+
+  test("a halfling's Nimbleness: through any creature larger than it, as Difficult Terrain; not one its own size or smaller", () => {
+    const c = (side, size = 2, spec = {}) => ({ side, status: "standing", conds: {}, spec: { size, ...spec } });
+    const halfling = c("friendly", 1, { throughLarger: true });
+    expect(dnd5eRules.passThrough(null, halfling, c("hostile", 2))).toBe("difficult");
+    expect(dnd5eRules.passThrough(null, c("friendly", 1), c("hostile", 2))).toBe("around");
+    expect(dnd5eRules.passThrough(null, halfling, c("hostile", 1))).toBe("around");
+    expect(dnd5eRules.passThrough(null, c("friendly", 2, { throughLarger: true }), c("hostile", 3))).toBe("difficult");
+  });
+
+  test("Nimbleness is read from the trait's identifier (2014 and 2024 alike), or the flag its effect sets", async () => {
+    const trait = { id: "nimble", type: "feat", name: "Halfling Nimbleness", identifier: "halfling-nimbleness", flags: {}, effects: [], system: { identifier: "halfling-nimbleness", activities: [], description: { value: "" }, uses: {} } };
+    expect((await specOf(actorOf({ size: "sm", items: [trait] }))).throughLarger).toBe(true);
+    expect((await specOf(actorOf({ size: "sm", flags: { dnd5e: { halflingNimbleness: true } } }))).throughLarger).toBe(true);
+    expect((await specOf(actorOf({ size: "sm" }))).throughLarger).toBeUndefined();
   });
 });
 
@@ -259,11 +275,11 @@ const smiteOf = () => spellOf("thunderous-smite", 1, [
 
 describe("what pushes, by identifier (FORCED_MOVES)", () => {
   test("each identifier: how far, and when", () => {
-    expect(Object.keys(FORCED_MOVES)).toEqual(["thunderwave", "gust-of-wind", "thunderous-smite", "repelling-blast", "whirlwind", "repulsion-breath", "cold-gale", "hammer-throw", "forceful-hand"]);
+    expect(Object.keys(FORCED_MOVES)).toEqual(["thunderwave", "gust-of-wind", "thunderous-smite", "repelling-blast", "whirlwind", "repulsion-breath", "cold-gale", "hammer-throw", "forceful-hand", "deadly-leap"]);
     expect(FORCED_MOVES).toEqual({
       thunderwave: { feet: 10 }, "gust-of-wind": { feet: 15 }, "thunderous-smite": { feet: 10, prone: true }, "repelling-blast": { feet: 10, lends: "eldritch-blast" },
       whirlwind: { feet: 20, prone: true, save: "str" }, "repulsion-breath": { feet: 30, byWords: true }, "cold-gale": { feet: 30 },
-      "hammer-throw": { feet: 15, hit: true }, "forceful-hand": { feet: 5, perMod: 5 }
+      "hammer-throw": { feet: 15, hit: true }, "forceful-hand": { feet: 5, perMod: 5 }, "deadly-leap": { feet: 5, success: true }
     });
     expect(Object.values(FORCED_MOVES).every(Object.isFrozen)).toBe(true);
     // As far as its words say (an older bronze dragon's breath, 2024's and 2014's wording), else the table's; a summoned
@@ -381,5 +397,111 @@ describe("pushed, in the engine", () => {
     takeTurn(run, run.byId.get("hero"));
     expect(run.log.find(e => e.type === "forced" && e.targetId === "orc")).toMatchObject({ how: "push", feet: 10 });
     expect(run.byId.get("orc").pos).toMatchObject({ x: 30, y: 0 });
+  });
+});
+
+/* Pushed on a success, and a weapon's Push mastery ------------------------- */
+
+/* The SRD's words (5.1 and 5.2, CC-BY 4.0), as dnd5e's compendiums keep them. */
+const LEAP_2014 = "<p>Each of those creatures must succeed on a [[/save activity=leap]] saving throw (target's choice) or be knocked &amp;reference[prone] and take [[/damage average activity=leap]]. On a successful save, the creature takes only half the damage, isn't knocked prone, and is pushed 5 feet out of the [[lookup @name lowercase]]{monster}'s space into an unoccupied space of the creature's choice.</p>";
+const LEAP_2024 = "<p>Dexterity Saving Throw: DC 16, each creature in the bulette's destination space. Failure: [[/damage average]] damage, and the target has the &amp;Reference[Prone apply=false] condition. Success: Half damage, and the target is pushed 5 feet straight away from the bulette.</p>";
+
+/** A bulette's Deadly Leap: 2014's (Strength or Dexterity, the target's choice; Prone from its words), or 2024's (Dexterity; Prone its effect). */
+function leapOf(edition) {
+  const prone = { _id: "prone", id: "prone", name: "Prone", statuses: new Set(["prone"]), changes: [], duration: {} };
+  const rolls = edition === 2014
+    ? [{ parts: ["3d6 + 4"], options: { types: ["bludgeoning"] } }, { parts: ["3d6 + 4"], options: { types: ["slashing"] } }]
+    : [{ parts: ["3d12"], options: { types: ["bludgeoning"] } }];
+  const leap = {
+    id: "leap", type: "save", activation: { type: "action" }, save: { ability: new Set(edition === 2014 ? ["str", "dex"] : ["dex"]), dc: { value: 16 } },
+    damage: { onSave: "half", parts: rolls.map(() => ({})) }, effects: edition === 2014 ? [] : [{ _id: "prone" }], range: edition === 2014 ? { value: 15, units: "ft" } : { units: "self" }, target: {},
+    getDamageConfig: () => ({ rolls })
+  };
+  return { ...featOf("deadly-leap", [leap], ""), effects: listOf([prone]), system: { identifier: "deadly-leap", activities: [leap], description: { value: edition === 2014 ? LEAP_2014 : LEAP_2024 }, uses: {} } };
+}
+/** A warhammer, its mastery Push. */
+const warhammerOf = (system = {}) => ({
+  id: "warhammer", type: "weapon", name: "Warhammer", identifier: "warhammer", flags: {}, effects: [],
+  system: { identifier: "warhammer", activities: [attackAct({ damage: "1d8 + 3", type: "bludgeoning", melee: true })], type: { value: "martialM", baseItem: "warhammer" }, properties: new Set(["ver"]), mastery: "push", equipped: true, range: {}, ...system }
+});
+/** A character with a warhammer, and mastery of warhammers or not. */
+function hammerer(has) {
+  const actor = actorOf({ type: "character", str: 3, items: [warhammerOf()] });
+  actor.system.traits.weaponProf = { mastery: { value: new Set(has ? ["warhammer"] : []) } };
+  return actor;
+}
+
+describe("pushed on a successful save (FORCED_MOVES' success)", () => {
+  test("Deadly Leap, 2014: Strength or Dexterity (the target's choice), Prone and the damage on a failure, half and pushed 5 feet on a success", async () => {
+    const [leap] = await actionsFrom([leapOf(2014)], "deadly-leap");
+    expect(leap).toMatchObject({ kind: "control", save: { type: ["str", "dex"], dc: 16, basic: true }, range: { increment: 15 } });
+    expect(leap.damage.map(p => p.type)).toEqual(["bludgeoning", "slashing"]);
+    const [critFail, fail, pass, critPass] = leap.onSave;
+    expect(fail).toMatchObject({ conditions: { prone: 1 } });
+    expect(fail.move).toBeUndefined();
+    expect(critFail).toBe(fail);
+    expect(pass).toEqual({ move: { kind: "push", feet: 5 } });
+    expect(critPass).toBe(pass);
+  });
+
+  test("Deadly Leap, 2024: a Dexterity save, its Prone effect on a failure, pushed 5 feet straight away on a success", async () => {
+    const [leap] = await actionsFrom([leapOf(2024)], "deadly-leap");
+    expect(leap).toMatchObject({ kind: "control", save: { type: "dex", dc: 16 } });
+    expect(leap.onSave[1]).toMatchObject({ conditions: { prone: 1 } });
+    expect(leap.onSave[2]).toEqual({ move: { kind: "push", feet: 5 } });
+  });
+
+  test("in the engine: a save made takes half and is pushed out of the way; a failed one is knocked prone where it stands", async () => {
+    const [leap] = await actionsFrom([leapOf(2014)], "deadly-leap");
+    const bulette = () => fighter("bulette", "hostile", 0, { actions: [leap] });
+    const sturdy = { defenses: { ac: 15, str: 50, dex: 50, con: 2, int: 0, wis: 0, cha: 0 } };
+    const made = fight([bulette(), fighter("hero", "friendly", 5, sturdy)]);
+    takeTurn(made, made.byId.get("bulette"));
+    const saved = made.log.find(e => e.type === "control" && e.actorId === "bulette");
+    expect(saved).toMatchObject({ roll: "save", took: true });
+    expect(saved.degree).toBeGreaterThanOrEqual(2);
+    expect(made.log.find(e => e.type === "forced" && e.targetId === "hero")).toMatchObject({ how: "push", feet: 5 });
+    expect(made.byId.get("hero")).toMatchObject({ pos: { x: 10, y: 0 }, prone: false });
+    expect(saved.damage).toBeGreaterThan(0);
+    expect(saved.damage).toBeLessThanOrEqual(22);
+    const failed = fight([bulette(), fighter("hero", "friendly", 5, frail)]);
+    takeTurn(failed, failed.byId.get("bulette"));
+    expect(failed.log.some(e => e.type === "forced")).toBe(false);
+    expect(failed.byId.get("hero")).toMatchObject({ pos: { x: 5, y: 0 }, prone: true });
+    expect(failed.log.find(e => e.type === "control" && e.actorId === "bulette").damage).toBeGreaterThanOrEqual(14);
+  });
+});
+
+describe("Weapon Mastery's Push (the SRD 5.2's)", () => {
+  const wielder = has => ({ system: { traits: { weaponProf: { mastery: { value: new Set(has ? ["warhammer"] : []) } } } } });
+
+  test("the mastery its wielder uses: dnd5e's own options, else the weapon's own where the wielder has mastery of its kind", () => {
+    expect(masteryOf(wielder(true), warhammerOf())).toBe("push");
+    expect(masteryOf(wielder(false), warhammerOf())).toBeNull();
+    expect(masteryOf(wielder(false), warhammerOf({ masteryOptions: [{ value: "push" }, { value: "sap" }] }))).toBe("push");
+    expect(masteryOf(wielder(true), warhammerOf({ masteryOptions: null }))).toBeNull();
+    expect(masteryOf(wielder(true), warhammerOf({ mastery: "" }))).toBeNull();
+    expect(PUSH_MASTERY).toEqual({ feet: 10, maxSize: 3 });
+  });
+
+  test("a hit with it pushes 10 feet (a creature Large or smaller); without the mastery, none", async () => {
+    const [hammer] = (await specOf(hammerer(true))).actions.filter(a => a.itemId === "warhammer");
+    expect(hammer.effects).toEqual([{ kind: "move", move: { kind: "push", feet: 10 }, critOnly: false, maxSize: 3 }]);
+    const [plain] = (await specOf(hammerer(false))).actions.filter(a => a.itemId === "warhammer");
+    expect(plain.effects).toBeUndefined();
+  });
+
+  test("in the engine: the hit pushes it 10 feet straight away", async () => {
+    const [hammer] = (await specOf(hammerer(true))).actions.filter(a => a.itemId === "warhammer");
+    const run = fight([fighter("hero", "friendly", 0, { actions: [{ ...hammer, bonus: 50 }] }), fighter("orc", "hostile", 5)]);
+    takeTurn(run, run.byId.get("hero"));
+    expect(run.log.find(e => e.type === "forced" && e.targetId === "orc")).toMatchObject({ how: "push", feet: 10 });
+    expect(run.byId.get("orc").pos).toMatchObject({ x: 15, y: 0 });
+  });
+
+  test("an outcome's own size limit: a Huge creature is past what it can do", () => {
+    const push = { kind: "control", onSave: [{ move: { kind: "push", feet: 10 }, maxSize: 3 }] };
+    expect(dnd5eRules.isImmune({ spec: { size: 4, iwr: { immune: [] } } }, push)).toBe(true);
+    expect(dnd5eRules.isImmune({ spec: { size: 3, iwr: { immune: [] } } }, push)).toBe(false);
   });
 });

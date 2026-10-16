@@ -114,11 +114,13 @@ export const dnd5eRules = {
   /**
    * Getting past another creature on the way (the core's behavior/space.js), the SRD 5.2's: through an ally's space, an
    * Incapacitated creature's (or one down), a Tiny creature's, or one two sizes larger or smaller, as Difficult Terrain;
-   * round any other. A move never ends in another's space (the core's, by default).
+   * round any other. A halfling's Nimbleness (spec.throughLarger) takes it through any creature larger than it too. A
+   * move never ends in another's space (the core's, by default).
    */
   passThrough(run, u, o) {
     const size = c => (Number.isFinite(c.spec.size) ? c.spec.size : 2);
-    const through = o.side === u.side || o.status !== STATUS.STANDING || !!o.conds?.incapacitated || size(o) === 0 || Math.abs(size(u) - size(o)) >= 2;
+    const through = o.side === u.side || o.status !== STATUS.STANDING || !!o.conds?.incapacitated || size(o) === 0 || Math.abs(size(u) - size(o)) >= 2
+      || (!!u.spec.throughLarger && size(o) > size(u));
     return through ? "difficult" : "around";
   },
   /** Prone from it only if it hurt (the SRD: a fall that does no damage, nor a resisted one to nothing, leaves it standing). */
@@ -340,14 +342,16 @@ export const dnd5eRules = {
 
   /** Immune to a control effect when it's immune to every condition the effect imposes. */
   isImmune(target, action) {
-    // Too big to shove.
-    if ( Number.isFinite(action.maxSize) && Number.isFinite(target.spec.size) && target.spec.size > action.maxSize ) return true;
+    // Too big to shove (or to swallow, or to push with a weapon's mastery: an outcome's own maxSize).
+    const big = most => Number.isFinite(most) && Number.isFinite(target.spec.size) && target.spec.size > most;
+    if ( big(action.maxSize) ) return true;
     const immune = new Set(target.spec.iwr?.immune ?? []);
     if ( (action.traits ?? []).some(t => immune.has(t)) ) return true;
     const alias = { incapacitated: "unconscious", immobilized: "restrained", controlled: "charmed" };
     // Every outcome it can have on the target (one that simply happens too; a backfire on the user doesn't count). A
     // grab is Grappled.
     const outcomes = [...(action.onSave ?? []), ...(action.onHit ?? []), action.outcome].filter(o => o && !o.self);
+    if ( outcomes.length && outcomes.every(o => big(o.maxSize)) ) return true;
     const keys = [...new Set(outcomes.flatMap(o => [...Object.keys(o.conditions ?? {}), ...(o.grab ? ["grappled"] : [])]))];
     return keys.length > 0 && keys.every(k => immune.has(k) || immune.has(alias[k]));
   },
