@@ -185,6 +185,10 @@ export function masteryOf(actor, item) {
   return base && asArray(known).includes(base) ? item.system.mastery : null;
 }
 
+/** An Unarmed Strike (the SRD 5.2's: damage, or a Grapple or a Shove instead), by identifier or its attack's own kind. */
+const unarmedStrike = item => identOf(item) === "unarmed-strike"
+  || [...(item?.system?.activities ?? [])].some(a => a.type === "attack" && a.attack?.type?.classification === "unarmed");
+
 /** The abilities a save is made with: one, or several (the target's choice: its best, as a bulette's leap has it). */
 const saveAbility = (activity, fallback) => {
   const all = asArray(activity?.save?.ability);
@@ -1765,6 +1769,20 @@ export class Dnd5eAdapter extends SystemAdapter {
     return null;
   }
 
+  /**
+   * Is a save beside an attack on the same item what a hit calls for (a rider: a wolf's bite, a spider's venom, a
+   * ghoul's claws)? So when it isn't an action of its own (dnd5e's "special": it comes of something else), when its
+   * activation says it comes of a hit ("When a creature is hit by this attack"), or when the item's words tie it to the
+   * attack (its [[/attack]], "Hit:", "if the attack hits", "roll a 20 on the attack roll"). Otherwise it's a use of its
+   * own, with nothing said of a hit: an Unarmed Strike's Grapple or Shove, a mace's wave of terror.
+   */
+  #ridesOnHit(item, activity) {
+    if ( !["action", "bonus", "reaction", "legendary"].includes(activity.activation?.type) ) return true;
+    if ( /\bhit\b/i.test(activity.activation?.condition ?? "") ) return true;
+    const html = englishDescription(item);
+    return /\[\[\/attack\b/i.test(html) || /\bhits?\b|\battack roll\b/i.test(plainText(html));
+  }
+
   /** A save beside an attack on the same item (a wolf's bite, a spider's venom) happens on a hit: a rider. */
   #saveRider(actor, item, activity) {
     const save = {
@@ -1796,7 +1814,13 @@ export class Dnd5eAdapter extends SystemAdapter {
     const inside = this.#inside(actor, item);
     if ( inside && activity.id !== inside.taker.id && activity.type !== "attack" ) return null;
     if ( inside && activity.id === inside.taker.id && activity.type === "save" && [...(item.system.activities ?? [])].some(a => a.type === "attack") ) return this.#takeIn(actor, item, activity, inside, null);
-    if ( activity.type === "save" && (item.system.activities?.contents ?? []).some(a => a.type === "attack") ) return this.#saveRider(actor, item, activity);
+    // A save beside an attack on the same item: what its hit calls for (a rider: #ridesOnHit), or a use of its own (a
+    // mace's wave of terror). An Unarmed Strike's own (its Grapple or Shove, made instead of dealing damage) is the
+    // core's grapple and shove, which #actions offers as what anyone can do: not an action of its own.
+    if ( activity.type === "save" && [...(item.system.activities ?? [])].some(a => a.type === "attack") ) {
+      if ( this.#ridesOnHit(item, activity) ) return this.#saveRider(actor, item, activity);
+      if ( unarmedStrike(item) ) return null;
+    }
     // What moves whoever it lands on (FORCED_MOVES). A spell's push on a failed save that comes after the casting ("each
     // creature that starts its turn in the line": the 2014 Gust of Wind's) is played as the casting itself, with the
     // spell's range and area.

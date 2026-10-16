@@ -505,3 +505,50 @@ describe("Weapon Mastery's Push (the SRD 5.2's)", () => {
     expect(dnd5eRules.isImmune({ spec: { size: 3, iwr: { immune: [] } } }, push)).toBe(false);
   });
 });
+
+/* A save beside an attack: a rider on its hit, or a use of its own ---------- */
+
+/** A weapon with an attack and a save beside it, the save's effects, and its words. */
+function attackAndSave({ identifier = "bite", attack = attackAct({ damage: "1d6 + 2", type: "piercing", melee: true }), save, effects = [], words = "" }) {
+  return { id: identifier, type: "weapon", name: identifier, identifier, flags: {}, effects: listOf(effects),
+    system: { identifier, activities: [attack, save], description: { value: words }, type: { value: "natural" }, equipped: true, range: {}, properties: new Set(), uses: {} } };
+}
+const condition = (id, statuses) => ({ id, _id: id, name: id, statuses: new Set(statuses), changes: [], duration: {} });
+
+describe("a save beside an attack on the same item", () => {
+  test("what its hit calls for is a rider: a spider's poisonous bite (its words after the attack), a ghoul's claws (dnd5e's special), a touch whose save says it comes of a hit", async () => {
+    // (The SRD 5.1's giant spider, as dnd5e keeps it: the save an action of its own in the data, the words tying it to the hit.)
+    const spider = attackAndSave({ save: saveAct({ id: "venom", ability: "con", dc: 11, damage: "2d8", type: "poison" }),
+      words: "<p>[[/attack extended]]. [[/damage extended]], and the target must make a [[/save activity=venom]] saving throw, taking 9 (2d8) poison damage on a failed save, or half as much damage on a successful one.</p>" });
+    const claws = attackAndSave({ identifier: "claws", save: { ...saveAct({ id: "paralysis", ability: "con", dc: 10 }), activation: { type: "special" }, effects: [{ _id: "stiff" }] }, effects: [condition("stiff", ["paralyzed"])] });
+    const touch = attackAndSave({ identifier: "paralyzing-touch", save: { ...saveAct({ id: "paralysis", ability: "con", dc: 18 }), activation: { type: "action", condition: "When a creature is hit by this attack." }, effects: [{ _id: "stiff" }] }, effects: [condition("stiff", ["paralyzed"])] });
+    for ( const [item, type] of [[spider, "con"], [claws, "con"], [touch, "con"]] ) {
+      const actions = await actionsFrom([item], item.id, { creature: "monstrosity" });
+      expect([item.id, actions.map(a => a.kind)]).toEqual([item.id, ["strike"]]);
+      expect(actions[0].effects).toEqual([expect.objectContaining({ kind: "save", save: expect.objectContaining({ type }) })]);
+    }
+  });
+
+  test("a use of its own, nothing said of a hit, is its own action: a mace's wave of terror", async () => {
+    const mace = attackAndSave({ identifier: "mace-of-terror",
+      save: { ...saveAct({ id: "wave", ability: "wis", dc: 15 }), effects: [{ _id: "afraid" }], target: { template: { type: "radius", size: 30, units: "ft" } } }, effects: [condition("afraid", ["frightened"])],
+      words: "<p>This magic weapon has 3 charges. While holding it, you can use an action and expend 1 charge to release a wave of terror. Each creature of your choice in a 30-foot radius extending from you must succeed on a DC 15 Wisdom saving throw or become frightened of you for 1 minute.</p>" });
+    const actions = await actionsFrom([mace], "mace-of-terror");
+    expect(actions.map(a => a.kind).sort()).toEqual(["control", "strike"]);
+    expect(actions.find(a => a.kind === "strike").effects).toBeUndefined();
+    expect(actions.find(a => a.kind === "control").onSave[1]).toMatchObject({ conditions: { frightened: 1 } });
+  });
+
+  test("an Unarmed Strike's Grapple or Shove (the SRD 5.2's, made instead of damage) is no rider on its hits: the core's grapple and shove stand for it", async () => {
+    const unarmed = attackAndSave({ identifier: "unarmed-strike",
+      attack: { ...attackAct({ damage: "1 + 3", type: "bludgeoning", melee: true }), attack: { type: { value: "melee", classification: "unarmed" } } },
+      save: { ...saveAct({ id: "grapple-shove", ability: "str", dc: 13 }), save: { ability: new Set(["str", "dex"]), dc: { value: 13 } }, effects: [{ _id: "grappled" }, { _id: "prone" }] },
+      effects: [condition("grappled", ["grappled"]), condition("prone", ["prone"])],
+      words: "<p>@UUID[Compendium.dnd5e.content24.JournalEntry.phbAppendixDRule.JournalEntryPage.xJjJ4lhymAYXAOvO]{Unarmed Strike Rules}</p>" });
+    const spec = await specOf(actorOf({ type: "character", str: 3, items: [unarmed] }));
+    const own = spec.actions.filter(a => a.itemId === "unarmed-strike");
+    expect(own.map(a => a.kind)).toEqual(["strike"]);
+    expect(own[0].effects).toBeUndefined();
+    expect(["shove", "shove-prone", "grapple"].map(k => spec.actions.find(a => a.id === `actor.${k}`)?.maneuver)).toEqual(["shove", "trip", "grapple"]);
+  });
+});
