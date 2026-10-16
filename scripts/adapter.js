@@ -96,6 +96,52 @@ const EFFECT_CONDITIONS = {
 };
 /** Statuses that help their bearer, as bonuses: unseen, it attacks with advantage and is attacked at disadvantage. */
 const STATUS_MODS = { invisible: { adv: 1, defAdv: -1 } };
+
+/**
+ * Spells and features that move whoever they land on, by identifier (dnd5e's slug: the same in the SRD 5.1 and 5.2 and
+ * every book): their data says what they deal and lay (damage, Prone), not this, which only their words say. Each
+ * pushes it straight away from the one using it, `feet` (the core's forced movement: a drop it goes over, a fire it
+ * lands in), and with `prone` it ends up Prone as well:
+ *  - on a failed save: a spell's or a feature's (Thunderwave, Gust of Wind, a breath), or the save a smite calls for;
+ *  - with `hit`, on a hit with its own attack;
+ *  - with `lends`, on a hit with the spell it works through (Repelling Blast: Eldritch Blast, or the cantrip it's laid on).
+ * save: only its activity with a save of that ability (another is something else: a creature it's flung into).
+ * byWords: as far as its words say ("pushed up to 60 feet"), an older creature's going farther; `feet` where they don't.
+ * perMod: that many feet more for each point of its caster's spellcasting modifier (a summoned hand's).
+ * Not here: a push on a success (a bulette's Deadly Leap, out of its way), a push chosen instead of something else
+ * (Brutal Strike's, an Open Hand Technique's), one that puts it anywhere (Telekinesis), and attacks whose identifier
+ * other creatures' attacks share without the push ("tail", "charge", "hooves", "warhammer", "breath-weapons").
+ */
+export const FORCED_MOVES = Object.freeze({
+  thunderwave: Object.freeze({ feet: 10 }),
+  "gust-of-wind": Object.freeze({ feet: 15 }),
+  // (Not in either SRD: the Player's Handbook's, a smite like those in riders.js.)
+  "thunderous-smite": Object.freeze({ feet: 10, prone: true }),
+  "repelling-blast": Object.freeze({ feet: 10, lends: "eldritch-blast" }),
+  // An air elemental's; a bronze dragon's breath; a silver dragon's; a fire giant's thrown hammer; Arcane Hand's shove.
+  whirlwind: Object.freeze({ feet: 20, prone: true, save: "str" }),
+  "repulsion-breath": Object.freeze({ feet: 30, byWords: true }),
+  "cold-gale": Object.freeze({ feet: 30 }),
+  "hammer-throw": Object.freeze({ feet: 15, hit: true }),
+  "forceful-hand": Object.freeze({ feet: 5, perMod: 5 })
+});
+const forcedEntry = id => (Object.hasOwn(FORCED_MOVES, id) ? FORCED_MOVES[id] : null);
+const identOf = item => String(item?.identifier ?? item?.system?.identifier ?? "");
+
+/**
+ * The push an entry of FORCED_MOVES makes (the core's move: {kind: "push", feet}), as far as its words say (byWords:
+ * its English description) or its caster's modifier makes it (perMod).
+ */
+export function forcedMoveOf(entry, { text = "", mod = 0 } = {}) {
+  let feet = entry.feet;
+  if ( entry.byWords ) feet = Number(/\bpushed (?:up to )?(\d+)[ -](?:feet|foot|ft\b)/i.exec(text ?? "")?.[1]) || feet;
+  if ( entry.perMod ) feet += entry.perMod * Math.max(0, Number(mod) || 0);
+  return { kind: "push", feet };
+}
+
+/** An outcome with Prone added (a push that knocks it down), or as it is: Prone by itself where it lays nothing else. */
+const proneToo = (outcome, prone) => (!prone || outcome?.conditions?.prone ? outcome
+  : { ...(outcome ?? { rounds: 1, label: t("KnockedProne") }), conditions: { ...(outcome?.conditions ?? {}), prone: 1 } });
 /**
  * A creature's features by identifier (dnd5e's slug, the same in the SRD and every book, whatever the language) and,
  * failing that, by name.
@@ -915,8 +961,11 @@ export class Dnd5eAdapter extends SystemAdapter {
         damage.push({ parts, perLevel, vs: namesFiends(a.name) });
       } else if ( a.type === "save" ) {
         const s = { type: asArray(a.save?.ability)[0] ?? "con", dc: a.save?.dc?.value ?? (8 + proficiency(actor.system.details?.level ?? 1) + 3) };
+        // (Pushed away on a failure, and knocked down: Thunderous Smite's.)
         const outcome = this.#outcome(this.#effects(item, a, { words: true }), s);
-        if ( outcome ) save = { ...s, outcome };
+        const forced = this.#forced(actor, item, a);
+        const landed = forced ? { ...(proneToo(outcome, forced.prone) ?? {}), move: forced.move } : outcome;
+        if ( landed ) save = { ...s, outcome: landed };
       }
     }
     // Against fiends and undead: an extra die (2014) or all it deals then (2024: 3d8 rather than 2d8).
@@ -1421,6 +1470,31 @@ export class Dnd5eAdapter extends SystemAdapter {
     return {};
   }
 
+  /**
+   * What moves whoever this activity lands on (FORCED_MOVES): {move, prone, hit: on a hit rather than a failed save}, or
+   * null. Its item's own entry, by identifier (only its save of that ability, where the entry names one); else, for a
+   * spell's attack, one a feature of its owner's lends it: 2024's Repelling Blast is laid on a cantrip of its owner's
+   * choice (an enchantment from the feature on that spell), 2014's (and one laid on none) works through Eldritch Blast.
+   */
+  #forced(actor, item, activity) {
+    const own = forcedEntry(identOf(item));
+    if ( own && !own.lends ) {
+      const fits = own.hit ? activity.type === "attack" : activity.type === "save" && (!own.save || asArray(activity.save?.ability)[0] === own.save);
+      if ( !fits ) return null;
+      const text = own.byWords ? plainText(`${englishDescription(item)} ${activity.target?.affects?.special ?? ""}`, actor, true) : "";
+      return { move: forcedMoveOf(own, { text, mod: actor.flags?.dnd5e?.summon?.mod }), prone: !!own.prone, hit: !!own.hit };
+    }
+    if ( activity.type !== "attack" || item.type !== "spell" ) return null;
+    for ( const feature of actor.items ) {
+      const entry = feature.type === "feat" ? forcedEntry(identOf(feature)) : null;
+      if ( !entry?.lends ) continue;
+      const laid = spell => !!feature.id && [...(spell.effects ?? [])].some(e => String(e.origin ?? "").includes(feature.id));
+      const on = actor.items.some(i => i.type === "spell" && laid(i)) ? laid(item) : identOf(item) === entry.lends;
+      if ( on ) return { move: forcedMoveOf(entry), prone: !!entry.prone, hit: true };
+    }
+    return null;
+  }
+
   /** A save beside an attack on the same item (a wolf's bite, a spider's venom) happens on a hit: a rider. */
   #saveRider(actor, item, activity) {
     const save = {
@@ -1430,31 +1504,41 @@ export class Dnd5eAdapter extends SystemAdapter {
     };
     const damage = this.#parts(activity);
     const control = this.#effects(item, activity);
-    if ( !damage.length && !control?.conditions && !control?.mods ) return null;
+    // (A failure may push it away too, and knock it down: FORCED_MOVES.)
+    const forced = this.#forced(actor, item, activity);
+    if ( !damage.length && !control?.conditions && !control?.mods && !forced ) return null;
+    const conditions = forced?.prone ? { ...(control?.conditions ?? {}), prone: 1 } : control?.conditions ?? undefined;
     return {
       riderFor: item.id,
-      rider: { kind: "save", save, damage: damage.length ? damage : undefined, conditions: control?.conditions ?? undefined, mods: control?.mods ?? undefined, rounds: control?.rounds, label: control?.label ?? item.name,
-        escape: control?.escape ?? undefined }
+      rider: { kind: "save", save, damage: damage.length ? damage : undefined, conditions, mods: control?.mods ?? undefined, rounds: control?.rounds, label: control?.label ?? item.name,
+        escape: control?.escape ?? undefined, move: forced?.move }
     };
   }
 
   #fromActivity(actor, item, activity) {
     if ( activity.type === "save" && (item.system.activities?.contents ?? []).some(a => a.type === "attack") ) return this.#saveRider(actor, item, activity);
-    const activation = activity.activation?.type ?? "action";
-    if ( !["action", "bonus", "legendary"].includes(activation) ) return null;
+    // What moves whoever it lands on (FORCED_MOVES). A spell's push on a failed save that comes after the casting ("each
+    // creature that starts its turn in the line": the 2014 Gust of Wind's) is played as the casting itself, with the
+    // spell's range and area.
+    const forced = this.#forced(actor, item, activity);
+    const played = ["action", "bonus", "legendary"];
+    const asCast = !!forced && !forced.hit && item.type === "spell" && !played.includes(activity.activation?.type ?? "action");
+    const activation = asCast ? item.system.activation?.type ?? "action" : activity.activation?.type ?? "action";
+    if ( !played.includes(activation) ) return null;
     // A legendary action: taken between other creatures' turns, for what it costs from the pool.
     const legendary = activation === "legendary" ? legendaryCost(activity, item) : undefined;
     const economy = activation === "bonus" ? "bonus" : undefined;
     // The activity's own range (dnd5e 4+), else the item's; a cone or line from yourself reaches as far as it is long.
     const range = item.system.range ?? {};
-    const own = activity.range ?? {};
+    const own = asCast ? {} : activity.range ?? {};
     const units = own.units ?? range.units;
-    const template = activity.target?.template ?? item.system.target?.template ?? {};
+    const target = asCast ? item.system.target : activity.target ?? item.system.target;
+    const template = (asCast ? null : activity.target?.template) ?? item.system.target?.template ?? {};
     // (A weapon's activity range is its long range; the item keeps the normal one.)
     const rangeFeet = (own.override && inFeet(own.value, own.units)) || inFeet(range.value, range.units) || inFeet(own.value, own.units)
       || (units === "self" && inFeet(template.size, template.units ?? "ft")) || (units === "touch" ? 5 : null);
     const longFeet = inFeet(range.long, range.units) || inFeet(own.long, own.units);
-    const several = (item.system.activities?.size ?? 1) > 1 && activity.type !== "attack";
+    const several = !asCast && (item.system.activities?.size ?? 1) > 1 && activity.type !== "attack";
     // Concentration: one such spell at a time, and a hard knock may end it.
     const concentration = !!(item.system.properties?.has?.("concentration") || item.system.duration?.concentration) || undefined;
     const base = {
@@ -1468,14 +1552,21 @@ export class Dnd5eAdapter extends SystemAdapter {
     const reachOf = () => inFeet(range.reach, range.units) || 5;
     const casterLevel = actor.type === "character" ? (actor.system.details?.level ?? 1) : (actor.system.attributes?.spell?.level ?? actor.system.details?.spellLevel ?? 1);
     const projectiles = item.type === "spell" ? projectileCount(englishDescription(item), casterLevel) : 1;
-    const targets = areaTargets(activity.target ?? item.system.target);
+    const targets = areaTargets(target);
 
     if ( activity.type === "attack" ) {
       const damage = this.#parts(activity);
       if ( !damage.length ) return null;
       const melee = activity.attack?.type?.value !== "ranged";
       const bonus = numberOf(activity.labels?.modifier) ?? numberOf(activity.labels?.toHit) ?? 0;
-      const riders = this.#riders(this.#effects(item, activity, { words: item.type === "spell" }));
+      const fx = this.#effects(item, activity, { words: item.type === "spell" });
+      const riders = this.#riders(fx);
+      // Pushed away by the blow (a fire giant's hammer; Repelling Blast's, every beam that hits), knocked down too where
+      // it says.
+      if ( forced?.hit ) {
+        riders.push({ kind: "move", move: forced.move, critOnly: false });
+        if ( forced.prone && !fx?.conditions?.prone ) riders.push({ kind: "condition", ...proneToo(null, true), critOnly: false });
+      }
       // (A ranged weapon that isn't thrown, a bow, a crossbow, a sling, sends a shot; a dart, a rock, a javelin flies itself.)
       const shoots = /R$/.test(String(item.system?.type?.value ?? "")) && !asArray(item.system?.properties).includes("thr");
       const attack = {
@@ -1500,15 +1591,18 @@ export class Dnd5eAdapter extends SystemAdapter {
         ...base, melee: false, range: { increment: rangeFeet ?? 30, max: rangeFeet ?? 30, noPenalty: true },
         area: targets > 1 ? { targets } : undefined
       };
-      const outcome = this.#outcome(control, save);
+      // (Pushed away on a failure, and knocked down where it says: FORCED_MOVES.)
+      const outcome = proneToo(this.#outcome(control, save), forced?.prone);
       if ( damage.length ) {
         // (Grappled on a failure, as the 2024 creatures' Constrict has it: the engine's grab.)
-        const riders = [...(control?.grab ? [{ kind: "grabbed" }] : []), ...(outcome ? [{ kind: "condition", ...outcome, critOnly: false }] : [])];
+        const riders = [...(forced ? [{ kind: "move", move: forced.move, critOnly: false }] : []), ...(control?.grab ? [{ kind: "grabbed" }] : []),
+          ...(outcome ? [{ kind: "condition", ...outcome, critOnly: false }] : [])];
         return { ...common, kind: "save", damage, save, effects: riders.length ? riders : undefined };
       }
-      // No damage: crowd control or a debuff on a failed save (Hold Person, Bane, Slow, Faerie Fire), or a grapple (the
-      // core's, with the grab).
-      const failed = control?.grab ? { ...(outcome ?? { label: conditionName("grappled") }), grab: true } : outcome;
+      // No damage: crowd control or a debuff on a failed save (Hold Person, Bane, Slow, Faerie Fire), a push (Gust of
+      // Wind), or a grapple (the core's, with the grab).
+      const pushed = forced ? { ...(outcome ?? {}), move: forced.move } : outcome;
+      const failed = control?.grab ? { ...(pushed ?? { label: conditionName("grappled") }), grab: true } : pushed;
       if ( !failed ) return null;
       if ( control?.refs?.length ) common.effectRef = { uuid: item.uuid, ids: control.refs };
       return { ...common, kind: "control", maneuver: control?.grab ? "grapple" : undefined, save: { ...save, basic: false }, onSave: [failed, failed, null, null] };

@@ -1,15 +1,17 @@
 /**
  * 5e's maneuvers, as the core plays them (its maneuvers.js and behavior/forced.js): Shove (pushed 5 feet or knocked
  * prone, the shover's choice) and Grapple (the engine's grab), each on a failed Strength or Dexterity save against
- * 8 + Strength + proficiency, with no degrees beyond failing and passing; a creature's own grapple on a save; and a
- * fall off a ledge, 1d6 bludgeoning for each 10 feet (at most 20d6), landing prone.
+ * 8 + Strength + proficiency, with no degrees beyond failing and passing; a creature's own grapple on a save; a fall off
+ * a ledge, 1d6 bludgeoning for each 10 feet (at most 20d6), landing prone; and the spells and features that push
+ * (FORCED_MOVES: Thunderwave and Gust of Wind on a failed save, Thunderous Smite's save on a hit, Repelling Blast on a
+ * hit with the cantrip it works through, a few SRD creatures').
  */
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { beginRun, beginRound, takeTurn, prepareBattle } from "../../FastFighting/scripts/engine/simulator.js";
 import { withManeuver } from "../../FastFighting/scripts/engine/maneuvers.js";
 import { holdsOf } from "../../FastFighting/scripts/engine/behavior/holds.js";
 import { canMove } from "../../FastFighting/scripts/engine/battle-state.js";
-import { Dnd5eAdapter } from "../scripts/adapter.js";
+import { Dnd5eAdapter, FORCED_MOVES, forcedMoveOf } from "../scripts/adapter.js";
 import { dnd5eRules } from "../scripts/rules.js";
 import { parseFormula } from "../scripts/core.js";
 
@@ -18,9 +20,9 @@ const replaceFormulaData = (formula, data) => String(formula).replace(/@([a-z.0-
 const listOf = list => Object.assign(list, { get: id => list.find(i => i.id === id), getName: name => list.find(i => i.name === name) });
 
 /** An actor as dnd5e prepares one, with only what these tests look at. */
-function actorOf({ type = "npc", creature = "humanoid", str = 0, cr = 1, size = "med", items = [] } = {}) {
+function actorOf({ type = "npc", creature = "humanoid", str = 0, cr = 1, size = "med", items = [], spells = {}, flags = {} } = {}) {
   return {
-    id: "actor", uuid: "Actor.actor", type, name: "actor", img: "", flags: {}, statuses: new Set(), appliedEffects: [], classes: {},
+    id: "actor", uuid: "Actor.actor", type, name: "actor", img: "", flags, statuses: new Set(), appliedEffects: [], classes: {},
     items: listOf(items), getRollData: () => ({}), toObject() { return { name: this.name }; },
     system: {
       abilities: Object.fromEntries(["str", "dex", "con", "int", "wis", "cha"].map(k => [k, { value: 10, mod: k === "str" ? str : 0, save: 0 }])),
@@ -28,7 +30,7 @@ function actorOf({ type = "npc", creature = "humanoid", str = 0, cr = 1, size = 
       details: { cr, level: cr, type: { value: creature } },
       skills: { ath: { total: 2, passive: 12 }, acr: { total: 0, passive: 10 }, ste: { total: 1 }, prc: { total: 1, passive: 11 }, ins: { total: 1, passive: 11 } },
       traits: { size, languages: { value: new Set() }, di: {}, dr: {}, dv: {}, ci: {} },
-      resources: {}, currency: {}, spells: {}
+      resources: {}, currency: {}, spells
     }
   };
 }
@@ -213,5 +215,171 @@ describe("cover from the walls, 5e's", () => {
     const u = { conds: {}, spec: {} };
     expect(dnd5eRules.modifiers.save({ unit: u, type: "dex", cover: "most" }).bonus).toBe(5 + dnd5eRules.modifiers.save({ unit: u, type: "dex" }).bonus);
     expect(dnd5eRules.modifiers.save({ unit: u, type: "wis", cover: "most" }).bonus).toBe(dnd5eRules.modifiers.save({ unit: u, type: "wis" }).bonus);
+  });
+});
+
+/* Pushes ------------------------------------------------------------------ */
+
+/** A save activity as dnd5e 6 prepares one: its ability and DC, and its damage (a formula, or none); its area its item's. */
+const saveAct = ({ id = "cast", name = "", ability = "con", dc = 13, damage = null, type = "thunder", activation = "action" } = {}) => ({
+  id, name, type: "save", activation: { type: activation }, save: { ability: new Set([ability]), dc: { value: dc } },
+  damage: { onSave: damage ? "half" : "none", parts: damage ? [{}] : [] }, effects: [], range: {},
+  getDamageConfig: () => ({ rolls: damage ? [{ parts: [damage], options: { types: [type] } }] : [] })
+});
+/** An attack activity: a ranged one unless it says otherwise. */
+const attackAct = ({ id = "attack", damage = "1d10", type = "force", melee = false } = {}) => ({
+  id, type: "attack", activation: { type: "action" }, attack: { type: { value: melee ? "melee" : "ranged" } }, labels: { modifier: "+5" },
+  damage: { parts: [{}] }, effects: [], range: {}, target: {},
+  getDamageConfig: () => ({ rolls: [{ parts: [damage], options: { types: [type] } }] })
+});
+const utilityAct = (id, activation) => ({ id, type: "utility", activation: { type: activation }, effects: [], range: {}, target: {} });
+/** A spell with these activities: from yourself, in a 15-foot cube, unless it says otherwise. */
+const spellOf = (identifier, level, activities, system = {}, extra = {}) => ({
+  id: identifier, type: "spell", name: identifier, identifier, flags: {}, effects: [], ...extra,
+  system: {
+    identifier, level, activities, activation: { type: "action" }, range: { units: "self" }, target: { template: { type: "cube", size: 15, units: "ft" } },
+    properties: new Set(["vocal", "somatic"]), duration: { units: "inst" }, description: { value: "" }, ...system
+  }
+});
+const featOf = (identifier, activities = [], description = "") => ({
+  id: identifier, type: "feat", name: identifier, identifier, flags: {}, effects: [], system: { identifier, activities, description: { value: `<p>${description}</p>` }, uses: {} }
+});
+/** The actions an actor with these items makes of one of them. */
+const actionsFrom = async (items, itemId, over = {}) => (await specOf(actorOf({ items, ...over }))).actions.filter(a => a.itemId === itemId);
+const slots = { spells: { spell1: { value: 2, max: 2 } } };
+const pushOf = feet => ({ kind: "move", move: { kind: "push", feet }, critOnly: false });
+/** One that never makes a save. */
+const frail = { defenses: { ac: 15, str: -30, dex: -30, con: -30, int: 0, wis: 0, cha: 0 } };
+/** Thunderous Smite as the Player's Handbook's data has it (no words of its own here): its damage, and a Strength save. */
+const smiteOf = () => spellOf("thunderous-smite", 1, [
+  { id: "hit", type: "damage", activation: { type: "bonus" }, damage: { parts: [{ denomination: 6, scaling: { mode: "whole", number: 1 } }] },
+    getDamageConfig: () => ({ rolls: [{ parts: ["2d6"], options: { types: ["thunder"] } }] }) },
+  saveAct({ id: "push", ability: "str", activation: "" })
+], { activation: { type: "bonus" } });
+
+describe("what pushes, by identifier (FORCED_MOVES)", () => {
+  test("each identifier: how far, and when", () => {
+    expect(Object.keys(FORCED_MOVES)).toEqual(["thunderwave", "gust-of-wind", "thunderous-smite", "repelling-blast", "whirlwind", "repulsion-breath", "cold-gale", "hammer-throw", "forceful-hand"]);
+    expect(FORCED_MOVES).toEqual({
+      thunderwave: { feet: 10 }, "gust-of-wind": { feet: 15 }, "thunderous-smite": { feet: 10, prone: true }, "repelling-blast": { feet: 10, lends: "eldritch-blast" },
+      whirlwind: { feet: 20, prone: true, save: "str" }, "repulsion-breath": { feet: 30, byWords: true }, "cold-gale": { feet: 30 },
+      "hammer-throw": { feet: 15, hit: true }, "forceful-hand": { feet: 5, perMod: 5 }
+    });
+    expect(Object.values(FORCED_MOVES).every(Object.isFrozen)).toBe(true);
+    // As far as its words say (an older bronze dragon's breath, 2024's and 2014's wording), else the table's; a summoned
+    // hand's, 5 feet more for each point of its caster's modifier.
+    const breath = FORCED_MOVES["repulsion-breath"];
+    expect(forcedMoveOf(breath, { text: "Failure: The target is pushed up to 60 feet straight away from the dragon." })).toEqual({ kind: "push", feet: 60 });
+    expect(forcedMoveOf(breath, { text: "On a failed save, the creature is pushed 40 feet away from the dragon." }).feet).toBe(40);
+    expect(forcedMoveOf(breath).feet).toBe(30);
+    expect(forcedMoveOf(FORCED_MOVES["forceful-hand"], { mod: 3 }).feet).toBe(20);
+    expect(forcedMoveOf(FORCED_MOVES.thunderwave, { text: "pushed up to 60 feet", mod: 3 }).feet).toBe(10);
+  });
+
+  test("Thunderwave: its damage, and on a failed Constitution save pushed 10 feet; Shatter pushes nobody", async () => {
+    const [wave] = await actionsFrom([spellOf("thunderwave", 1, [saveAct({ damage: "2d8" })])], "thunderwave", slots);
+    expect(wave).toMatchObject({ kind: "save", save: { type: "con", dc: 13, basic: true }, range: { increment: 15, max: 15 }, area: { targets: 3 }, effects: [pushOf(10)] });
+    const [shatter] = await actionsFrom([spellOf("shatter", 2, [saveAct({ damage: "3d8" })])], "shatter");
+    expect(shatter.kind).toBe("save");
+    expect(shatter.effects).toBeUndefined();
+  });
+
+  test("Gust of Wind: a failed Strength save, pushed 15 feet; 2014's, whose save comes after the casting, played as the casting", async () => {
+    const line = { target: { template: { type: "line", size: 60, width: 10, units: "ft" } }, properties: new Set(["vocal", "somatic", "material", "concentration"]) };
+    const [gust] = await actionsFrom([spellOf("gust-of-wind", 2, [saveAct({ ability: "str" })], line)], "gust-of-wind");
+    const failed = { move: { kind: "push", feet: 15 } };
+    expect(gust).toMatchObject({ kind: "control", concentration: true, save: { type: "str", dc: 13, basic: false }, onSave: [failed, failed, null, null] });
+    const legacy = Object.assign([saveAct({ name: "Wind Blast Save", ability: "str", activation: "special" }), utilityAct("turn", "bonus"), utilityAct("use", "action")], { size: 3 });
+    const old = await actionsFrom([spellOf("gust-of-wind", 2, legacy, line)], "gust-of-wind");
+    expect(old).toHaveLength(1);
+    expect(old[0]).toMatchObject({ name: "gust-of-wind", kind: "control", range: { increment: 60, max: 60 }, area: { targets: 3 }, onSave: [failed, failed, null, null] });
+    expect(old[0].economy).toBeUndefined();
+  });
+
+  test("Thunderous Smite: its save on a hit, failed, pushes 10 feet and knocks prone", async () => {
+    const spec = await specOf(actorOf({ items: [smiteOf()], ...slots }));
+    expect(spec.riders).toHaveLength(1);
+    const failed = { conditions: { prone: 1 }, move: { kind: "push", feet: 10 } };
+    expect(spec.riders[0]).toMatchObject({ save: { type: "str", dc: 13 }, onSave: [failed, failed, null, null], resource: "slots:1", cost: { bonus: 1, slot: 1 } });
+  });
+
+  test("Repelling Blast: Eldritch Blast pushes 10 feet on a hit (2014, or laid on nothing); 2024's, the cantrip it's laid on", async () => {
+    const blast = spellOf("eldritch-blast", 0, [attackAct()], { range: { value: 120, units: "ft" }, target: {} });
+    const bolt = (effects = []) => spellOf("fire-bolt", 0, [attackAct({ type: "fire" })], { range: { value: 120, units: "ft" }, target: {} }, { effects });
+    const invocation = featOf("repelling-blast", [{ id: "make", type: "enchant", activation: { type: "" }, effects: [] }]);
+    const effectsOf = async (items, id) => (await actionsFrom(items, id))[0].effects;
+    expect(await effectsOf([blast, bolt()], "eldritch-blast")).toBeUndefined();
+    expect(await effectsOf([blast, bolt(), invocation], "eldritch-blast")).toEqual([pushOf(10)]);
+    expect(await effectsOf([blast, bolt(), invocation], "fire-bolt")).toBeUndefined();
+    const laid = bolt([{ name: "Repelling Blast", origin: "Actor.actor.Item.repelling-blast.Activity.make", changes: [] }]);
+    expect(await effectsOf([blast, laid, invocation], "fire-bolt")).toEqual([pushOf(10)]);
+    expect(await effectsOf([blast, laid, invocation], "eldritch-blast")).toBeUndefined();
+  });
+
+  test("SRD creatures': a whirlwind (only its Strength save), a dragon's breath as far as it says, a thrown hammer, a summoned hand", async () => {
+    const whirl = Object.assign([saveAct({ id: "collide", ability: "dex", damage: "3d8", type: "bludgeoning" }), saveAct({ id: "whirl", ability: "str", damage: "3d8", type: "bludgeoning" })], { size: 2 });
+    const [collide, flung] = await actionsFrom([featOf("whirlwind", whirl)], "whirlwind");
+    expect(collide.effects).toBeUndefined();
+    expect(flung.effects).toEqual([pushOf(20), expect.objectContaining({ kind: "condition", conditions: { prone: 1 } })]);
+    const [breath] = await actionsFrom([featOf("repulsion-breath", [saveAct({ ability: "str" })], "Failure: The target is pushed up to 60 feet straight away from the dragon.")], "repulsion-breath");
+    expect(breath.onSave[1]).toEqual({ move: { kind: "push", feet: 60 } });
+    const [hammer] = await actionsFrom([featOf("hammer-throw", [attackAct({ damage: "1d8", type: "fire" })])], "hammer-throw");
+    expect(hammer).toMatchObject({ kind: "strike", effects: [pushOf(15)] });
+    const [hand] = await actionsFrom([featOf("forceful-hand", [saveAct({ ability: "str", activation: "bonus" })])], "forceful-hand", { flags: { dnd5e: { summon: { mod: 3 } } } });
+    expect(hand).toMatchObject({ kind: "control", economy: "bonus", onSave: [{ move: { kind: "push", feet: 20 } }, { move: { kind: "push", feet: 20 } }, null, null] });
+  });
+});
+
+describe("pushed, in the engine", () => {
+  const caster = async () => fighter("hero", "friendly", 0, { actions: await actionsFrom([spellOf("thunderwave", 1, [saveAct({ damage: "2d8" })])], "thunderwave", slots), resources: { "slots:1": 2 } });
+
+  test("Thunderwave, a failed save: its damage, and pushed 10 feet away", async () => {
+    const run = fight([await caster(), fighter("orc", "hostile", 5, frail)]);
+    const orc = run.byId.get("orc");
+    takeTurn(run, run.byId.get("hero"));
+    const save = run.log.find(e => e.type === "save" && e.actorId === "hero");
+    expect(save).toMatchObject({ saveType: "con", targetId: "orc" });
+    expect(save.degree).toBeLessThan(2);
+    expect(run.log.find(e => e.type === "forced" && e.targetId === "orc")).toMatchObject({ how: "push", feet: 10, fall: 0 });
+    expect(orc.pos).toMatchObject({ x: 15, y: 0 });
+    expect(orc.hp).toBe(60 - save.damage);
+  });
+
+  test("Thunderwave, a save made: half its damage, and it stays where it is", async () => {
+    const run = fight([await caster(), fighter("orc", "hostile", 5, { defenses: { ac: 15, str: 2, dex: 2, con: 50, int: 0, wis: 0, cha: 0 } })]);
+    takeTurn(run, run.byId.get("hero"));
+    expect(run.log.find(e => e.type === "save" && e.actorId === "hero")?.degree).toBeGreaterThanOrEqual(2);
+    expect(run.log.some(e => e.type === "forced")).toBe(false);
+    expect(run.byId.get("orc").pos).toMatchObject({ x: 5, y: 0 });
+  });
+
+  test("Thunderwave by a drop: pushed over the edge, a fall of 20 feet, and it lands prone", async () => {
+    const run = fight([await caster(), fighter("orc", "hostile", 5, frail)], ledge);
+    const orc = run.byId.get("orc");
+    takeTurn(run, run.byId.get("hero"));
+    expect(run.log.find(e => e.type === "forced" && e.targetId === "orc")).toMatchObject({ how: "push", fall: 20 });
+    const fell = run.log.find(e => e.type === "fall" && e.actorId === "orc");
+    expect(fell.feet).toBe(20);
+    expect(fell.amount).toBeGreaterThanOrEqual(2);
+    expect(orc.prone).toBe(true);
+  });
+
+  test("Thunderous Smite on a hit: the failed save pushes it 10 feet and knocks it prone", async () => {
+    const { riders } = await specOf(actorOf({ items: [smiteOf()], ...slots }));
+    const hero = fighter("hero", "friendly", 0, { actions: [{ ...fist("hero"), bonus: 50 }], riders, resources: { "slots:1": 2 }, tac: { resourceUse: "nova" } });
+    const run = fight([hero, fighter("orc", "hostile", 5, frail)]);
+    takeTurn(run, run.byId.get("hero"));
+    expect(run.log.find(e => e.type === "rider" && e.targetId === "orc")).toMatchObject({ saveType: "str", landed: true });
+    expect(run.log.find(e => e.type === "forced" && e.targetId === "orc")).toMatchObject({ how: "push", feet: 10 });
+    expect(run.byId.get("orc").prone).toBe(true);
+  });
+
+  test("Repelling Blast: Eldritch Blast's hit pushes it 10 feet away", async () => {
+    const blast = spellOf("eldritch-blast", 0, [attackAct()], { range: { value: 120, units: "ft" }, target: {} });
+    const [beam] = await actionsFrom([blast, featOf("repelling-blast")], "eldritch-blast");
+    const run = fight([fighter("hero", "friendly", 0, { actions: [{ ...beam, bonus: 50 }] }), fighter("orc", "hostile", 20)]);
+    takeTurn(run, run.byId.get("hero"));
+    expect(run.log.find(e => e.type === "forced" && e.targetId === "orc")).toMatchObject({ how: "push", feet: 10 });
+    expect(run.byId.get("orc").pos).toMatchObject({ x: 30, y: 0 });
   });
 });
