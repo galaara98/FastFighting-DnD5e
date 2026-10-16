@@ -1429,7 +1429,7 @@ export class Dnd5eAdapter extends SystemAdapter {
    *   spit       {after, save}: so much damage from inside it in one turn, and its save not to bring them up (its other
    *              save, with no damage; how much from that activity's words, else the item's)
    *   escape     {dc, others, checks}: an action and a check that get it out (its check activity: a cube's Strength
-   *              check), a friend beside it able to pull it out where the creature has an Ooze Cube's way to
+   *              check); a friend beside it can pull it out too where the creature has an Ooze Cube (by identifier)
    *   maxSize    the biggest it takes in ("Large or smaller"); grappled: only a creature it's grappling
    *   clear      feet it's pushed clear on a successful save (an ooze's), or 0
    *   bite       the item whose attack does the swallowing, where the taker is a utility (2014's: "makes one Bite attack")
@@ -1505,7 +1505,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       const save = { type: saveAbility(activity, "dex"), dc: activity.save?.dc?.value ?? (8 + proficiency(actor.system.details?.level ?? 1) + 3), basic: activity.damage?.onSave !== "none" };
       const damage = this.#parts(activity);
       if ( [...(item.system.activities ?? [])].some(a => a.type === "attack") ) {
-        return { riderFor: item.id, rider: { kind: "save", save, damage: damage.length ? damage : undefined, ...outcome, label: outcome.label } };
+        return { riderFor: item.id, rider: { kind: "save", save, damage: damage.length ? damage : undefined, ...outcome } };
       }
       if ( !base ) return null;
       const clear = inside.clear > 0 ? { move: { kind: "push", feet: inside.clear } } : null;
@@ -1742,9 +1742,9 @@ export class Dnd5eAdapter extends SystemAdapter {
   /**
    * What moves whoever this activity lands on (FORCED_MOVES): {move, prone, hit: on a hit rather than a failed save,
    * success: on a successful save rather than a failed one}, or null. Its item's own entry, by identifier (only its save
-   * of that ability, where the entry names one); else, for a
-   * spell's attack, one a feature of its owner's lends it: 2024's Repelling Blast is laid on a cantrip of its owner's
-   * choice (an enchantment from the feature on that spell), 2014's (and one laid on none) works through Eldritch Blast.
+   * of that ability, where the entry names one); else, for a spell's attack, one a feature of its owner's lends it:
+   * 2024's Repelling Blast is laid on a cantrip of its owner's choice (an enchantment from the feature on that spell),
+   * 2014's (and one laid on none) works through Eldritch Blast.
    */
   #forced(actor, item, activity) {
     const own = forcedEntry(identOf(item));

@@ -23,7 +23,7 @@ Foundry only offers this module in D&D 5e worlds. Metric worlds work too: speeds
 
 ## What it reads
 
-Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 (their wordings differ, and both are read). The Player's Handbook, the Dungeon Master's Guide and other books only add more spells and features, read the same way: from what an item does (its activities and effects), then its words, never from a list of names. Features it has to recognise (Extra Attack, Sneak Attack, Rage's companions Reckless Attack and Action Surge, Pack Tactics, Nimble Escape, Multiattack) are found by their identifier, the same in every book and language.
+Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 (their wordings differ, and both are read). The Player's Handbook, the Dungeon Master's Guide and other books only add more spells and features, read the same way: from what an item does (its activities and effects), then its words, never from a list of names. Features it has to recognise (Extra Attack, Sneak Attack, Rage's companions Reckless Attack and Action Surge, Pack Tactics, Nimble Escape, Multiattack, Halfling Nimbleness, a creature's Swallow, Engulf or Deadly Leap) are found by their identifier, the same in every book and language.
 
 - **Attacks:** weapons and features through their attack activities: to-hit, damage (with your modifiers), melee reach, and ranged normal and long range.
   - A save beside an attack on the same item happens on a hit: a wolf's bite (Strength or prone), a spider's venom (Constitution, half on a success).
