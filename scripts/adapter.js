@@ -688,7 +688,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     }
     // Anyone can Dodge (attacks against it have disadvantage until its next turn): a 5e shield is already in its AC,
     // so the shield answer says how readily it takes this turn to its own defense instead. Characters and humanoids can
-    // Shove a foe prone (a Strength or Dexterity save against 8 + Strength + proficiency).
+    // Shove and Grapple (below).
     out.push({ id: `${actor.id}.dodge`, name: t("Dodge"), kind: "buff", targets: "self", cost: 1, traits: [], tell: "dodge", guard: true, setup: true, outcome: { mods: { defAdv: -1 }, rounds: 1, label: t("Dodging") } });
     // Hide (anyone; a rogue's Cunning Action makes it a bonus action): Dexterity (Stealth) against DC 15, the SRD 5.2's.
     // Hidden, it's Invisible (its attacks with advantage, those against it at disadvantage) until it attacks. Not with a
@@ -711,16 +711,19 @@ export class Dnd5eAdapter extends SystemAdapter {
       ...this.#resource(actor, surge), outcome: { actionsNow: 1, rounds: 1, label: t("Surging") } });
     const creatureType = String(actor.system.details?.type?.value ?? "").toLowerCase();
     if ( actor.type === "character" || creatureType === "humanoid" ) {
+      // Shove and Grapple (the SRD 5.2's Unarmed Strike options; the core's maneuvers, maneuvers.js, with 5e's own
+      // outcomes): the target makes a Strength or Dexterity save, its better, against 8 + Strength + proficiency, and
+      // fails or doesn't (no degrees beyond). Only a creature at most one size larger.
       const dc = 8 + (actor.system.abilities?.str?.mod ?? 0) + proficiency(level);
-      const prone = { conditions: { prone: 1 }, rounds: 1, label: t("KnockedProne") };
-      // (Only a creature at most one size larger.)
-      out.push({ id: `${actor.id}.shove`, name: t("Shove"), kind: "control", cost: 1, traits: [], melee: true, reach: 5, maxSize: sizeOf(actor.system.traits?.size) + 1,
-        save: { type: ["str", "dex"], dc, basic: false }, onSave: [prone, prone, null, null] });
-      // Grapple (an Unarmed Strike, the SRD 5.2's): the same save, or Grappled (it can't move) until it breaks free,
-      // the save again at the end of each of its turns. It takes a free hand.
-      const held = { conditions: { immobilized: 1 }, rounds: 10, repeatSave: { type: ["str", "dex"], dc }, label: conditionName("grappled") };
-      out.push({ id: `${actor.id}.grapple`, name: t("Grapple"), kind: "control", cost: 1, traits: [], melee: true, reach: 5, maxSize: sizeOf(actor.system.traits?.size) + 1,
-        save: { type: ["str", "dex"], dc, basic: false }, onSave: [held, held, null, null], hands: 1 });
+      const option = () => ({ kind: "control", cost: 1, traits: [], melee: true, reach: 5, maxSize: sizeOf(actor.system.traits?.size) + 1, save: { type: ["str", "dex"], dc, basic: false } });
+      const onFail = outcome => [outcome, outcome, null, null];
+      // Shove: pushed 5 feet away or knocked prone, as the shover chooses. One action each (the core's shove and
+      // trip), and it takes whichever is worth more there (a push by a drop, prone among its friends).
+      out.push({ id: `${actor.id}.shove`, name: t("Shove"), maneuver: "shove", ...option(), onSave: onFail({ move: { kind: "push", feet: 5 } }) });
+      out.push({ id: `${actor.id}.shove-prone`, name: t("ShoveProne"), maneuver: "trip", ...option(), onSave: onFail({ conditions: { prone: 1 }, rounds: 1, label: t("KnockedProne") }) });
+      // Grapple: Grappled, the engine's grab (it can't move; an action and a check against the grappler's escape DC
+      // break it: holds.js). It takes a free hand.
+      out.push({ id: `${actor.id}.grapple`, name: t("Grapple"), maneuver: "grapple", ...option(), onSave: onFail({ grab: true, label: conditionName("grappled") }), hands: 1 });
     }
     this.#sneakAttack(actor, level, features, out);
     // Improved Divine Smite (2014) and Radiant Strikes (2024): a die of radiant on every melee weapon hit.
@@ -1495,13 +1498,16 @@ export class Dnd5eAdapter extends SystemAdapter {
       };
       const outcome = this.#outcome(control, save);
       if ( damage.length ) {
-        const riders = outcome ? [{ kind: "condition", ...outcome, critOnly: false }] : [];
+        // (Grappled on a failure, as the 2024 creatures' Constrict has it: the engine's grab.)
+        const riders = [...(control?.grab ? [{ kind: "grabbed" }] : []), ...(outcome ? [{ kind: "condition", ...outcome, critOnly: false }] : [])];
         return { ...common, kind: "save", damage, save, effects: riders.length ? riders : undefined };
       }
-      // No damage: crowd control or a debuff on a failed save (Hold Person, Bane, Slow, Faerie Fire).
-      if ( !outcome ) return null;
+      // No damage: crowd control or a debuff on a failed save (Hold Person, Bane, Slow, Faerie Fire), or a grapple (the
+      // core's, with the grab).
+      const failed = control?.grab ? { ...(outcome ?? { label: conditionName("grappled") }), grab: true } : outcome;
+      if ( !failed ) return null;
       if ( control?.refs?.length ) common.effectRef = { uuid: item.uuid, ids: control.refs };
-      return { ...common, kind: "control", save: { ...save, basic: false }, onSave: [outcome, outcome, null, null] };
+      return { ...common, kind: "control", maneuver: control?.grab ? "grapple" : undefined, save: { ...save, basic: false }, onSave: [failed, failed, null, null] };
     }
 
     if ( activity.type === "damage" ) {

@@ -6,7 +6,7 @@
  * disadvantage, which cancel each other out. A creature at 0 HP makes death saves; three successes stabilize it,
  * three failures kill it, and taking damage while down counts as a failure (two on a critical).
  */
-import { DOWNED_MODELS, STATUS, rollD20, bestReactionStrike, dropCondition } from "./core.js";
+import { DOWNED_MODELS, STATUS, rollD20, bestReactionStrike, dropCondition, part } from "./core.js";
 import { t } from "./words.js";
 import { escapeFrom, bondsDC, breakFree, HOLD_COST } from "./holds.js";
 
@@ -98,6 +98,15 @@ export const dnd5eRules = {
   },
   /** Every action says how many free hands it needs (adapter.js): one tied up can still use those that need none. */
   handsKnown: true,
+  /**
+   * A fall (shoved off a ledge: the core's behavior/forced.js): 1d6 bludgeoning for each 10 feet, at most 20d6, and it
+   * lands prone (the SRD's, 5.1 and 5.2 alike).
+   */
+  fallDamage(feet) {
+    const dice = Math.min(20, Math.floor((Number(feet) || 0) / 10));
+    return dice > 0 ? [part([{ n: dice, faces: 6 }], 0, "bludgeoning")] : [];
+  },
+  fallProne: true,
 
   /* Holds ----------------------------------------------------------------- */
   /** Breaking free of a grapple, webs, a net or bonds, and freeing a friend (holds.js): each try an action. */
@@ -317,9 +326,10 @@ export const dnd5eRules = {
     const immune = new Set(target.spec.iwr?.immune ?? []);
     if ( (action.traits ?? []).some(t => immune.has(t)) ) return true;
     const alias = { incapacitated: "unconscious", immobilized: "restrained", controlled: "charmed" };
-    // Every outcome it can have on the target (one that simply happens too; a backfire on the user doesn't count).
+    // Every outcome it can have on the target (one that simply happens too; a backfire on the user doesn't count). A
+    // grab is Grappled.
     const outcomes = [...(action.onSave ?? []), ...(action.onHit ?? []), action.outcome].filter(o => o && !o.self);
-    const keys = [...new Set(outcomes.flatMap(o => Object.keys(o.conditions ?? {})))];
+    const keys = [...new Set(outcomes.flatMap(o => [...Object.keys(o.conditions ?? {}), ...(o.grab ? ["grappled"] : [])]))];
     return keys.length > 0 && keys.every(k => immune.has(k) || immune.has(alias[k]));
   },
 
