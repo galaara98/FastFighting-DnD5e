@@ -3,7 +3,7 @@
  * live battle's changes back. Written against dnd5e 6 on Foundry v14; values are read defensively so older data still
  * works.
  */
-import { SystemAdapter, parseFormula, part, simpleAffliction } from "./core.js";
+import { SystemAdapter, parseFormula, part, simpleAffliction, localize } from "./core.js";
 import { dnd5eRules, proficiency } from "./rules.js";
 import { deriveDnd5eTraits, isMindless } from "./traits.js";
 import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, speaksAtAll, plainText as sheetText } from "./auto.js";
@@ -106,6 +106,25 @@ const ALIGHT = /\b(?:it|target|creature) (?:also )?(?:starts burning|ignites|cat
 export function setsAlight(text) {
   return String(text ?? "").split(/(?<=[.!?;])\s+/).some(s => ALIGHT.test(s) && (/\bcreatures?\b/i.test(s) || !/\bobjects?\b/i.test(s)));
 }
+
+/**
+ * Swallowing and engulfing, by identifier: the core's swallowed and engulfed (held inside the creature that did it:
+ * inside.js). An effect that gives Total Cover with Restrained (a 2014 purple worm's bite) is a swallow too.
+ */
+const INSIDE = Object.freeze({ swallow: "swallowed", engulf: "engulfed" });
+/** How long a creature stays inside, unless something gets it out: as long as any fight goes. */
+const INSIDE_ROUNDS = 100;
+/** "Large or smaller": the biggest it can take in. */
+const SMALLER = /\b(tiny|small|medium|large|huge)\s+or\s+smaller\b/i;
+const SIZE_WORDS = Object.freeze({ tiny: 0, small: 1, medium: 2, large: 3, huge: 4 });
+/** Only a creature it's grappling ("a Medium or smaller target it is grappling", "one Large or smaller creature Grappled by the worm"). */
+const GRAPPLED_FIRST = /\b(?:it is grappling|grappled by (?:it|the)\b|creature grappled\b)/i;
+/** Pushed clear on a successful save ("On a successful save, the creature can choose to be pushed 5 feet back"; "Success: ... moves to an unoccupied space within 5 feet"). */
+const CLEAR = /\b(?:on a successful save|success:)[^.]*?\b(?:pushed|moves? to an unoccupied space within)\s+(\d+)\s*feet\b/i;
+/** The damage from inside in one turn that may bring it up ("takes 30 damage or more on a single turn from a creature inside it"). */
+const SPIT_AFTER = /\btakes (\d+) (?:damage )?or more\b/i;
+/** Ways out of an ooze by a check, as its holds.js reads them: the skill's ability. */
+const ESCAPE_SKILLS = Object.freeze({ ath: "str", acr: "dex" });
 
 /** What harm left on a creature for the end of its next turn is, by its damage type: acid, the core's corroding. */
 const LINGERS = Object.freeze({ acid: "corroding" });
@@ -576,9 +595,11 @@ export class Dnd5eAdapter extends SystemAdapter {
       deathSaves: { success: sys.attributes?.death?.success ?? 0, failure: sys.attributes?.death?.failure ?? 0 },
       ...mending,
       fastHealing: await this.#lastingHealing(actor),
-      // What lasts on whoever it hurts (rules.js conditionHarm): a fire it starts, the harm its spells leave for later.
+      // What lasts on whoever it hurts (rules.js conditionHarm): a fire it starts, the harm its spells leave for later;
+      // and what it does to whatever it swallows or engulfs (inside.js).
       burns: this.#burns(actor),
       lingering: this.#lingerings(actor),
+      inside: this.#insideSpec(actor),
       ...this.#saveFeatures(actor, features, level),
       conditions: this.#conditions(actor),
       perception: skillMod("prc") ?? 0,
@@ -1401,6 +1422,105 @@ export class Dnd5eAdapter extends SystemAdapter {
   }
 
   /**
+   * A swallow or an engulfing (INSIDE: by identifier, or an effect with Total Cover and Restrained), read from the item:
+   *   key        the core's condition: swallowed, engulfed
+   *   taker      the activity that takes it in: the save or the utility whose effect holds it (Restrained)
+   *   harm       what it takes each turn inside: the item's other damage (a gullet's acid), else the taker's own (2024's ooze)
+   *   spit       {after, save}: so much damage from inside it in one turn, and its save not to bring them up (its other
+   *              save, with no damage; how much from that activity's words, else the item's)
+   *   escape     {dc, others, checks}: an action and a check that get it out (its check activity: a cube's Strength
+   *              check), a friend beside it able to pull it out where the creature has an Ooze Cube's way to
+   *   maxSize    the biggest it takes in ("Large or smaller"); grappled: only a creature it's grappling
+   *   clear      feet it's pushed clear on a successful save (an ooze's), or 0
+   *   bite       the item whose attack does the swallowing, where the taker is a utility (2014's: "makes one Bite attack")
+   * Null when it isn't one.
+   */
+  #inside(actor, item) {
+    const activities = [...(item.system?.activities ?? [])];
+    const statusesOf = a => (a.effects ?? []).flatMap(r => asArray((r.effect ?? item.effects?.get?.(r._id ?? r.id))?.statuses));
+    const taker = activities.find(a => ["save", "utility"].includes(a.type) && statusesOf(a).includes("restrained"));
+    const key = taker ? INSIDE[identOf(item)] ?? (statusesOf(taker).includes("coverTotal") ? "swallowed" : null) : null;
+    if ( !key ) return null;
+    const html = englishDescription(item);
+    const words = plainText(html, actor, true);
+    const special = `${taker.target?.affects?.special ?? ""} ${words}`;
+    const later = activities.find(a => a !== taker && a.type === "damage");
+    const up = activities.find(a => a !== taker && a.type === "save" && !this.#parts(a).length);
+    const after = Number(SPIT_AFTER.exec(plainText(up?.activation?.condition ?? "", actor, true))?.[1] ?? SPIT_AFTER.exec(words)?.[1]) || 0;
+    const upDC = Number(up?.save?.dc?.value) || numberOf(up?.save?.dc?.formula);
+    const check = activities.find(a => a !== taker && a.type === "check");
+    const skills = asArray(check?.check?.associated).filter(s => ESCAPE_SKILLS[s]);
+    const checks = skills.length ? skills.map(skill => ({ ability: ESCAPE_SKILLS[skill], skill }))
+      : ["str", "dex"].includes(check?.check?.ability) ? [{ ability: check.check.ability, skill: null }] : [];
+    const checkDC = Number(check?.check?.dc?.value) || numberOf(check?.check?.dc?.formula);
+    const pulls = actor.items.some(i => i !== item && identOf(i) === "ooze-cube");
+    const size = SMALLER.exec(special)?.[1]?.toLowerCase();
+    const link = /\[\[\/item\s+\.?([^\]\s]+)\]\]/.exec(html)?.[1] ?? /@UUID\[[^\]]*?\.Item\.([^\].]+)\]/.exec(html)?.[1];
+    const biteOf = i => i?.type === "weapon" && [...(i.system?.activities ?? [])].some(a => a.type === "attack");
+    const linked = link ? actor.items.get?.(link) : null;
+    const bite = taker.type === "utility" && /\bmakes? one\b[^.]*\battack\b/i.test(words)
+      ? (biteOf(linked) ? linked : actor.items.find(i => biteOf(i) && identOf(i) === "bite")) ?? null : null;
+    return {
+      key, taker,
+      harm: later ? this.#parts(later) : this.#parts(taker),
+      spit: up && after > 0 && upDC > 0 ? { after, save: { type: saveAbility(up, "con"), dc: upDC } } : null,
+      escape: checks.length && checkDC > 0 ? { dc: checkDC, others: pulls ? "check" : null, checks } : null,
+      maxSize: size ? SIZE_WORDS[size] : null,
+      grappled: GRAPPLED_FIRST.test(special),
+      clear: Number(CLEAR.exec(words)?.[1]) || 0,
+      bite
+    };
+  }
+
+  /** What a creature's swallow or engulfing does to whoever it holds (#inside), for its spec (rules.js, inside.js). */
+  #insideSpec(actor) {
+    for ( const item of actor.items ) {
+      const inside = this.#inside(actor, item);
+      if ( inside ) return { key: inside.key, harm: inside.harm.length ? inside.harm : undefined, spit: inside.spit ?? undefined, escape: !!inside.escape || undefined };
+    }
+    return undefined;
+  }
+
+  /**
+   * What takes a creature in (#inside), as the engine plays it: the core's swallowed or engulfed, for as long as a fight
+   * goes, on a creature no bigger than it takes (maxSize), broken as its escape says (an ooze's check; a gullet's none).
+   *  - a save beside a bite (2014's purple worm): a rider on the bite's hit, taken in on a failure;
+   *  - a save of its own (an ooze's engulfing, 2024's swallows): the core's control, taken in on a failure (with its
+   *    damage, halved on a success where it says), pushed clear on a success where it says, and only at a creature
+   *    it's grappling where it says (grappledOnly: rules.usable);
+   *  - a utility with a bite (2014's behir, tarrasque): that bite's attack, taken in on a hit; with none, it simply
+   *    happens (2024's frog).
+   */
+  #takeIn(actor, item, activity, inside, base) {
+    const outcome = {
+      conditions: { [inside.key]: 1 }, rounds: INSIDE_ROUNDS, label: localize(`FASTFIGHTING.Condition.${inside.key}`).toLocaleLowerCase(),
+      maxSize: inside.maxSize ?? undefined, escape: inside.escape ?? undefined
+    };
+    const fx = this.#effects(item, activity);
+    const effectRef = fx?.refs?.length ? { uuid: item.uuid, ids: fx.refs } : undefined;
+    const grappledOnly = inside.grappled || undefined;
+    // (What it takes in is beside it, or in its grip.)
+    const reach = { melee: true, reach: 5 };
+    if ( activity.type === "save" ) {
+      const save = { type: saveAbility(activity, "dex"), dc: activity.save?.dc?.value ?? (8 + proficiency(actor.system.details?.level ?? 1) + 3), basic: activity.damage?.onSave !== "none" };
+      const damage = this.#parts(activity);
+      if ( [...(item.system.activities ?? [])].some(a => a.type === "attack") ) {
+        return { riderFor: item.id, rider: { kind: "save", save, damage: damage.length ? damage : undefined, ...outcome, label: outcome.label } };
+      }
+      if ( !base ) return null;
+      const clear = inside.clear > 0 ? { move: { kind: "push", feet: inside.clear } } : null;
+      return { ...base, kind: "control", ...reach, save, damage: damage.length ? damage : undefined, onSave: [outcome, outcome, clear, clear], grappledOnly, effectRef };
+    }
+    if ( !base ) return null;
+    const attack = inside.bite ? [...(inside.bite.system?.activities ?? [])].find(a => a.type === "attack") : null;
+    const strike = attack ? this.#fromActivity(actor, inside.bite, attack) : null;
+    if ( strike?.kind === "strike" ) {
+      return { ...base, kind: "control", melee: true, reach: strike.reach ?? 5, bonus: strike.bonus, damage: strike.damage, onHit: [null, null, outcome, outcome], grappledOnly, effectRef };
+    }
+    return { ...base, kind: "control", ...reach, auto: true, outcome, grappledOnly, effectRef };
+  }
+
+  /**
    * Harm a spell leaves for the end of its target's next turn (Acid Arrow, Vitriolic Sphere: "... acid damage at the end
    * of its next turn"): its damage activity besides the one that strikes or calls for the save, and the core's
    * condition for it by its type (LINGERS: acid, corroding; an untyped part, as the spell's own). {activity, condition,
@@ -1671,6 +1791,11 @@ export class Dnd5eAdapter extends SystemAdapter {
     const later = this.#lingering(item);
     if ( later && later.activity.id === activity.id ) return null;
     const lingers = later ? [{ kind: "condition", conditions: { [later.condition]: 1 }, rounds: 1, label: item.name, critOnly: false }] : [];
+    // Swallowed or engulfed (#inside): what takes it in, the core's condition (#takeIn); the rest of the item (its
+    // digestion, what brings it up, the check that gets out) is read onto the creature's spec, not actions of its own.
+    const inside = this.#inside(actor, item);
+    if ( inside && activity.id !== inside.taker.id && activity.type !== "attack" ) return null;
+    if ( inside && activity.id === inside.taker.id && activity.type === "save" && [...(item.system.activities ?? [])].some(a => a.type === "attack") ) return this.#takeIn(actor, item, activity, inside, null);
     if ( activity.type === "save" && (item.system.activities?.contents ?? []).some(a => a.type === "attack") ) return this.#saveRider(actor, item, activity);
     // What moves whoever it lands on (FORCED_MOVES). A spell's push on a failed save that comes after the casting ("each
     // creature that starts its turn in the line": the 2014 Gust of Wind's) is played as the casting itself, with the
@@ -1704,6 +1829,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       // (A feature's: a class's, a species', a creature's own. What "magic and specialties" means, with spells.)
       feature: item.type === "feat" || undefined
     };
+    if ( inside && activity.id === inside.taker.id ) return this.#takeIn(actor, item, activity, inside, base);
     const reachOf = () => inFeet(range.reach, range.units) || 5;
     const casterLevel = actor.type === "character" ? (actor.system.details?.level ?? 1) : (actor.system.attributes?.spell?.level ?? actor.system.details?.spellLevel ?? 1);
     const projectiles = item.type === "spell" ? projectileCount(englishDescription(item), casterLevel) : 1;

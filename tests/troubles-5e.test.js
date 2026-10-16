@@ -2,13 +2,15 @@
  * What lasts on a creature in 5e, as the core's own conditions and afflictions play it (its engine/conditions.js
  * PROFILES and behavior/afflictions.js): 2024's Contagion as a tallied affliction (three successes or three failures);
  * Burning (the SRD 5.2's hazard: 1d4 fire a turn, put out with an action) and the acid a spell leaves for the end of
- * its target's next turn, as the core's burning and corroding.
+ * its target's next turn, as the core's burning and corroding; and swallowed and engulfed (a purple worm's, a behir's,
+ * a tarrasque's gullet; a gelatinous cube), as the SRD has them (inside.js).
  */
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { beginRun, beginRound, takeTurn, prepareBattle, endOfTurn } from "../../FastFighting/scripts/engine/simulator.js";
-import { remediesOf } from "../../FastFighting/scripts/engine/behavior/holds.js";
+import { remediesOf, holdsOf, tryHold, release } from "../../FastFighting/scripts/engine/behavior/holds.js";
 import { Dnd5eAdapter, tallyFrom, tallied, plainText, setsAlight } from "../scripts/adapter.js";
 import { dnd5eRules } from "../scripts/rules.js";
+import { holderOf, reachable, spitUp } from "../scripts/inside.js";
 import { parseFormula, applyOutcome } from "../scripts/core.js";
 
 /** Foundry's Roll.replaceFormulaData, as far as these tests need it. */
@@ -289,5 +291,280 @@ describe("acid a spell leaves for the end of its target's next turn, as the core
 
   test("corroding laid by anything else is the core's own (its harm by its value)", () => {
     expect(dnd5eRules.conditionHarm("corroding", 2, { effects: [{ sourceId: "gm", key: "gm:corroding", conditions: { corroding: 2 } }] }, { id: "gm", spec: {} })).toBeUndefined();
+  });
+});
+
+/* Swallowed and engulfed ---------------------------------------------------- */
+
+/* The SRD's words (5.1 and 5.2, CC-BY 4.0), as dnd5e's compendiums keep them. */
+const WORM_BITE_2014 = "<p>[[/attack extended]]. [[/damage extended]]. If the target is a Large or smaller creature, it must succeed on a [[/save activity=swallow]] saving throw or be swallowed by the [[lookup @name lowercase]]{monster}. A swallowed creature is &amp;reference[blinded] and &amp;reference[restrained], it has &amp;reference[total cover] against attacks and other effects outside the [[lookup @name lowercase]]{monster}, and it takes [[/damage average activity=digest]] damage at the start of each of the [[lookup @name lowercase]]{monster}'s turns. If the [[lookup @name lowercase]]{monster} takes 30 damage or more on a single turn from a creature inside it, the [[lookup @name lowercase]]{monster} must succeed on a [[/save activity=spit]] saving throw at the end of that turn or regurgitate all swallowed creatures, which fall &amp;reference[prone] in a space within 10 feet of the [[lookup @name lowercase]]{monster}.</p>";
+const BEHIR_SWALLOW_2014 = "<p>The [[lookup @name lowercase]]{monster} makes one [[/item .bite]]{Bite} attack against a Medium or smaller target it is &amp;reference[grappling]. If the attack hits, the target is also swallowed, and the grapple ends. While swallowed, the target is &amp;reference[blinded] and &amp;reference[restrained], it has &amp;reference[total cover] against attacks and other effects outside the [[lookup @name lowercase]]{monster}, and it takes [[/damage average activity=digest]] damage at the start of each of the [[lookup @name lowercase]]{monster}'s turns. If the [[lookup @name lowercase]]{monster} takes 30 damage or more on a single turn from the swallowed creature, the [[lookup @name lowercase]]{monster} must succeed on a [[/save activity=spit]] saving throw at the end of that turn or regurgitate the creature, which falls prone in a space within 10 feet of the [[lookup @name lowercase]]{monster}.</p>";
+const SWALLOW_2024 = "<p>Strength Saving Throw: DC [[lookup @save.dc.value activity=swallow]], [[lookup @target.affects.special activity=swallow]] by the [[lookup @name lowercase]]{monster} (it can have up to three creatures swallowed at a time). Failure: The target is swallowed by the [[lookup @name lowercase]]{monster}, and the Grappled conditions end. A swallowed creature has the &amp;Reference[Blinded apply=false] and &amp;Reference[Restrained apply=false] conditions, has &amp;Reference[Total Cover] against attacks and other effects outside the [[lookup @name lowercase]]{monster}, and takes [[/damage average activity=digest]] damage at the start of each of the [[lookup @name lowercase]]{monster}'s turns. If the [[lookup @name lowercase]]{monster} takes 30 damage or more on a single turn from a creature inside it, the [[lookup @name lowercase]]{monster} must succeed on a [[/save format=long activity=spit]] at the end of that turn or regurgitate all swallowed creatures.</p>";
+const CUBE_ENGULF_2014 = "<p>The [[lookup @name lowercase]]{monster} moves up to its speed. While doing so, it can enter Large or smaller creatures' spaces. Whenever the [[lookup @name lowercase]]{monster} enters a creature's space, the creature must make a [[/save activity=engulf]] saving throw. On a successful save, the creature can choose to be pushed 5 feet back or to the side of the [[lookup @name lowercase]]{monster}. A creature that chooses not to be pushed suffers the consequences of a failed saving throw. On a failed save, the [[lookup @name lowercase]]{monster} enters the creature's space, and the creature takes [[/damage average activity=engulf]] damage and is engulfed. The engulfed creature can't &amp;reference[suffocating]{Breathe}, is &amp;reference[restrained], and takes [[/damage average activity=digest]] damage at the start of each of the [[lookup @name lowercase]]{monster}'s turns. An engulfed creature can try to escape by taking an action to make a [[/check activity=escape]] check. On a success, the creature escapes and enters a space of its choice within 5 feet of the [[lookup @name lowercase]]{monster}.</p>";
+const CUBE_ENGULF_2024 = "<p>The [[lookup @name lowercase]]{monster} moves up to its Speed without provoking Opportunity Attacks. Dexterity Saving Throw: DC [[lookup @save.dc.value activity=engulf]], each creature whose space the [[lookup @name lowercase]]{monster} enters for the first time during this move. Failure: [[/damage average]] damage, and the target is engulfed. An engulfed target is &amp;Reference[suffocating], has the &amp;Reference[Restrained apply=false] condition, and takes [[/damage average]] damage at the start of each of the [[lookup @name lowercase]]{monster}'s turns. An engulfed target can try to escape by taking an action to make a [[/check ability=str skill=ath dc=@abilities.str.dc]] check. On a successful check, the target escapes and enters the nearest unoccupied space. Success: Half damage, and the target moves to an unoccupied space within 5 feet of the [[lookup @name lowercase]]{monster}'s.</p>";
+
+const gullet = (statuses = ["blinded", "restrained", "coverTotal"]) => effectOf("gullet", "Swallowed", statuses);
+const spitAct = (dc, condition = "") => ({ id: "spit", type: "save", activation: { type: "special", condition }, save: { ability: new Set(["con"]), dc: { value: dc } }, damage: { parts: [] }, effects: [], range: {}, target: {}, getDamageConfig: rollsOf(null) });
+const digestAct = (formula, activation = "special") => ({ id: "digest", type: "damage", activation: { type: activation }, range: {}, target: {}, effects: [], getDamageConfig: rollsOf(formula, "acid") });
+const biteAct = (formula = "3d8 + 9") => ({ id: "atk", type: "attack", activation: { type: "action" }, attack: { type: { value: "melee" } }, labels: { modifier: "+14" }, range: { reach: 10, units: "ft" }, target: {}, effects: [], getDamageConfig: rollsOf(formula, "piercing") });
+
+/** A 2014 purple worm's bite: its attack, the save that swallows on a hit, its digestion, and its save not to bring them up. */
+const wormBite2014 = () => itemOf("weapon", "bite", "Bite", {
+  activities: [
+    biteAct(),
+    { id: "swallow", type: "save", activation: { type: "special" }, save: { ability: new Set(["dex"]), dc: { value: 19 } }, damage: { onSave: "none", parts: [] }, effects: [{ _id: "gullet" }], range: {}, target: {}, getDamageConfig: rollsOf(null) },
+    digestAct("6d6"), spitAct(21, "When the [[lookup @name lowercase]]{monster} takes 30 or more damage on a single turn form a swallowed creature.")
+  ],
+  effects: [gullet()], words: WORM_BITE_2014, system: { type: { value: "natural" }, equipped: true }
+});
+/** A 2014 swallow of a creature it's grappling (a behir's; a tarrasque's), its own bite making the attack. */
+const swallow2014 = ({ digest = "6d6", dc = 14, condition = "When the [[lookup @name lowercase]]{monster} takes 30 or more damage on a single turn form a swallowed creature.", words = BEHIR_SWALLOW_2014 } = {}) => itemOf("feat", "swallow", "Swallow", {
+  activities: [digestAct(digest), { id: "take", type: "utility", activation: { type: "action" }, range: { units: "touch" }, target: {}, effects: [{ _id: "gullet" }] }, spitAct(dc, condition)],
+  effects: [gullet()], words
+});
+/** A 2024 swallow: a save (a bonus action) at one it's grappling, its digestion, and its save not to bring them up. */
+const swallow2024 = ({ digest = "5d6", spitDC = 21 } = {}) => itemOf("feat", "swallow", "Swallow", {
+  activities: [
+    { id: "swallow", type: "save", activation: { type: "bonus" }, save: { ability: new Set(["str"]), dc: { value: 19 } }, damage: { onSave: "none", parts: [] }, effects: [{ _id: "gullet" }],
+      range: { value: 0, units: "ft" }, target: { affects: { type: "creature", count: "1", special: "one Large or smaller creature Grappled" } }, getDamageConfig: rollsOf(null) },
+    digestAct(digest, ""), { ...spitAct(spitDC), activation: { type: "" } }
+  ],
+  effects: [gullet(["coverTotal", "blinded", "restrained", "prone"])], words: SWALLOW_2024
+});
+/** A gelatinous cube's engulfing (2014 or 2024), and its Ooze Cube (a creature beside it can pull another out). */
+function cube(edition) {
+  const engulf = { id: "engulf", type: "save", activation: { type: "action" }, save: { ability: new Set(["dex"]), dc: { value: 12 } }, damage: { onSave: edition === 2014 ? "half" : "none", parts: [{}] },
+    effects: [{ _id: "inside" }], range: edition === 2014 ? { units: "touch" } : { units: "self" }, target: {}, getDamageConfig: rollsOf("3d6", "acid") };
+  const escape = { id: "escape", type: "check", activation: { type: "" }, check: edition === 2014 ? { ability: "str", associated: [], dc: { value: 12, formula: "12" } } : { ability: "", associated: new Set(["ath"]), dc: { value: 12, calculation: "str" } }, effects: [], range: {}, target: {} };
+  const activities = edition === 2014 ? [escape, digestAct("6d6", "turnStart"), engulf] : [engulf, escape];
+  const item = itemOf("feat", "engulf", "Engulf", { activities, effects: [effectOf("inside", "Engulfed", edition === 2014 ? ["restrained", "suffocation"] : ["coverTotal", "restrained", "suffocation"])], words: edition === 2014 ? CUBE_ENGULF_2014 : CUBE_ENGULF_2024 });
+  const ooze = itemOf("feat", "ooze-cube", "Ooze Cube", { activities: [{ id: "pull", type: "check", activation: { type: "special" }, check: { ability: "str", associated: [], dc: { value: 12 } }, effects: [], range: {}, target: {} }] });
+  return [item, ooze];
+}
+
+describe("swallowed and engulfed: what the adapter reads", () => {
+  test("a purple worm's bite (2014): a save on its hit swallows a Large or smaller creature; its digestion and its save not to bring it up go on its spec", async () => {
+    const spec = await specOf(actorOf({ creature: "monstrosity", size: "grg", items: [wormBite2014()] }));
+    const actions = spec.actions.filter(a => a.itemId === "bite");
+    expect(actions).toHaveLength(1);
+    expect(actions[0]).toMatchObject({ kind: "strike", melee: true });
+    expect(actions[0].effects).toEqual([expect.objectContaining({ kind: "save", save: { type: "dex", dc: 19, basic: false }, conditions: { swallowed: 1 }, rounds: 100, maxSize: 3 })]);
+    expect(actions[0].effects[0].label).toBeTruthy();
+    expect(spec.inside).toEqual({ key: "swallowed", harm: [expect.objectContaining({ dice: [{ n: 6, faces: 6 }], type: "acid" })], spit: { after: 30, save: { type: "con", dc: 21 } } });
+  });
+
+  test("a behir's swallow (2014): its bite's attack, swallowing on a hit a Medium or smaller creature it's grappling", async () => {
+    const bite = itemOf("weapon", "bite", "Bite", { activities: [biteAct("3d10 + 6")], system: { type: { value: "natural" }, equipped: true } });
+    const spec = await specOf(actorOf({ creature: "monstrosity", size: "huge", items: [bite, swallow2014()] }));
+    const [swallow] = spec.actions.filter(a => a.itemId === "swallow");
+    expect(swallow).toMatchObject({ kind: "control", melee: true, bonus: 14, grappledOnly: true });
+    expect(swallow.damage).toEqual([expect.objectContaining({ dice: [{ n: 3, faces: 10 }], flat: 6, type: "piercing" })]);
+    expect(swallow.onHit.slice(0, 2)).toEqual([null, null]);
+    expect(swallow.onHit[2]).toMatchObject({ conditions: { swallowed: 1 }, rounds: 100, maxSize: 2 });
+    expect(spec.inside).toMatchObject({ key: "swallowed", spit: { after: 30, save: { type: "con", dc: 14 } } });
+    // (Its own bite stays an attack of its own.)
+    expect(spec.actions.filter(a => a.itemId === "bite").map(a => a.kind)).toEqual(["strike"]);
+  });
+
+  test("a tarrasque's swallow (2014): how much brings it up, from the save's own words before the trait's", async () => {
+    const bite = itemOf("weapon", "bite", "Bite", { activities: [biteAct("4d12 + 10")], system: { type: { value: "natural" }, equipped: true } });
+    const swallow = swallow2014({ digest: "16d6", dc: 20, condition: "When the [[lookup @name lowercase]]{monster} takes 60 or more damage on a single turn form a swallowed creature." });
+    const spec = await specOf(actorOf({ creature: "monstrosity", size: "grg", items: [bite, swallow] }));
+    expect(spec.inside).toMatchObject({ key: "swallowed", harm: [expect.objectContaining({ dice: [{ n: 16, faces: 6 }] })], spit: { after: 60, save: { type: "con", dc: 20 } } });
+  });
+
+  test("a 2024 swallow: a bonus action's save at a Large or smaller creature it's grappling", async () => {
+    const spec = await specOf(actorOf({ creature: "monstrosity", size: "grg", items: [swallow2024()] }));
+    const actions = spec.actions.filter(a => a.itemId === "swallow");
+    expect(actions).toHaveLength(1);
+    const [swallow] = actions;
+    expect(swallow).toMatchObject({ kind: "control", economy: "bonus", melee: true, reach: 5, save: { type: "str", dc: 19 }, grappledOnly: true, effectRef: { uuid: "Item.swallow", ids: ["gullet"] } });
+    expect(swallow.onSave[1]).toMatchObject({ conditions: { swallowed: 1 }, maxSize: 3 });
+    expect(swallow.onSave.slice(2)).toEqual([null, null]);
+    expect(spec.inside).toMatchObject({ key: "swallowed", harm: [expect.objectContaining({ dice: [{ n: 5, faces: 6 }], type: "acid" })], spit: { after: 30, save: { type: "con", dc: 21 } } });
+  });
+
+  test("a gelatinous cube (2014): engulfed on a failed save (its acid, halved on a success), pushed clear on a success; out with a DC 12 Strength check, a friend beside it too", async () => {
+    const spec = await specOf(actorOf({ creature: "ooze", size: "lg", items: cube(2014) }));
+    const [engulf] = spec.actions.filter(a => a.itemId === "engulf");
+    expect(engulf).toMatchObject({ kind: "control", melee: true, save: { type: "dex", dc: 12, basic: true } });
+    expect(engulf.damage).toEqual([expect.objectContaining({ dice: [{ n: 3, faces: 6 }], type: "acid" })]);
+    expect(engulf.onSave[1]).toMatchObject({ conditions: { engulfed: 1 }, maxSize: 3, escape: { dc: 12, others: "check", checks: [{ ability: "str", skill: null }] } });
+    expect(engulf.onSave[2]).toEqual({ move: { kind: "push", feet: 5 } });
+    expect(engulf.grappledOnly).toBeUndefined();
+    expect(spec.inside).toMatchObject({ key: "engulfed", harm: [expect.objectContaining({ dice: [{ n: 6, faces: 6 }] })], escape: true });
+    expect(spec.inside.spit).toBeUndefined();
+  });
+
+  test("a gelatinous cube (2024): its engulfing's own acid each turn, out with a DC 12 Strength (Athletics) check", async () => {
+    const spec = await specOf(actorOf({ creature: "ooze", size: "lg", items: cube(2024) }));
+    const [engulf] = spec.actions.filter(a => a.itemId === "engulf");
+    expect(engulf.onSave[1].escape).toEqual({ dc: 12, others: "check", checks: [{ ability: "str", skill: "ath" }] });
+    expect(engulf.onSave[2]).toEqual({ move: { kind: "push", feet: 5 } });
+    expect(spec.inside.harm).toEqual([expect.objectContaining({ dice: [{ n: 3, faces: 6 }], type: "acid" })]);
+  });
+
+  test("nothing else is a swallow: a bite with an ordinary grapple, a web's restraint", async () => {
+    const grip = itemOf("weapon", "bite", "Bite", { activities: [{ ...biteAct(), effects: [{ _id: "grip" }] }], effects: [effectOf("grip", "Grappled", ["grappled", "restrained"])], system: { type: { value: "natural" }, equipped: true } });
+    expect((await specOf(actorOf({ items: [grip] }))).inside).toBeUndefined();
+  });
+});
+
+describe("swallowed and engulfed: what the rules say", () => {
+  const unit = (id, conds = {}, effects = [], spec = {}) => ({ id, conds, effects, spec: { defenses: saves(0), ...spec }, adjacent: new Set(), pos: null });
+  const runOf = units => ({ byId: new Map(units.map(u => [u.id, u])), units, prep: { rules: dnd5eRules } });
+  const inWorm = (id, worm) => unit(id, { swallowed: 1 }, [{ key: "bite", sourceId: worm.id, conditions: { swallowed: 1 } }]);
+
+  test("Total Cover: none outside goes for one inside, and it goes for none but its holder (and another inside with it)", () => {
+    const worm = unit("worm");
+    const hero = inWorm("hero", worm);
+    const friend = inWorm("friend", worm);
+    const orc = unit("orc");
+    const run = runOf([worm, hero, friend, orc]);
+    expect(holderOf(run, hero)).toBe(worm);
+    expect([reachable(run, orc, hero), reachable(run, worm, hero), reachable(run, hero, orc)]).toEqual([false, false, false]);
+    expect([reachable(run, hero, worm), reachable(run, hero, friend), reachable(run, orc, worm)]).toEqual([true, true, true]);
+    expect(dnd5eRules.canTarget(run, orc, hero)).toBe(false);
+  });
+
+  test("Blinded and Restrained in a gullet, Restrained in an ooze: its attacks at Disadvantage, its Dexterity saves too", () => {
+    const worm = unit("worm");
+    const hero = { ...inWorm("hero", worm), prone: false };
+    const foe = { ...unit("foe"), prone: false };
+    const plain = dnd5eRules.modifiers.attack({ attacker: foe, target: foe, action: { melee: true }, distance: 5 });
+    expect(plain.advantage).toBe(0);
+    expect(dnd5eRules.modifiers.attack({ attacker: hero, target: foe, action: { melee: true }, distance: 5 }).advantage).toBe(-1);
+    expect(dnd5eRules.modifiers.save({ unit: hero, type: "dex" }).advantage).toBe(-1);
+    expect(dnd5eRules.modifiers.save({ unit: { ...unit("x", { engulfed: 1 }) }, type: "dex" }).advantage).toBe(-1);
+    expect(dnd5eRules.modifiers.exposed({ target: hero, action: { melee: true }, distance: 5 })).toBe(true);
+  });
+
+  test("a gullet's hold: nothing breaks it, its own try or a friend's, in the core's own's place; an ooze's is its escape's", () => {
+    const worm = unit("worm", {}, [], { inside: { key: "swallowed" } });
+    const hero = inWorm("hero", worm);
+    expect(dnd5eRules.holds(runOf([worm, hero]), hero)).toEqual([{ key: "swallowed", byId: "worm", dc: null, others: null, friendOnly: true }]);
+    expect(dnd5eRules.holds(runOf([worm, unit("orc")]), unit("orc"))).toEqual([]);
+  });
+
+  test("its harm: its holder's own; one with none says, the core's", () => {
+    const worm = { id: "worm", spec: { inside: { key: "swallowed", harm: [parseFormula("6d6", "acid")] } } };
+    expect(dnd5eRules.conditionHarm("swallowed", 1, { effects: [] }, worm)).toBe(worm.spec.inside.harm);
+    expect(dnd5eRules.conditionHarm("engulfed", 1, { effects: [] }, worm)).toBeUndefined();
+    expect(dnd5eRules.conditionHarm("swallowed", 1, { effects: [] }, { id: "gm", spec: {} })).toBeUndefined();
+  });
+
+  test("brought up: so much from inside on one turn, and the holder's save failed; once a turn", () => {
+    const rng = { d20: () => 10, chance: () => false, die: () => 1, next: () => 0.5 };
+    const worm = unit("worm", {}, [], { inside: { key: "swallowed", spit: { after: 30, save: { type: "con", dc: 21 } } }, defenses: saves(0) });
+    const hero = inWorm("hero", worm);
+    hero.spec.name = "Hero";
+    const run = { ...runOf([worm, hero]), acting: hero, round: 1, turn: 2, rng };
+    expect(spitUp(run, worm, 20, rng)).toBeNull();
+    const said = spitUp(run, worm, 15, rng);
+    expect(said.text).toBeTruthy();
+    expect(hero.conds.swallowed ?? 0).toBe(0);
+    expect(hero.prone).toBe(true);
+    // (Not from outside; not when it isn't the holder's.)
+    const other = inWorm("other", worm);
+    const outside = { ...runOf([worm, other, unit("orc")]), acting: unit("orc"), round: 1, turn: 3, rng };
+    expect(spitUp(outside, worm, 50, rng)).toBeNull();
+    expect(other.conds.swallowed).toBe(1);
+  });
+
+  test("a swallow of a creature it's grappling: only one in its grip", () => {
+    const worm = unit("worm");
+    const action = { kind: "control", grappledOnly: true };
+    expect(dnd5eRules.usable(null, worm, action, { grabbedBy: "worm" })).toBe(true);
+    expect(dnd5eRules.usable(null, worm, action, { grabbedBy: null })).toBe(false);
+    expect(dnd5eRules.usable(null, worm, { kind: "control" }, { grabbedBy: null })).toBe(true);
+  });
+});
+
+describe("swallowed and engulfed, in the engine", () => {
+  /** A purple worm (2014's bite) and its spec's swallowing. */
+  const wormOf = async (over = {}) => {
+    const spec = await specOf(actorOf({ creature: "monstrosity", size: "grg", items: [wormBite2014()] }));
+    const [bite] = spec.actions.filter(a => a.itemId === "bite");
+    return fighter("worm", "hostile", 0, { size: 5, actions: [{ ...bite, bonus: 50 }], inside: spec.inside, hp: { value: 200, max: 200, temp: 0 }, ...over });
+  };
+  const frail = { defenses: saves(-30) };
+
+  test("bitten, a failed save: swallowed, out of everyone's reach but its holder's, 6d6 acid at the end of its turn", async () => {
+    const run = fight([await wormOf(), fighter("hero", "friendly", 5, frail), fighter("orc", "hostile", 10)]);
+    const [worm, hero, orc] = ["worm", "hero", "orc"].map(id => run.byId.get(id));
+    takeTurn(run, worm);
+    expect(hero.conds.swallowed).toBe(1);
+    expect(holderOf(run, hero)).toBe(worm);
+    expect(dnd5eRules.canTarget(run, orc, hero)).toBe(false);
+    const before = hero.hp;
+    endOfTurn(run, hero);
+    const acid = run.log.find(e => e.type === "persistent" && e.actorId === "hero");
+    expect(acid).toMatchObject({ condition: "swallowed", damageType: "acid" });
+    expect(acid.amount).toBeGreaterThanOrEqual(6);
+    expect(acid.amount).toBeLessThanOrEqual(36);
+    expect(hero.hp).toBe(before - acid.amount);
+  });
+
+  test("inside, it goes for its holder, where its holder now is; 30 from it in a turn, and a failed save brings it up, Prone", async () => {
+    const hard = { id: "hero.fist", name: "Fist", kind: "strike", bonus: 50, melee: true, reach: 5, damage: [parseFormula("40", "bludgeoning")], hands: 0 };
+    const run = fight([await wormOf({ defenses: saves(-30) }), fighter("hero", "friendly", 5, { ...frail, actions: [hard] })]);
+    const [worm, hero] = ["worm", "hero"].map(id => run.byId.get(id));
+    takeTurn(run, worm);
+    expect(hero.conds.swallowed).toBe(1);
+    worm.pos = { x: -20, y: 0 };
+    takeTurn(run, hero);
+    expect(run.log.find(e => e.type === "attack" && e.actorId === "hero")).toMatchObject({ targetId: "worm" });
+    expect(hero.pos).toEqual({ x: -20, y: 0 });
+    expect(run.log.find(e => e.type === "endure" && e.actorId === "worm")?.text).toBeTruthy();
+    expect(hero.conds.swallowed ?? 0).toBe(0);
+    expect(hero.prone).toBe(true);
+  });
+
+  test("its holder's save made, it stays down; its holder falls, and it's let go", async () => {
+    const hard = { id: "hero.fist", name: "Fist", kind: "strike", bonus: 50, melee: true, reach: 5, damage: [parseFormula("40", "bludgeoning")], hands: 0 };
+    const run = fight([await wormOf({ defenses: saves(50), hp: { value: 60, max: 60, temp: 0 } }), fighter("hero", "friendly", 5, { ...frail, actions: [hard] })]);
+    const [worm, hero] = ["worm", "hero"].map(id => run.byId.get(id));
+    takeTurn(run, worm);
+    takeTurn(run, hero);
+    expect(run.log.find(e => e.type === "endure" && e.actorId === "worm")?.text).toBeTruthy();
+    expect(hero.conds.swallowed).toBe(1);
+    takeTurn(run, hero);
+    expect(worm.status).not.toBe("standing");
+    expect(hero.conds.swallowed ?? 0).toBe(0);
+  });
+
+  test("a gelatinous cube: engulfed on a failed save, out again with an action and a DC 12 Strength check; a save made, pushed clear", async () => {
+    const spec = await specOf(actorOf({ creature: "ooze", size: "lg", items: cube(2014) }));
+    const [engulf] = spec.actions.filter(a => a.itemId === "engulf");
+    const cubeOf = () => fighter("cube", "hostile", 0, { actions: [engulf], inside: spec.inside });
+    const run = fight([cubeOf(), fighter("hero", "friendly", 5, { defenses: saves(-30), escapeWork: { mod: 30, ath: 30, acr: 0, str: 30, dex: 0 } })]);
+    const hero = run.byId.get("hero");
+    takeTurn(run, run.byId.get("cube"));
+    expect(hero.conds.engulfed).toBe(1);
+    const [hold] = holdsOf(run, hero);
+    expect(hold).toMatchObject({ key: "engulfed", byId: "cube", dc: 12, others: "check" });
+    const got = tryHold(run, hero, hold);
+    expect(got).toMatchObject({ success: true, dc: 12 });
+    release(run, hero, hold);
+    expect(hero.conds.engulfed ?? 0).toBe(0);
+    const clear = fight([cubeOf(), fighter("hero", "friendly", 5, { defenses: saves(50) })]);
+    takeTurn(clear, clear.byId.get("cube"));
+    expect(clear.byId.get("hero").conds.engulfed ?? 0).toBe(0);
+    expect(clear.log.find(e => e.type === "forced" && e.targetId === "hero")).toMatchObject({ how: "push", feet: 5 });
+  });
+
+  test("a 2024 swallow goes only for one in its grip", async () => {
+    const spec = await specOf(actorOf({ creature: "monstrosity", size: "grg", items: [swallow2024()] }));
+    const [swallow] = spec.actions.filter(a => a.itemId === "swallow");
+    const run = fight([fighter("worm", "hostile", 0, { size: 5, actions: [swallow], inside: spec.inside }), fighter("hero", "friendly", 5, frail)]);
+    const [worm, hero] = ["worm", "hero"].map(id => run.byId.get(id));
+    takeTurn(run, worm);
+    expect(hero.conds.swallowed ?? 0).toBe(0);
+    hero.grabbedBy = "worm";
+    takeTurn(run, worm);
+    expect(hero.conds.swallowed).toBe(1);
+    // (Its grapple over once it's inside.)
+    dnd5eRules.startTurn(run, hero);
+    expect(hero.grabbedBy).toBeNull();
   });
 });

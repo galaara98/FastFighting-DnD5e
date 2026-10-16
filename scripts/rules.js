@@ -9,6 +9,7 @@
 import { DOWNED_MODELS, STATUS, rollD20, bestReactionStrike, dropCondition, part } from "./core.js";
 import { t } from "./words.js";
 import { escapeFrom, bondsDC, breakFree, HOLD_COST } from "./holds.js";
+import { reachable, insideHolds, insideTurn, spitUp } from "./inside.js";
 
 /** Proficiency bonus for a level or challenge rating. */
 export function proficiency(level) {
@@ -22,7 +23,9 @@ const coverBonus = cover => (cover === "some" ? 2 : cover === "most" ? 5 : 0);
 /** Conditions that give the creature disadvantage on its own attacks. */
 const HAMPERED = ["poisoned", "frightened", "restrained", "blinded", "prone"];
 
-const has = (u, key) => (u?.conds?.[key] ?? 0) > 0;
+/** What being inside another creature is besides, by the SRD: Blinded and Restrained in a gullet, Restrained in an ooze. */
+const INSIDE_MEANS = Object.freeze({ blinded: ["swallowed"], restrained: ["swallowed", "engulfed"] });
+const has = (u, key) => (u?.conds?.[key] ?? 0) > 0 || !!INSIDE_MEANS[key]?.some(k => (u?.conds?.[k] ?? 0) > 0);
 const exhaustion = u => u?.conds?.exhaustion ?? 0;
 /** d20 tests take -2 per level of exhaustion (2024 rules); 0 when fresh. */
 const tired = u => (exhaustion(u) ? -2 * exhaustion(u) : 0);
@@ -165,7 +168,8 @@ export const dnd5eRules = {
   /**
    * The core's own conditions' harm, in 5e's terms (the core's, at the end of the bearer's turn): burning, the SRD
    * 5.2's hazard, 1d4 fire (or what its fire's source says: spec.burns, a 2014 fire elemental's 1d10); corroding, the
-   * acid a spell left for the end of its next turn (its caster's spec.lingering, by the name its effect goes by).
+   * acid a spell left for the end of its next turn (its caster's spec.lingering, by the name its effect goes by);
+   * swallowed or engulfed, what its holder's gullet or body does (spec.inside.harm: a purple worm's 6d6 acid).
    * Undefined: the core's own.
    */
   conditionHarm(key, value, unit, by) {
@@ -174,7 +178,24 @@ export const dnd5eRules = {
       const left = (unit.effects ?? []).find(e => e.sourceId === by.id && (Number(e.conditions?.corroding) || 0) > 0 && Object.hasOwn(by.spec.lingering, e.key));
       return left ? by.spec.lingering[left.key] : undefined;
     }
+    if ( (key === "swallowed" || key === "engulfed") && by?.spec?.inside?.key === key && by.spec.inside.harm?.length ) return by.spec.inside.harm;
     return undefined;
+  },
+  /** In a gullet: no action gets it out (inside.js); only being brought up, or its holder's death. */
+  holds(run, u) {
+    return insideHolds(run, u);
+  },
+  /** Total Cover between those inside a creature and everything outside it (inside.js). */
+  canTarget(run, u, t) {
+    return reachable(run, u, t);
+  },
+  /** Hurt from inside: a gullet may bring up what it holds (inside.js). */
+  afterHarm(run, u, amount, rng) {
+    return spitUp(run, u, amount, rng);
+  },
+  /** Inside another creature: its holder's grapple over, and where its holder is (inside.js). */
+  startTurn(run, u) {
+    return insideTurn(run, u);
   },
   /**
    * Putting out the fire on itself (Burning), an action: the SRD 5.2's, it goes Prone and rolls on the ground; the 2014
@@ -424,8 +445,12 @@ export const dnd5eRules = {
     if ( key === "hidden" ) return { adv: 1, defAdv: -1 };
     return key === "prone" ? { adv: -1, defAdv: 1 } : null;
   },
-  /** Hiding takes not having a foe beside it: there's no hiding from one who's right there. */
-  usable(run, u, action) {
+  /**
+   * Hiding takes not having a foe beside it: there's no hiding from one who's right there. A swallow that takes a
+   * creature it's grappling (grappledOnly: a behir's, 2024's purple worm's) only at one it has in its grip.
+   */
+  usable(run, u, action, t = null) {
+    if ( action?.grappledOnly && t && t.grabbedBy !== u.id ) return false;
     if ( !action?.hide ) return true;
     return ![...(u.adjacent ?? [])].some(id => { const o = run.byId.get(id); return o && o.status === STATUS.STANDING && run.prep.sides[u.side]?.enemies.has(o.side); });
   },

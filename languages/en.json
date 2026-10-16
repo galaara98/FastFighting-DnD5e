@@ -37,6 +37,8 @@
     "Study": "Study",
     "VsFiends": "{name} (fiend or undead)",
     "Disengage": "takes the Disengage action",
+    "SpitsUp": "fails its save ({total} against DC {dc}) and brings up {names}, who land prone",
+    "KeepsDown": "makes its save ({total} against DC {dc}) and keeps {names} down",
     "DeathSaves": "Unconscious, death saves {s} ✓ {f} ✗",
     "Death": {
       "Twenty": "rolls a 20 on a death save and comes to with 1 HP",
