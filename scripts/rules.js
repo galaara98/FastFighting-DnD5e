@@ -8,6 +8,7 @@
  */
 import { DOWNED_MODELS, STATUS, rollD20, bestReactionStrike, dropCondition } from "./core.js";
 import { t } from "./words.js";
+import { escapeFrom, bondsDC, breakFree, HOLD_COST } from "./holds.js";
 
 /** Proficiency bonus for a level or challenge rating. */
 export function proficiency(level) {
@@ -94,6 +95,21 @@ export const dnd5eRules = {
   /** Standing up costs half your movement. */
   standCost(u) {
     return { move: Math.ceil((u.spec.speeds?.walk ?? 30) / 2) };
+  },
+  /** Every action says how many free hands it needs (adapter.js): one tied up can still use those that need none. */
+  handsKnown: true,
+
+  /* Holds ----------------------------------------------------------------- */
+  /** Breaking free of a grapple, webs, a net or bonds, and freeing a friend (holds.js): each try an action. */
+  escapeFrom,
+  bondsDC,
+  breakFree,
+  escapeCost() {
+    return { ...HOLD_COST };
+  },
+  /** Untying a friend, or pulling a net off one: an action (2024: Utilize). */
+  untieCost() {
+    return { ...HOLD_COST };
   },
 
   /* Rolls ----------------------------------------------------------------- */

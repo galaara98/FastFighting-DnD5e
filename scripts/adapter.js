@@ -17,6 +17,7 @@ import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 import { edgeActions, studyCheck } from "./edges.js";
 import { loreBoost } from "./lore.js";
 import { formulaNumber, plainDice } from "./arithmetic.js";
+import { escapeWords, grabEscapeDC } from "./holds.js";
 import { t, skillName, conditionName, statusName, coin, englishName, englishDescription, languageNames } from "./words.js";
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
@@ -28,6 +29,18 @@ const MATERIALS = ["ada", "sil"];
 /** Creature sizes, smallest first (dnd5e and PF2e use the same keys). */
 const SIZES = ["tiny", "sm", "med", "lg", "huge", "grg"];
 const sizeOf = key => { const i = SIZES.indexOf(String(key ?? "med")); return i < 0 ? 2 : i; };
+
+/** The 2024 rules (dnd5e's "modern"), unless the world plays the 2014 ones ("legacy"); an older dnd5e has no say. */
+function modernRules() {
+  try {
+    return game.settings.get("dnd5e", "rulesVersion") !== "legacy";
+  } catch ( err ) {
+    return true; // (an older dnd5e: no such setting)
+  }
+}
+
+/** A natural weapon that is a hand (claws, a fist, pincers), by identifier: it needs that hand free. */
+const HAND_LIKE = /(?:^|-)(?:claws?|fists?|pincers?|hands?)(?:-|$)/;
 
 /** What a legendary action costs from the pool: its activation's value, else "(Costs 2 Actions)" in its name. */
 export function legendaryCost(activity, item) {
@@ -407,6 +420,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     const skill = key => sys.skills?.[key];
     const skillMod = key => skill(key)?.total ?? skill(key)?.mod ?? null;
     const passive = key => skill(key)?.passive ?? (10 + (skillMod(key) ?? 0));
+    const modern = modernRules();
     return {
       id: tokenDoc.id,
       tokenId: tokenDoc.id,
@@ -457,6 +471,11 @@ export class Dnd5eAdapter extends SystemAdapter {
         pick: sys.tools?.thief && (actor.type !== "character" || actor.items.some(i => i.type === "tool" && i.system.type?.baseItem === "thief"))
           ? { mod: sys.tools.thief.total ?? sys.tools.thief.mod ?? 0 } : null
       },
+      // Breaking free (holds.js): which rules the world plays (they differ on grapples and rope), its ways out, and how
+      // hard its own grab is to break.
+      rulesVersion: modern ? "modern" : "legacy",
+      escapeWork: this.#escapeWork(sys, skillMod),
+      escapeDC: this.#escapeDC(actor, level, modern, passive),
       // Sizing a foe up (a Lore-Collector): the Study action, with its best knowledge skill (2024: Arcana, History,
       // Investigation, Nature, Religion).
       sizeUp: isMindless(sys.abilities?.int?.value, creature) ? undefined : studyCheck(sys, loreBoost()),
@@ -533,11 +552,36 @@ export class Dnd5eAdapter extends SystemAdapter {
 
   /** "Heroic Inspiration" under the 2024 rules, "Inspiration" under the 2014 ones. */
   #fateLabel() {
-    let modern = true;
+    return game.i18n.localize(modernRules() ? "FFDND5E.HeroicInspiration" : "FFDND5E.Inspiration");
+  }
+
+  /**
+   * Its ways out of a hold (holds.js), each as a check modifier: Athletics and Acrobatics (a grapple: the better of
+   * them, `mod`), and Strength and Dexterity checks on their own (a 2014 web's, a rope's).
+   */
+  #escapeWork(sys, skillMod) {
+    const check = a => (Number(sys.abilities?.[a]?.mod) || 0) + (Number(sys.abilities?.[a]?.checkBonus) || 0);
+    const str = check("str");
+    const dex = check("dex");
+    const ath = Number(skillMod("ath") ?? str);
+    const acr = Number(skillMod("acr") ?? dex);
+    return { mod: Math.max(ath, acr), ath, acr, str, dex };
+  }
+
+  /**
+   * How hard its own grab is to break: the escape DC its attacks' words give (the hardest, if they differ), else the
+   * rules': 2024, 8 + its Strength modifier + its proficiency bonus; 2014, a contest of its Athletics, taken as its
+   * passive Athletics (10 + its Athletics).
+   */
+  #escapeDC(actor, level, modern, passive) {
+    let data = {};
     try {
-      modern = game.settings.get("dnd5e", "rulesVersion") !== "legacy";
-    } catch ( err ) { /* an older dnd5e: no such setting */ }
-    return game.i18n.localize(modern ? "FFDND5E.HeroicInspiration" : "FFDND5E.Inspiration");
+      data = actor.getRollData?.() ?? {};
+    } catch ( err ) { /* none to read */ }
+    const lookup = path => { const walk = o => String(path).split(".").reduce((x, k) => x?.[k], o); return walk(data) ?? walk(actor.system); };
+    const stated = actor.items.filter(i => i.type === "weapon" || i.type === "feat").map(i => grabEscapeDC(englishDescription(i), lookup)).filter(Number.isFinite);
+    if ( stated.length ) return Math.max(...stated);
+    return modern ? 8 + (Number(actor.system.abilities?.str?.mod) || 0) + proficiency(level) : passive("ath");
   }
 
   #iwr(sys) {
@@ -673,10 +717,10 @@ export class Dnd5eAdapter extends SystemAdapter {
       out.push({ id: `${actor.id}.shove`, name: t("Shove"), kind: "control", cost: 1, traits: [], melee: true, reach: 5, maxSize: sizeOf(actor.system.traits?.size) + 1,
         save: { type: ["str", "dex"], dc, basic: false }, onSave: [prone, prone, null, null] });
       // Grapple (an Unarmed Strike, the SRD 5.2's): the same save, or Grappled (it can't move) until it breaks free,
-      // the save again at the end of each of its turns.
+      // the save again at the end of each of its turns. It takes a free hand.
       const held = { conditions: { immobilized: 1 }, rounds: 10, repeatSave: { type: ["str", "dex"], dc }, label: conditionName("grappled") };
       out.push({ id: `${actor.id}.grapple`, name: t("Grapple"), kind: "control", cost: 1, traits: [], melee: true, reach: 5, maxSize: sizeOf(actor.system.traits?.size) + 1,
-        save: { type: ["str", "dex"], dc, basic: false }, onSave: [held, held, null, null] });
+        save: { type: ["str", "dex"], dc, basic: false }, onSave: [held, held, null, null], hands: 1 });
     }
     this.#sneakAttack(actor, level, features, out);
     // Improved Divine Smite (2014) and Radiant Strikes (2024): a die of radiant on every melee weapon hit.
@@ -715,7 +759,35 @@ export class Dnd5eAdapter extends SystemAdapter {
         out.push({ ...sequence[0], id: `${actor.id}.multiattack${k ? `.${k}` : ""}`, name: label, sequence, uses: undefined, resource: undefined });
       });
     }
+    // How many free hands each needs (#hands); a sequence, what its most demanding strike does.
+    for ( const a of out ) {
+      for ( const s of a.sequence ?? [] ) s.hands ??= this.#hands(actor, s);
+      a.hands ??= a.sequence?.length ? Math.max(0, ...a.sequence.map(s => s.hands)) : this.#hands(actor, a);
+    }
     return out;
+  }
+
+  /**
+   * How many free hands an action needs (one that's tied up can still use those that need none): a weapon one, two if
+   * it's two-handed; a natural weapon none (a bite, horns, a tail, a slam of its body) unless it's a hand itself (claws,
+   * a fist, pincers: HAND_LIKE); an unarmed strike none (a kick or a head-butt will do, as the SRD has it); a spell one
+   * if it has a somatic or a material component (the hand that makes the gestures, or reaches the components or holds
+   * the focus, may be the same), else none; anything else that's held and used (a potion, a net, a wand) one; a
+   * feature, or what anyone can do (Dodge, Help, Hide, Shove), none.
+   */
+  #hands(actor, action) {
+    const item = action.itemId ? actor.items.get(action.itemId) : null;
+    if ( !item ) return 0;
+    const props = new Set(asArray(item.system.properties));
+    const ident = String(item.identifier ?? item.system?.identifier ?? "");
+    if ( item.type === "spell" ) return props.has("somatic") || props.has("material") ? 1 : 0;
+    if ( item.type === "feat" ) return HAND_LIKE.test(ident) ? 1 : 0;
+    if ( item.type === "weapon" ) {
+      if ( ident === "unarmed-strike" ) return 0;
+      if ( item.system.type?.value === "natural" ) return HAND_LIKE.test(ident) ? 1 : 0;
+      return props.has("two") ? 2 : 1;
+    }
+    return 1;
   }
 
   /**
@@ -1254,8 +1326,11 @@ export class Dnd5eAdapter extends SystemAdapter {
     const hasMods = Object.keys(mods).length > 0;
     if ( !Object.keys(conditions).length && !hasMods && !tempHp && !grab && !said?.mark && !iwr ) return null;
     const label = statuses.size || hasMods || tempHp || Object.keys(conditions).length ? effectLabel({ statuses: [...statuses], names, mods, tempHp, conditions }) : "grappled";
+    // What restrains it (webs, grasping plants, a net) says how it's broken: an action and a check (holds.js).
+    const escape = conditions.restrained
+      ? escapeWords(englishDescription(item), { dc: Number(activity.save?.dc?.value) || Number(item.actor?.system?.attributes?.spell?.dc) || null }) : null;
     return {
-      conditions: Object.keys(conditions).length ? conditions : null, mods: hasMods ? mods : null, tempHp, grab, names, iwr, refs,
+      conditions: Object.keys(conditions).length ? conditions : null, mods: hasMods ? mods : null, tempHp, grab, names, iwr, refs, escape,
       // The effect's own duration first; the words only when it has none ("the next attack roll it makes").
       rounds: rounds || said?.rounds || durationRounds(item.system.duration) || 10, label, words: said
     };
@@ -1270,7 +1345,9 @@ export class Dnd5eAdapter extends SystemAdapter {
       // Good for one roll (Guidance, Bardic Inspiration), against whoever it's set on (True Strike).
       uses: fx.words?.uses || undefined, vsFocus: fx.words?.vsFocus || undefined,
       repeatSave: fx.words?.repeatSave && save ? { type: save.type, dc: save.dc } : undefined,
-      endsOnHarm: fx.words?.endsOnHarm || undefined
+      endsOnHarm: fx.words?.endsOnHarm || undefined,
+      // (An action and a check break it: the core's effect.escape.)
+      escape: fx.escape ?? undefined
     };
   }
 
@@ -1316,7 +1393,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     const out = [];
     if ( control.grab ) out.push({ kind: "grabbed" });
     // (Guiding Bolt: the next attack at it, from anyone, has advantage.)
-    if ( control.conditions || control.mods ) out.push({ kind: "condition", conditions: control.conditions ?? undefined, mods: control.mods ?? undefined, rounds: control.rounds, label: control.label, critOnly: false, uses: control.words?.uses || undefined });
+    if ( control.conditions || control.mods ) out.push({ kind: "condition", conditions: control.conditions ?? undefined, mods: control.mods ?? undefined, rounds: control.rounds, label: control.label, critOnly: false, uses: control.words?.uses || undefined, escape: control.escape ?? undefined });
     return out;
   }
 
@@ -1349,7 +1426,8 @@ export class Dnd5eAdapter extends SystemAdapter {
     if ( !damage.length && !control?.conditions && !control?.mods ) return null;
     return {
       riderFor: item.id,
-      rider: { kind: "save", save, damage: damage.length ? damage : undefined, conditions: control?.conditions ?? undefined, mods: control?.mods ?? undefined, rounds: control?.rounds, label: control?.label ?? item.name }
+      rider: { kind: "save", save, damage: damage.length ? damage : undefined, conditions: control?.conditions ?? undefined, mods: control?.mods ?? undefined, rounds: control?.rounds, label: control?.label ?? item.name,
+        escape: control?.escape ?? undefined }
     };
   }
 

@@ -97,6 +97,11 @@ Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 
   - half damage on a successful save, or none when the spell says so.
 - **Doors:** a wooden door is AC 15 with 18 hit points, locked against a DC 15 Strength (Athletics) check or thieves' tools (proficiency, and the tools themselves for a character); opening one is a free object interaction, forcing or picking it takes an action.
 - **Opportunity attacks:** anyone with a melee weapon swings once (its reaction) at a foe leaving its reach. Disengage gets you out safely; rogues (Cunning Action) and goblins (Nimble Escape) do it as a bonus action.
+- **Breaking free** (each try an action, and so is freeing a friend):
+  - a grapple: an Athletics or Acrobatics check, whichever is better, against the grappler's escape DC: the one its attack gives ("escape DC 13"), else 8 + its Strength modifier + proficiency (2024), or 10 + its Athletics (2014's contest, as a passive check). Grappled on the sheet with no grabber known: the hardest grab among the foes within reach, else a typical DC for its level;
+  - webs, grasping plants and a net say what breaks them: a Strength check (2024: Strength (Athletics)) against the spell's save DC, or DC 10 for a net, which a friend beside it can make too;
+  - FastFighting's bonds are taken as rope: 2024, DC 15 Acrobatics to slip them or DC 20 Athletics to burst them; 2014, a DC 17 Strength check to burst them. A friend unties them with no roll.
+- **Free hands:** tied up, a creature can still use what needs none: a bite, an unarmed strike (a kick will do), a spell with only a verbal component. A weapon takes one hand (two-handed, two), and so do claws, a fist, a spell with a somatic or material component, a potion or a net, and a grapple.
 - **Advantage and disadvantage:** helpless, prone or restrained targets; poisoned, frightened or blinded attackers; Pack Tactics; ranged attacks at long range or in melee. They cancel out.
 - **Exhaustion:** −2 per level to d20 tests.
 - **Dying:**
