@@ -222,3 +222,52 @@ describe("a lore page a biography embeds", () => {
     expect(bio.about.length).toBe(5000);
   });
 });
+
+/* The SRD's words (5.1 and 5.2, CC-BY 4.0), as dnd5e's compendiums keep them. */
+const REGENERATE_2014 = "<p>You touch a creature and stimulate its natural healing ability. The target regains 4d8 + 15 hit points. For the duration of the spell, the target regains 1 hit point at the start of each of its turns (10 hit points each minute).</p>";
+const REGENERATE_2024 = "<p>A creature you touch regains 4d8 + 15 Hit Points. For the duration, the target regains [[/healing 1 type=healing]]{1 Hit Point} at the start of each of its turns, and any severed body parts regrow after 2 minutes.</p>";
+
+describe("healing that goes on (Regenerate), and a monster's Regeneration", () => {
+  /** Regenerate as dnd5e has it: a heal activity (4d8 + 15), its effect with no changes, an hour long. */
+  const regenerate = words => {
+    const effect = { id: "regen-fx", _id: "regen-fx", name: "Regenerating", statuses: new Set(), changes: [], duration: {} };
+    const heal = { id: "cast", type: "heal", activation: { type: "action" }, range: { units: "touch" }, target: {}, effects: [{ _id: "regen-fx" }],
+      getDamageConfig: () => ({ rolls: [{ parts: ["4d8 + 15"], options: { types: ["healing"] } }] }) };
+    return { ...item("spell", "regenerate", "Regenerate", { level: 7, activities: [heal], activation: { type: "action" }, range: { units: "touch" }, duration: { value: 1, units: "hour" },
+      properties: new Set(["vocal", "somatic", "material"]), method: "spell", prepared: true, description: { value: words } }), uuid: "Item.regenerate", effects: listOf([effect]) };
+  };
+
+  test("its words, 2014's and 2024's: a hit point at the start of each of its turns", async () => {
+    const { lastingHealingFrom, plainText } = await import("../scripts/adapter.js");
+    expect(lastingHealingFrom(plainText(REGENERATE_2014))).toBe(1);
+    expect(lastingHealingFrom(plainText(REGENERATE_2024))).toBe(1);
+    expect(lastingHealingFrom(plainText("<p>A creature you touch regains a number of Hit Points equal to 2d8 plus your spellcasting ability modifier.</p>"))).toBe(0);
+  });
+
+  test("Regenerate: the heal, and the core's fast healing lent for its hour (outcome.fastHealing), its own effect for a live battle", async () => {
+    for ( const words of [REGENERATE_2014, REGENERATE_2024] ) {
+      const actor = actorOf({ items: [regenerate(words)] });
+      actor.system.spells = { spell7: { value: 1, max: 1 } };
+      const cast = (await specOf(actor)).actions.find(a => a.itemId === "regenerate");
+      expect(cast).toMatchObject({ kind: "heal", reach: 5, outcome: { fastHealing: 1, rounds: 600, label: "Regenerating" }, effectRef: { uuid: "Item.regenerate", ids: ["regen-fx"] } });
+      expect(cast.heal).toEqual([expect.objectContaining({ dice: [{ n: 4, faces: 8 }], flat: 15, type: "healing" })]);
+    }
+    // (A heal that doesn't go on lends nothing.)
+    const cure = regenerate("<p>A creature you touch regains 2d8 Hit Points.</p>");
+    expect((await specOf(actorOf({ items: [cure] }))).actions.find(a => a.itemId === "regenerate").outcome).toBeUndefined();
+  });
+
+  test("already under a Regenerate when the fight starts: a hit point a turn, the spec's fast healing", async () => {
+    const actor = actorOf();
+    actor.appliedEffects = [{ origin: "Item.regenerate", changes: [], statuses: new Set() }, { origin: "Item.gone", changes: [], statuses: new Set() }];
+    globalThis.fromUuid = async uuid => (uuid === "Item.regenerate" ? regenerate(REGENERATE_2024) : null);
+    expect((await specOf(actor)).fastHealing).toBe(1);
+    expect((await specOf(actorOf())).fastHealing).toBeUndefined();
+  });
+
+  test("a monster's Regeneration, 2024's wording: the amount its heal gives, and it can die at 0", async () => {
+    const { regenerationFrom, plainText } = await import("../scripts/adapter.js");
+    const words = "<p>The oni regains [[lookup @healing.formula activity=heal]] Hit Points at the start of each of its turns if it has at least 1 Hit Point.</p>";
+    expect(regenerationFrom(plainText(words), 10)).toEqual({ amount: 10, stoppedBy: [], needsHp: true });
+  });
+});

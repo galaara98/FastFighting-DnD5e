@@ -257,6 +257,15 @@ export function regenerationFrom(text, healed = null) {
 }
 
 /**
+ * Healing that goes on after a heal, from its words (Regenerate: "the target regains 1 hit point at the start of each
+ * of its turns"; 2024's "[[/healing 1]]{1 Hit Point}" reads the same): so many hit points each turn, or 0.
+ */
+export function lastingHealingFrom(text) {
+  const m = /\bregains? (\d+) hit points? at the start of each of (?:its|their|your) turns\b/i.exec(text ?? "");
+  return m ? Number(m[1]) : 0;
+}
+
+/**
  * Undead Fortitude, from its words: "a Constitution saving throw with a DC of 5 + the damage taken, unless the
  * damage is radiant or from a critical hit" -> {save, base, except, notOnCrit}, or null.
  */
@@ -527,6 +536,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       stable: (hp.value ?? 0) <= 0 ? (sys.attributes?.death?.success ?? 0) >= 3 : undefined,
       deathSaves: { success: sys.attributes?.death?.success ?? 0, failure: sys.attributes?.death?.failure ?? 0 },
       ...mending,
+      fastHealing: await this.#lastingHealing(actor),
       ...this.#saveFeatures(actor, features, level),
       conditions: this.#conditions(actor),
       perception: skillMod("prc") ?? 0,
@@ -610,6 +620,22 @@ export class Dnd5eAdapter extends SystemAdapter {
       }
     }
     return list.length ? list : null;
+  }
+
+  /**
+   * Healing a spell already on it goes on lending it (a Regenerate cast before the fight: a hit point at the start of
+   * each of its turns): the spec's fast healing, the most of them; undefined when none does.
+   */
+  async #lastingHealing(actor) {
+    let most = 0;
+    for ( const effect of actor.appliedEffects ?? [] ) {
+      let origin = null;
+      try {
+        origin = effect.origin ? await fromUuid(effect.origin) : null;
+      } catch ( err ) { /* gone */ }
+      if ( origin?.type === "spell" ) most = Math.max(most, lastingHealingFrom(plainText(englishDescription(origin), null, true)));
+    }
+    return most || undefined;
   }
 
   /**
@@ -1670,7 +1696,13 @@ export class Dnd5eAdapter extends SystemAdapter {
       const self = item.type === "consumable" || units === "self";
       // Cure Wounds is a touch; Healing Word reaches 60 feet.
       const reach = units === "touch" ? { reach: 5 } : rangeFeet ? { range: { increment: rangeFeet, max: rangeFeet, noPenalty: true } } : {};
-      return { ...base, kind: "heal", heal, selfOnly: self, ...(self ? {} : reach) };
+      // Healing that goes on after it (Regenerate: a hit point at the start of each of its turns, for as long as it
+      // lasts): the core's fast healing, lent by the heal (outcome.fastHealing), and the spell's effect for a live battle.
+      const lasting = lastingHealingFrom(plainText(englishDescription(item), actor, true));
+      const refs = (activity.effects ?? []).map(r => r.effect ?? item.effects?.get?.(r._id ?? r.id)).filter(Boolean);
+      const outcome = lasting > 0 ? { fastHealing: lasting, rounds: durationRounds(item.system.duration) ?? 600, label: refs[0]?.name ?? item.name } : undefined;
+      const effectRef = outcome && refs.length ? { uuid: item.uuid, ids: refs.map(e => e.id ?? e._id) } : undefined;
+      return { ...base, kind: "heal", heal, selfOnly: self, ...(self ? {} : reach), outcome, effectRef };
     }
     return null;
   }
