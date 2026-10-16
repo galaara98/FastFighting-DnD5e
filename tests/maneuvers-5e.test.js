@@ -117,6 +117,20 @@ describe("a fall", () => {
   });
 });
 
+describe("getting past another creature", () => {
+  test("an ally, one down or Incapacitated, a Tiny one or one two sizes off: through it, as Difficult Terrain; any other foe: round it", () => {
+    const c = (side, size = 2, extra = {}) => ({ side, status: "standing", conds: {}, spec: { size }, ...extra });
+    const me = c("friendly");
+    expect(dnd5eRules.passThrough(null, me, c("friendly"))).toBe("difficult");
+    expect(dnd5eRules.passThrough(null, me, c("hostile"))).toBe("around");
+    expect(dnd5eRules.passThrough(null, me, c("hostile", 2, { status: "down" }))).toBe("difficult");
+    expect(dnd5eRules.passThrough(null, me, c("hostile", 2, { conds: { incapacitated: 1 } }))).toBe("difficult");
+    expect(dnd5eRules.passThrough(null, me, c("hostile", 0))).toBe("difficult");
+    expect(dnd5eRules.passThrough(null, me, c("hostile", 4))).toBe("difficult");
+    expect(dnd5eRules.passThrough(null, me, c("hostile", 3))).toBe("around");
+  });
+});
+
 /* In the engine ---------------------------------------------------------- */
 
 const at = x => ({ position: { x, y: 0, size: 5 } });

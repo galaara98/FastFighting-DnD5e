@@ -106,6 +106,16 @@ export const dnd5eRules = {
     const dice = Math.min(20, Math.floor((Number(feet) || 0) / 10));
     return dice > 0 ? [part([{ n: dice, faces: 6 }], 0, "bludgeoning")] : [];
   },
+  /**
+   * Getting past another creature on the way (the core's behavior/space.js), the SRD 5.2's: through an ally's space, an
+   * Incapacitated creature's (or one down), a Tiny creature's, or one two sizes larger or smaller, as Difficult Terrain;
+   * round any other. A move never ends in another's space (the core's, by default).
+   */
+  passThrough(run, u, o) {
+    const size = c => (Number.isFinite(c.spec.size) ? c.spec.size : 2);
+    const through = o.side === u.side || o.status !== STATUS.STANDING || !!o.conds?.incapacitated || size(o) === 0 || Math.abs(size(u) - size(o)) >= 2;
+    return through ? "difficult" : "around";
+  },
   /** Prone from it only if it hurt (the SRD: a fall that does no damage, nor a resisted one to nothing, leaves it standing). */
   fallProne(t, dealt) {
     return dealt > 0;
