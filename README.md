@@ -171,7 +171,7 @@ What "Let this character decide" stands for comes from 5e's own data wherever it
 In a live battle, each turn's changes go onto the tokens as the turn is played:
 - HP and temporary HP;
 - death saves;
-- unconscious, prone and other conditions, as dnd5e's own (Grappled for the core's grabbed, Sleeping for asleep, Hiding for hidden; exhaustion as its level), put on and taken off, and read back from the sheet each turn (the GM's too, from the Battle Interface); those dnd5e has no condition for (off guard, dazed) FastFighting keeps itself;
+- unconscious, prone and other conditions, as dnd5e's own (Grappled for the core's grabbed, Sleeping for asleep, Hiding for hidden; exhaustion as its level), put on and taken off, and read back from the sheet each turn (the GM's too, from the Battle Vantage); those dnd5e has no condition for (off guard, dazed) FastFighting keeps itself;
 - death (and defeated in the Combat Tracker);
 - spell and pact slots spent, potions drunk and limited uses spent;
 - a spell's effects (Bless, Bane, Hold Person): the spell's own effect, on for the rounds it has, and off when it ends.

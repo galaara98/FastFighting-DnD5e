@@ -45,7 +45,7 @@ export function conditionName(key) {
 }
 
 /**
- * A status's own name ("Grappled", "Sleeping"), as the system writes it, for the Battle Interface: null where the system
+ * A status's own name ("Grappled", "Sleeping"), as the system writes it, for the Battle Vantage: null where the system
  * has none, or isn't translated into the reader's language (FastFighting's own word stands in).
  */
 export function statusName(id) {
