@@ -30,6 +30,23 @@ const tired = u => (exhaustion(u) ? -2 * exhaustion(u) : 0);
 /** An affliction on it, taken hold, that weakens saves of this ability (Contagion's: adapter.js tallied). */
 const weakened = (u, type) => (u?.afflictions ?? []).some(a => a.spec?.weakSave === type && a.stage > 0 && !(a.onsetLeft > 0));
 
+/** How badly being on fire bothers a creature: as the core's own burning profile has it. */
+const BURNING_BOTHERS = 60;
+/** The DC to put out a fire on oneself, under the 2014 rules (the SRD 5.1's alchemist's fire). */
+const DOUSE_DC = 10;
+
+/** One try at putting out the fire on itself (rules.remedies): out, and Prone (2024); or a DC 10 Dexterity check (2014). */
+function douse(run, u) {
+  if ( u.spec?.rulesVersion === "legacy" ) {
+    const rules = run.prep.rules;
+    const { bonus = 0, advantage = 0 } = rules.modifiers?.check?.({ unit: u }) ?? {};
+    const roll = rollD20(rules, run.rng, (Number(u.spec.escapeWork?.dex) || 0) + bonus, DOUSE_DC, { advantage, kind: "check" });
+    if ( roll.degree < 2 ) return { success: false };
+  } else u.prone = true;
+  dropCondition(u, "burning");
+  return { success: true };
+}
+
 /** Advantage and disadvantage cancel: any of one and none of the other decides. */
 function net(adv, dis) {
   if ( adv && !dis ) return 1;
@@ -142,6 +159,31 @@ export const dnd5eRules = {
   /** Untying a friend, or pulling a net off one: an action (2024: Utilize). */
   untieCost() {
     return { ...HOLD_COST };
+  },
+
+  /* Harm that lasts ------------------------------------------------------- */
+  /**
+   * The core's own conditions' harm, in 5e's terms (the core's, at the end of the bearer's turn): burning, the SRD
+   * 5.2's hazard, 1d4 fire (or what its fire's source says: spec.burns, a 2014 fire elemental's 1d10); corroding, the
+   * acid a spell left for the end of its next turn (its caster's spec.lingering, by the name its effect goes by).
+   * Undefined: the core's own.
+   */
+  conditionHarm(key, value, unit, by) {
+    if ( key === "burning" ) return by?.spec?.burns ?? [part([{ n: 1, faces: 4 }], 0, "fire")];
+    if ( key === "corroding" && by?.spec?.lingering ) {
+      const left = (unit.effects ?? []).find(e => e.sourceId === by.id && (Number(e.conditions?.corroding) || 0) > 0 && Object.hasOwn(by.spec.lingering, e.key));
+      return left ? by.spec.lingering[left.key] : undefined;
+    }
+    return undefined;
+  },
+  /**
+   * Putting out the fire on itself (Burning), an action: the SRD 5.2's, it goes Prone and rolls on the ground; the 2014
+   * rules', a DC 10 Dexterity check (the SRD 5.1's alchemist's fire). Offered before the core's own way and as
+   * bothersome as it (its burning profile's), so it's the one tried; a friend beside it beats the flames out, the core's.
+   */
+  remedies(run, u) {
+    if ( !((Number(u.conds?.burning) || 0) > 0) || u.coreConds?.owned?.includes("burning") ) return [];
+    return [{ key: "dnd5e:burning", condition: "burning", type: "fire", label: null, annoyance: BURNING_BOTHERS, cost: { ...HOLD_COST }, try: douse }];
   },
 
   /* Rolls ----------------------------------------------------------------- */

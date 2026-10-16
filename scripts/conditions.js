@@ -30,7 +30,9 @@ const READ = {
   unconscious: ["unconscious", "incapacitated"],
   sleeping: ["asleep", "unconscious", "incapacitated"],
   silenced: ["silenced"],
-  hiding: ["hidden"]
+  hiding: ["hidden"],
+  // (The SRD 5.2's Burning hazard, dnd5e's status: the core's burning, on or off, 1d4 fire a turn by 5e's rules.)
+  burning: ["burning"]
 };
 
 /** The engine's conditions a dnd5e sheet carries, each by the status that shows it (prone's is its own change). */

@@ -92,8 +92,25 @@ const EFFECT_CONDITIONS = {
   unconscious: { unconscious: 1, incapacitated: 1 },
   incapacitated: { incapacitated: 1 },
   charmed: { controlled: 1 },
-  deafened: { deafened: 1 }
+  deafened: { deafened: 1 },
+  // (The SRD 5.2's Burning: the core's burning, its harm and its remedy 5e's: rules.js.)
+  burning: { burning: 1 }
 };
+
+/**
+ * Words that set a creature alight (2024: "it starts burning", "or take 1d4 Fire damage and start burning"; 2014: "it
+ * ignites", "and catches fire"): a sentence that says so of it, not one only about flammable objects (Fireball's,
+ * Hurl Flame's), nor a flame that "ignites nothing".
+ */
+const ALIGHT = /\b(?:it|target|creature) (?:also )?(?:starts burning|ignites|catches fire)\b|\band (?:starts? burning|catch(?:es)? fire)\b/i;
+export function setsAlight(text) {
+  return String(text ?? "").split(/(?<=[.!?;])\s+/).some(s => ALIGHT.test(s) && (/\bcreatures?\b/i.test(s) || !/\bobjects?\b/i.test(s)));
+}
+
+/** What harm left on a creature for the end of its next turn is, by its damage type: acid, the core's corroding. */
+const LINGERS = Object.freeze({ acid: "corroding" });
+/** Damage a spell deals again at the end of its target's next turn (Acid Arrow's, Vitriolic Sphere's). */
+const LINGERING_WORDS = /\bdamage at the end of its next turn\b/i;
 /** Statuses that help their bearer, as bonuses: unseen, it attacks with advantage and is attacked at disadvantage. */
 const STATUS_MODS = { invisible: { adv: 1, defAdv: -1 } };
 
@@ -559,6 +576,9 @@ export class Dnd5eAdapter extends SystemAdapter {
       deathSaves: { success: sys.attributes?.death?.success ?? 0, failure: sys.attributes?.death?.failure ?? 0 },
       ...mending,
       fastHealing: await this.#lastingHealing(actor),
+      // What lasts on whoever it hurts (rules.js conditionHarm): a fire it starts, the harm its spells leave for later.
+      burns: this.#burns(actor),
+      lingering: this.#lingerings(actor),
       ...this.#saveFeatures(actor, features, level),
       conditions: this.#conditions(actor),
       perception: skillMod("prc") ?? 0,
@@ -1380,6 +1400,54 @@ export class Dnd5eAdapter extends SystemAdapter {
     return 8;
   }
 
+  /**
+   * Harm a spell leaves for the end of its target's next turn (Acid Arrow, Vitriolic Sphere: "... acid damage at the end
+   * of its next turn"): its damage activity besides the one that strikes or calls for the save, and the core's
+   * condition for it by its type (LINGERS: acid, corroding; an untyped part, as the spell's own). {activity, condition,
+   * parts}, or null.
+   */
+  #lingering(item) {
+    const activities = [...(item.system?.activities ?? [])];
+    const main = activities.find(a => a.type === "attack" || a.type === "save");
+    const later = activities.find(a => a.type === "damage" && a !== main);
+    if ( !main || !later || !LINGERING_WORDS.test(plainText(englishDescription(item))) ) return null;
+    const own = this.#parts(main)[0]?.type;
+    const parts = this.#parts(later).map(p => (p.type === "untyped" && own ? { ...p, type: own } : p));
+    const condition = LINGERS[parts[0]?.type];
+    return condition ? { activity: later, condition, parts } : null;
+  }
+
+  /** What each of its spells leaves for later (#lingering), by the name its effect goes by (rules.js conditionHarm). */
+  #lingerings(actor) {
+    const out = {};
+    for ( const item of actor.items ) {
+      const later = this.#lingering(item);
+      if ( later ) out[item.name] = later.parts;
+    }
+    return Object.keys(out).length ? out : undefined;
+  }
+
+  /**
+   * What a fire it starts does at the start of each of its target's turns where its own words say more than the SRD
+   * 5.2's 1d4 (a 2014 fire elemental's touch: 1d10): the damage activity, not an action of its own, of an item that sets
+   * alight (rules.js conditionHarm). Undefined when none says.
+   */
+  #burns(actor) {
+    let best;
+    for ( const item of actor.items ) {
+      const activities = [...(item.system?.activities ?? [])];
+      const laid = r => asArray((r.effect ?? item.effects?.get?.(r._id ?? r.id))?.statuses);
+      const lights = activities.some(a => (a.effects ?? []).some(r => laid(r).includes("burning"))) || setsAlight(plainText(englishDescription(item)));
+      if ( !lights ) continue;
+      for ( const a of activities ) {
+        if ( a.type !== "damage" || ["action", "bonus", "legendary", "reaction"].includes(a.activation?.type) ) continue;
+        const parts = this.#parts(a);
+        if ( parts.length && (!best || meanOf(parts) > meanOf(best)) ) best = parts;
+      }
+    }
+    return best;
+  }
+
   /** Damage parts an activity deals (or heals), with the actor's numbers filled in. */
   #parts(activity, healing = false) {
     let config;
@@ -1449,6 +1517,9 @@ export class Dnd5eAdapter extends SystemAdapter {
         rounds = minutes || (/until the end of (?:its|your|the \w+'s) next turn/.test(text) ? 1 : 0) || rounds;
       }
     }
+    // Set alight by its words, where its effect doesn't say so (2024's Alchemist's Fire, a magmin's touch, a 2014 fire
+    // elemental's): the core's burning.
+    if ( !statuses.has("burning") && ["attack", "save"].includes(activity.type) && setsAlight(plainText(englishDescription(item))) ) statuses.add("burning");
     const { mods, tempHp, iwr } = modsFromChanges(changes);
     const said = words ? fromWords(plainText(englishDescription(item)), mods) : null;
     if ( !said?.endsOnAttack ) for ( const m of helpful ) for ( const [k, v] of Object.entries(m) ) mods[k] ??= v;
@@ -1595,6 +1666,11 @@ export class Dnd5eAdapter extends SystemAdapter {
   }
 
   #fromActivity(actor, item, activity) {
+    // Harm it leaves for later (Acid Arrow's, at the end of the target's next turn): what its strike or its save lays,
+    // not an action of its own.
+    const later = this.#lingering(item);
+    if ( later && later.activity.id === activity.id ) return null;
+    const lingers = later ? [{ kind: "condition", conditions: { [later.condition]: 1 }, rounds: 1, label: item.name, critOnly: false }] : [];
     if ( activity.type === "save" && (item.system.activities?.contents ?? []).some(a => a.type === "attack") ) return this.#saveRider(actor, item, activity);
     // What moves whoever it lands on (FORCED_MOVES). A spell's push on a failed save that comes after the casting ("each
     // creature that starts its turn in the line": the 2014 Gust of Wind's) is played as the casting itself, with the
@@ -1639,7 +1715,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       const melee = activity.attack?.type?.value !== "ranged";
       const bonus = numberOf(activity.labels?.modifier) ?? numberOf(activity.labels?.toHit) ?? 0;
       const fx = this.#effects(item, activity, { words: item.type === "spell" });
-      const riders = this.#riders(fx);
+      const riders = [...this.#riders(fx), ...lingers];
       // A weapon's Push mastery: pushed 10 feet away by the hit (Large or smaller only: its maxSize).
       if ( masteryOf(actor, item) === "push" ) riders.push({ kind: "move", move: { kind: "push", feet: PUSH_MASTERY.feet }, critOnly: false, maxSize: PUSH_MASTERY.maxSize });
       // Pushed away by the blow (a fire giant's hammer; Repelling Blast's, every beam that hits), knocked down too where
@@ -1688,7 +1764,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       if ( damage.length ) {
         // (Grappled on a failure, as the 2024 creatures' Constrict has it: the engine's grab.)
         const riders = [...(forced ? [{ kind: "move", move: forced.move, critOnly: false }] : []), ...(control?.grab ? [{ kind: "grabbed" }] : []),
-          ...(outcome ? [{ kind: "condition", ...outcome, critOnly: false }] : [])];
+          ...(outcome ? [{ kind: "condition", ...outcome, critOnly: false }] : []), ...lingers];
         return { ...common, kind: "save", damage, save, effects: riders.length ? riders : undefined };
       }
       // No damage: crowd control or a debuff on a failed save (Hold Person, Bane, Slow, Faerie Fire), a push (Gust of

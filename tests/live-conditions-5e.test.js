@@ -15,14 +15,14 @@ const CARRIED = {
   prone: "prone", blinded: "blinded", charmed: "charmed", deafened: "deafened", frightened: "frightened", grabbed: "grappled",
   incapacitated: "incapacitated", invisible: "invisible", paralyzed: "paralyzed", petrified: "petrified", poisoned: "poisoned",
   restrained: "restrained", stunned: "stunned", unconscious: "unconscious", asleep: "sleeping", silenced: "silenced", hidden: "hiding",
-  exhaustion: null
+  burning: "burning", exhaustion: null
 };
 
 /** dnd5e's statuses that mean others too (its conditionTypes' and statusEffects' `statuses`), and Unconscious's rider. */
 const IMPLIES = { paralyzed: ["incapacitated"], petrified: ["incapacitated"], stunned: ["incapacitated"], unconscious: ["incapacitated"], sleeping: ["incapacitated", "unconscious"] };
 const RIDERS = { unconscious: ["prone"] };
 const STATUSES = ["blinded", "charmed", "deafened", "exhaustion", "frightened", "grappled", "incapacitated", "invisible", "paralyzed", "petrified",
-  "poisoned", "prone", "restrained", "silenced", "stunned", "unconscious", "dead", "dodging", "hiding", "sleeping"];
+  "poisoned", "prone", "restrained", "silenced", "stunned", "unconscious", "dead", "dodging", "hiding", "sleeping", "burning"];
 /** dnd5e's static id for a status's effect. */
 const idOf = status => `dnd5e${status}`.padEnd(16, "0").slice(0, 16);
 

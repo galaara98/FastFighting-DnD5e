@@ -95,7 +95,8 @@
       "prone": "prone",
       "invisible": "invisible",
       "grappled": "grappled",
-      "exhaustion": "exhaustion"
+      "exhaustion": "exhaustion",
+      "burning": "burning"
     },
     "Coin": {
       "pp": "pp",
