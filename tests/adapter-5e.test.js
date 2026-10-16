@@ -85,7 +85,7 @@ describe("reactions at the master list's newer moments", () => {
 describe("Relentless Endurance", () => {
   const relentless = spent => item("feat", "relentless-endurance", "Relentless Endurance", { uses: { max: 1, spent } });
 
-  test("by its identifier: it holds on at 1 hit point with no save to make, while it has its use (a pool, for Make it So to spend)", async () => {
+  test("by its identifier: it holds on at 1 hit point with no save to make, while it has its use (a pool, spent on its sheet when it holds on)", async () => {
     const spec = await specOf(actorOf({ type: "character", items: [relentless(0)] }));
     const pool = "feature:relentless-endurance";
     expect(spec.holdOn).toEqual({ save: "con", base: -Infinity, except: [], notOnCrit: false, label: "Relentless Endurance", pool });

@@ -1,6 +1,6 @@
 /**
  * FastFighting D&D 5e: teaches FastFighting Core how Dungeons & Dragons Fifth Edition works.
- * Registers the dnd5e adapter (actor data, rules, personality defaults, leadership, Make it So) through the
+ * Registers the dnd5e adapter (actor data, rules, personality defaults, leadership, live battles) through the
  * core's public API.
  */
 import { Dnd5eAdapter } from "./adapter.js";
@@ -9,7 +9,7 @@ import { registerLoreBoost } from "./lore.js";
 export const MODULE_ID = "fast-fighting-dnd5e";
 
 /** The core API this helper is written against (older cores have no api.version: that is 1). */
-const NEEDS_API = 14;
+const NEEDS_API = 15;
 
 /**
  * The last translation module we knew of for this game system, by language: in a language other than English, this

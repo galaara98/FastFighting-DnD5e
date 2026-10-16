@@ -1,6 +1,7 @@
 /**
- * D&D Fifth Edition adapter: reads dnd5e actors (through their items' activities) into CombatantSpecs and commits
- * outcomes back. Written against dnd5e 6 on Foundry v14; values are read defensively so older data still works.
+ * D&D Fifth Edition adapter: reads dnd5e actors (through their items' activities) into CombatantSpecs and writes a
+ * live battle's changes back. Written against dnd5e 6 on Foundry v14; values are read defensively so older data still
+ * works.
  */
 import { SystemAdapter, parseFormula, part } from "./core.js";
 import { dnd5eRules, proficiency } from "./rules.js";
@@ -8,7 +9,7 @@ import { deriveDnd5eTraits, isMindless } from "./traits.js";
 import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, speaksAtAll, plainText as sheetText } from "./auto.js";
 import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
-import { commitDnd5eOutcome, commitDnd5eChanges, describeDnd5eOutcome, commitDnd5eConcession } from "./commit.js";
+import { commitDnd5eChanges, describeDnd5eOutcome, commitDnd5eConcession } from "./commit.js";
 import { readDnd5eTurn } from "./read-turn.js";
 import { modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "./effects.js";
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
@@ -752,7 +753,8 @@ export class Dnd5eAdapter extends SystemAdapter {
       if ( h ) out.holdOn = h;
     }
     // Relentless Endurance: 1 hit point instead of 0, with no save to make (any roll meets it), once a long rest, and
-    // not when the blow kills it outright (rules.adjustRoll). While it has the use: a pool, for Make it So to spend.
+    // not when the blow kills it outright (rules.adjustRoll). While it has the use: a pool, spent on its sheet when it
+    // holds on (commit.js).
     const relentless = out.holdOn ? null : featureItem(actor, "relentless-endurance", "relentless endurance");
     const left = relentless ? Math.max(0, (Number(relentless.system.uses?.max) || 1) - (Number(relentless.system.uses?.spent) || 0)) : 0;
     if ( left ) {
@@ -1297,7 +1299,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       for ( const k of ["attackDie", "checkDie", "saveDie"] ) if ( outcome.mods[k] ) outcome.mods[k] = faces;
     }
     const reach = units === "touch" ? { reach: 5 } : rangeFeet && !self ? { range: { increment: rangeFeet, max: rangeFeet, noPenalty: true } } : {};
-    // (The spell's own effects, to leave on a creature still under them when the fight ends.)
+    // (The spell's own effects, to put on a creature under it in a live battle: commit.js layEffect.)
     if ( fx?.refs?.length ) base.effectRef = { uuid: item.uuid, ids: fx.refs };
     if ( mark?.length ) {
       return { ...base, kind: "control", auto: true, melee: false, ...reach, freeWhileHeld: true,
@@ -1692,10 +1694,6 @@ export class Dnd5eAdapter extends SystemAdapter {
     if ( key === "pact" ) return game.i18n.localize("FFDND5E.PactSlot");
     if ( key.startsWith("slots:") ) return game.i18n.format("FFDND5E.SpellSlot", { level: key.split(":")[1] });
     return null;
-  }
-
-  async commitOutcome(tokenDoc, spec, final, options) {
-    return commitDnd5eOutcome(tokenDoc, spec, final, options);
   }
 
   get supportsLive() {

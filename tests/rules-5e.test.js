@@ -210,7 +210,7 @@ describe("features by identifier", () => {
   });
 });
 
-describe("Make it So: whose side a token ends up on", () => {
+describe("whose side a token ends up on", () => {
   test("won over, talked out of the fight, or a neutral that turned on the party", () => {
     expect(sideChange({ swayed: "switched", side: "friendly", status: "standing" })).toBe("friendly");
     expect(sideChange({ swayed: "neutral", side: "neutralParty", status: "standing", against: [] })).toBe("neutral");

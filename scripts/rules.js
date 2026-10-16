@@ -339,7 +339,7 @@ export const dnd5eRules = {
     u.deathFailures = 0;
   },
 
-  /** Death saves, so Make it So can write them back. */
+  /** Death saves, for a live battle to write onto the sheet and the planner to show. */
   capture(u) {
     return { deathSuccesses: u.deathSuccesses ?? 0, deathFailures: u.deathFailures ?? 0 };
   },
