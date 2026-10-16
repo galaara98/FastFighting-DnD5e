@@ -497,6 +497,11 @@ describe("Weapon Mastery's Push (the SRD 5.2's)", () => {
     takeTurn(run, run.byId.get("hero"));
     expect(run.log.find(e => e.type === "forced" && e.targetId === "orc")).toMatchObject({ how: "push", feet: 10 });
     expect(run.byId.get("orc").pos).toMatchObject({ x: 15, y: 0 });
+    // (Not a Huge one: the rider's maxSize, the core's.)
+    const huge = fight([fighter("hero", "friendly", 0, { actions: [{ ...hammer, bonus: 50 }] }), fighter("orc", "hostile", 5, { size: 4 })]);
+    takeTurn(huge, huge.byId.get("hero"));
+    expect(huge.log.some(e => e.type === "attack" && e.actorId === "hero" && e.degree >= 2)).toBe(true);
+    expect(huge.log.some(e => e.type === "forced")).toBe(false);
   });
 
   test("an outcome's own size limit: a Huge creature is past what it can do", () => {

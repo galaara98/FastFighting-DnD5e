@@ -10,8 +10,9 @@ import { beginRun, beginRound, takeTurn, prepareBattle, endOfTurn } from "../../
 import { remediesOf, holdsOf, tryHold, release } from "../../FastFighting/scripts/engine/behavior/holds.js";
 import { Dnd5eAdapter, tallyFrom, tallied, plainText, setsAlight } from "../scripts/adapter.js";
 import { dnd5eRules } from "../scripts/rules.js";
-import { holderOf, reachable, spitUp } from "../scripts/inside.js";
-import { parseFormula, applyOutcome } from "../scripts/core.js";
+import { holderOf, spitUp } from "../scripts/inside.js";
+import { parseFormula, applyOutcome, cutOff } from "../scripts/core.js";
+import { levelOf } from "../../FastFighting/scripts/engine/behavior/desire.js";
 
 /** Foundry's Roll.replaceFormulaData, as far as these tests need it. */
 const replaceFormulaData = (formula, data) => String(formula).replace(/@([a-z.0-9_-]+)/gi, (m, term) => String(term.split(".").reduce((o, k) => o?.[k], data) ?? 0));
@@ -115,6 +116,9 @@ describe("Contagion (the SRD 5.2's): a tallied affliction", () => {
     const hero = run.byId.get("hero");
     expect(run.log.find(e => e.type === "save" && e.actorId === "cleric")?.degree).toBeLessThan(2);
     expect(hero.afflictions).toHaveLength(1);
+    // (As the spell's save went, bySave: no roll of its own told as shrugging it off.)
+    expect(run.log.filter(e => e.type === "afflictionSave")).toEqual([]);
+    expect(run.log.some(e => e.type === "afflicted" && e.actorId === "hero")).toBe(true);
     expect(hero.conds.poisoned).toBe(1);
     // (Its Constitution saves at Disadvantage while it lasts; its others not.)
     expect(dnd5eRules.modifiers.save({ unit: hero, type: "con" }).advantage).toBe(-1);
@@ -204,21 +208,28 @@ describe("Burning (the SRD 5.2's hazard), as the core's burning", () => {
     expect(dnd5eRules.conditionHarm("bleeding", 2, { effects: [] }, null)).toBeUndefined();
   });
 
-  test("in the engine: 1d4 fire at the end of its turn; it puts the fire out with an action, and is Prone (2024), the core's own way not tried", () => {
+  test("in the engine: 1d4 fire at the start of its turn, none at its end; it puts the fire out with an action, and is Prone (2024), in place of the core's own way", () => {
     const run = fight([fighter("hero", "friendly", 0), fighter("orc", "hostile", 5)]);
     const hero = run.byId.get("hero");
     applyOutcome(hero, { conditions: { burning: 1 }, rounds: 10, label: "burning" }, "orc", { id: "orc.fire" });
     endOfTurn(run, hero);
+    expect(run.log.some(e => e.type === "persistent" && e.actorId === "hero")).toBe(false);
+    const remedies = remediesOf(run, hero);
+    expect(remedies).toHaveLength(1);
+    expect(remedies[0]).toMatchObject({ key: "dnd5e:burning", condition: "burning", type: "fire", annoyance: 60, cost: { action: 1 } });
+    takeTurn(run, hero);
     const burnt = run.log.find(e => e.type === "persistent" && e.actorId === "hero");
     expect(burnt).toMatchObject({ condition: "burning", damageType: "fire" });
     expect(burnt.amount).toBeGreaterThanOrEqual(1);
     expect(burnt.amount).toBeLessThanOrEqual(4);
-    const [first] = remediesOf(run, hero);
-    expect(first).toMatchObject({ key: "dnd5e:burning", condition: "burning", type: "fire", annoyance: 60, cost: { action: 1 } });
-    expect(first.try(run, hero)).toEqual({ success: true });
-    expect(hero.conds.burning ?? 0).toBe(0);
-    expect(hero.prone).toBe(true);
-    expect(remediesOf(run, hero)).toEqual([]);
+    expect(run.log.indexOf(burnt)).toBeLessThan(run.log.findIndex(e => e.actorId === "hero" && ["remedy", "attack", "move"].includes(e.type)));
+    const fresh = fight([fighter("hero", "friendly", 0), fighter("orc", "hostile", 5)]);
+    const other = fresh.byId.get("hero");
+    applyOutcome(other, { conditions: { burning: 1 }, rounds: 10, label: "burning" }, "orc", { id: "orc.fire" });
+    expect(remediesOf(fresh, other)[0].try(fresh, other)).toEqual({ success: true });
+    expect(other.conds.burning ?? 0).toBe(0);
+    expect(other.prone).toBe(true);
+    expect(remediesOf(fresh, other)).toEqual([]);
   });
 
   test("under the 2014 rules: an action and a DC 10 Dexterity check put it out (the SRD 5.1's alchemist's fire), no Prone", () => {
@@ -279,6 +290,8 @@ describe("acid a spell leaves for the end of its target's next turn, as the core
     takeTurn(run, run.byId.get("mage"));
     const hero = run.byId.get("hero");
     expect(hero.conds.corroding).toBe(1);
+    // (Nothing scrapes it off: no remedy of the core's for it here.)
+    expect(remediesOf(run, hero)).toEqual([]);
     const hp = hero.hp;
     endOfTurn(run, hero);
     const left = run.log.find(e => e.type === "persistent" && e.actorId === "hero");
@@ -415,16 +428,15 @@ describe("swallowed and engulfed: what the rules say", () => {
   const runOf = units => ({ byId: new Map(units.map(u => [u.id, u])), units, prep: { rules: dnd5eRules } });
   const inWorm = (id, worm) => unit(id, { swallowed: 1 }, [{ key: "bite", sourceId: worm.id, conditions: { swallowed: 1 } }]);
 
-  test("Total Cover: none outside goes for one inside, and it goes for none but its holder (and another inside with it)", () => {
+  test("Total Cover (the core's): none outside goes for one inside, and it goes for none but its holder (and another inside with it)", () => {
     const worm = unit("worm");
     const hero = inWorm("hero", worm);
     const friend = inWorm("friend", worm);
     const orc = unit("orc");
     const run = runOf([worm, hero, friend, orc]);
     expect(holderOf(run, hero)).toBe(worm);
-    expect([reachable(run, orc, hero), reachable(run, worm, hero), reachable(run, hero, orc)]).toEqual([false, false, false]);
-    expect([reachable(run, hero, worm), reachable(run, hero, friend), reachable(run, orc, worm)]).toEqual([true, true, true]);
-    expect(dnd5eRules.canTarget(run, orc, hero)).toBe(false);
+    expect([cutOff(run, orc, hero), cutOff(run, worm, hero), cutOff(run, hero, orc)]).toEqual([true, true, true]);
+    expect([cutOff(run, hero, worm), cutOff(run, hero, friend), cutOff(run, orc, worm)]).toEqual([false, false, false]);
   });
 
   test("Blinded and Restrained in a gullet, Restrained in an ooze: its attacks at Disadvantage, its Dexterity saves too", () => {
@@ -458,16 +470,16 @@ describe("swallowed and engulfed: what the rules say", () => {
     const worm = unit("worm", {}, [], { inside: { key: "swallowed", spit: { after: 30, save: { type: "con", dc: 21 } } }, defenses: saves(0) });
     const hero = inWorm("hero", worm);
     hero.spec.name = "Hero";
-    const run = { ...runOf([worm, hero]), acting: hero, round: 1, turn: 2, rng };
-    expect(spitUp(run, worm, 20, rng)).toBeNull();
-    const said = spitUp(run, worm, 15, rng);
+    const run = { ...runOf([worm, hero]), round: 1, turn: 2, rng };
+    expect(spitUp(run, worm, 20, rng, hero)).toBeNull();
+    const said = spitUp(run, worm, 15, rng, hero);
     expect(said.text).toBeTruthy();
     expect(hero.conds.swallowed ?? 0).toBe(0);
     expect(hero.prone).toBe(true);
     // (Not from outside; not when it isn't the holder's.)
     const other = inWorm("other", worm);
-    const outside = { ...runOf([worm, other, unit("orc")]), acting: unit("orc"), round: 1, turn: 3, rng };
-    expect(spitUp(outside, worm, 50, rng)).toBeNull();
+    const outside = { ...runOf([worm, other, unit("orc")]), round: 1, turn: 3, rng };
+    expect(spitUp(outside, worm, 50, rng, outside.units[2])).toBeNull();
     expect(other.conds.swallowed).toBe(1);
   });
 
@@ -489,15 +501,18 @@ describe("swallowed and engulfed, in the engine", () => {
   };
   const frail = { defenses: saves(-30) };
 
-  test("bitten, a failed save: swallowed, out of everyone's reach but its holder's, 6d6 acid at the end of its turn", async () => {
+  test("bitten, a failed save: swallowed, out of everyone's reach but its holder's, 6d6 acid at the start of its turn (not the end), no penalty of the core's on top", async () => {
     const run = fight([await wormOf(), fighter("hero", "friendly", 5, frail), fighter("orc", "hostile", 10)]);
     const [worm, hero, orc] = ["worm", "hero", "orc"].map(id => run.byId.get(id));
     takeTurn(run, worm);
     expect(hero.conds.swallowed).toBe(1);
     expect(holderOf(run, hero)).toBe(worm);
-    expect(dnd5eRules.canTarget(run, orc, hero)).toBe(false);
-    const before = hero.hp;
+    expect(cutOff(run, orc, hero)).toBe(true);
+    expect(hero.mods?.attack ?? 0).toBe(0);
     endOfTurn(run, hero);
+    expect(run.log.some(e => e.type === "persistent" && e.actorId === "hero")).toBe(false);
+    const before = hero.hp;
+    takeTurn(run, hero);
     const acid = run.log.find(e => e.type === "persistent" && e.actorId === "hero");
     expect(acid).toMatchObject({ condition: "swallowed", damageType: "acid" });
     expect(acid.amount).toBeGreaterThanOrEqual(6);
@@ -531,6 +546,8 @@ describe("swallowed and engulfed, in the engine", () => {
     takeTurn(run, hero);
     expect(worm.status).not.toBe("standing");
     expect(hero.conds.swallowed ?? 0).toBe(0);
+    // (Out of the corpse, Prone.)
+    expect(hero.prone).toBe(true);
   });
 
   test("a gelatinous cube: engulfed on a failed save, out again with an action and a DC 12 Strength check; a save made, pushed clear", async () => {
@@ -563,8 +580,54 @@ describe("swallowed and engulfed, in the engine", () => {
     hero.grabbedBy = "worm";
     takeTurn(run, worm);
     expect(hero.conds.swallowed).toBe(1);
-    // (Its grapple over once it's inside.)
-    dnd5eRules.startTurn(run, hero);
+    // (Its grapple over once it's inside: the core's.)
     expect(hero.grabbedBy).toBeNull();
+  });
+
+  test("a 2014 behir swallows the one it's grappling, rather than bite a weaker foe beside it (the core's opening)", async () => {
+    const bite = itemOf("weapon", "bite", "Bite", { activities: [biteAct("3d10 + 6")], system: { type: { value: "natural" }, equipped: true } });
+    const spec = await specOf(actorOf({ creature: "monstrosity", size: "huge", items: [bite, swallow2014()] }));
+    let swallowed = 0;
+    for ( let seed = 1; seed <= 6; seed++ ) {
+      const run = fight([fighter("behir", "hostile", 0, { size: 3, actions: spec.actions, inside: spec.inside, hp: { value: 160, max: 160, temp: 0 } }),
+        fighter("hero", "friendly", 10), fighter("archer", "friendly", 10, { position: { x: 5, y: 10, size: 5 }, hp: { value: 20, max: 60, temp: 0 } })], seed);
+      const [behir, hero, archer] = ["behir", "hero", "archer"].map(id => run.byId.get(id));
+      hero.grabbedBy = "behir";
+      for ( const o of [hero, archer] ) {
+        behir.adjacent.add(o.id);
+        o.adjacent.add(behir.id);
+      }
+      takeTurn(run, behir);
+      expect(run.log.some(e => e.actorId === "behir" && e.targetId === "archer")).toBe(false);
+      if ( (hero.conds.swallowed ?? 0) > 0 ) swallowed++;
+    }
+    expect(swallowed).toBeGreaterThan(3);
+  });
+});
+
+describe("healing that goes on, in a fight", () => {
+  test("Regenerate's hit point a turn lands with its heal (the core lays a heal's outcome)", () => {
+    const regenerate = { id: "cleric.regen", name: "Regenerate", kind: "heal", cost: 1, heal: [parseFormula("4d8 + 15", "healing")], reach: 5, outcome: { fastHealing: 1, rounds: 600, label: "Regenerating" } };
+    const run = fight([fighter("cleric", "friendly", 0, { actions: [fist("cleric"), regenerate], hp: { value: 20, max: 80, temp: 0 } }), fighter("orc", "hostile", 30)]);
+    const cleric = run.byId.get("cleric");
+    takeTurn(run, cleric);
+    expect(run.log.find(e => e.type === "heal" && e.actorId === "cleric")).toMatchObject({ action: "Regenerate" });
+    expect(cleric.fxHealing).toBe(1);
+  });
+});
+
+describe("fear, as 5e has it (the core's conditionWishes)", () => {
+  test("Frightened: it can't come any closer to what frightens it, so it keeps away from it, however bold; on or off, the core building how bad it's got", () => {
+    const by = { id: "dragon" };
+    expect(dnd5eRules.conditionWishes(null, {}, { key: "frightened", value: 1, by })).toEqual([{ kind: "avoid", targetId: "dragon", level: 60 }]);
+    expect(dnd5eRules.conditionWishes(null, {}, { key: "frightened", value: 1, by: null })).toEqual([]);
+    expect(dnd5eRules.conditionWishes(null, {}, { key: "poisoned", value: 1, by })).toBeNull();
+    expect(dnd5eRules.fearValued).toBeUndefined();
+    const run = fight([fighter("hero", "friendly", 0), fighter("orc", "hostile", 30)]);
+    const [hero, orc] = ["hero", "orc"].map(id => run.byId.get(id));
+    applyOutcome(hero, { conditions: { frightened: 1 }, rounds: 5, label: "" }, "orc", { id: "orc.roar" });
+    takeTurn(run, hero);
+    expect(levelOf(hero, "avoid", orc.id)).toBeGreaterThanOrEqual(60);
+    expect(run.log.some(e => e.type === "flee" && e.actorId === "hero")).toBe(false);
   });
 });

@@ -9,7 +9,7 @@
 import { DOWNED_MODELS, STATUS, rollD20, bestReactionStrike, dropCondition, part } from "./core.js";
 import { t } from "./words.js";
 import { escapeFrom, bondsDC, breakFree, HOLD_COST } from "./holds.js";
-import { reachable, insideHolds, insideTurn, spitUp } from "./inside.js";
+import { insideHolds, spitUp, outOfCorpse } from "./inside.js";
 
 /** Proficiency bonus for a level or challenge rating. */
 export function proficiency(level) {
@@ -32,6 +32,12 @@ const tired = u => (exhaustion(u) ? -2 * exhaustion(u) : 0);
 
 /** An affliction on it, taken hold, that weakens saves of this ability (Contagion's: adapter.js tallied). */
 const weakened = (u, type) => (u?.afflictions ?? []).some(a => a.spec?.weakSave === type && a.stage > 0 && !(a.onsetLeft > 0));
+
+/**
+ * How badly the frightened want to keep away from whatever frightens them (the core's desire levels: driven), the rule
+ * being that they can't come any closer: enough not to go for it while there's anything else to do.
+ */
+const FRIGHTENED_AVOID = 60;
 
 /** How badly being on fire bothers a creature: as the core's own burning profile has it. */
 const BURNING_BOTHERS = 60;
@@ -166,11 +172,10 @@ export const dnd5eRules = {
 
   /* Harm that lasts ------------------------------------------------------- */
   /**
-   * The core's own conditions' harm, in 5e's terms (the core's, at the end of the bearer's turn): burning, the SRD
-   * 5.2's hazard, 1d4 fire (or what its fire's source says: spec.burns, a 2014 fire elemental's 1d10); corroding, the
-   * acid a spell left for the end of its next turn (its caster's spec.lingering, by the name its effect goes by);
-   * swallowed or engulfed, what its holder's gullet or body does (spec.inside.harm: a purple worm's 6d6 acid).
-   * Undefined: the core's own.
+   * The core's own conditions' harm, in 5e's terms: burning, the SRD 5.2's hazard, 1d4 fire (or what its fire's source
+   * says: spec.burns, a 2014 fire elemental's 1d10); corroding, the acid a spell left for the end of its next turn (its
+   * caster's spec.lingering, by the name its effect goes by); swallowed or engulfed, what its holder's gullet or body
+   * does (spec.inside.harm: a purple worm's 6d6 acid). Undefined: the core's own.
    */
   conditionHarm(key, value, unit, by) {
     if ( key === "burning" ) return by?.spec?.burns ?? [part([{ n: 1, faces: 4 }], 0, "fire")];
@@ -181,26 +186,34 @@ export const dnd5eRules = {
     if ( (key === "swallowed" || key === "engulfed") && by?.spec?.inside?.key === key && by.spec.inside.harm?.length ) return by.spec.inside.harm;
     return undefined;
   },
+  /**
+   * What of the core's own conditions is 5e's: Burning's fire at the start of each of its turns (the SRD 5.2's), and a
+   * gullet's or an ooze's harm there too (the SRD's: at the start of its holder's turns); inside another creature, no
+   * penalty of the core's on top of 5e's own Blinded and Restrained (rules.js has); corroding, a spell's acid left for
+   * later, isn't scraped off.
+   */
+  conditionProfile(key) {
+    if ( key === "burning" ) return { harmAt: "start" };
+    if ( key === "swallowed" || key === "engulfed" ) return { harmAt: "start", mods: null };
+    if ( key === "corroding" ) return { remedy: null };
+    return null;
+  },
   /** In a gullet: no action gets it out (inside.js); only being brought up, or its holder's death. */
   holds(run, u) {
     return insideHolds(run, u);
   },
-  /** Total Cover between those inside a creature and everything outside it (inside.js). */
-  canTarget(run, u, t) {
-    return reachable(run, u, t);
-  },
   /** Hurt from inside: a gullet may bring up what it holds (inside.js). */
-  afterHarm(run, u, amount, rng) {
-    return spitUp(run, u, amount, rng);
+  afterHarm(run, u, amount, rng, ctx = {}) {
+    return spitUp(run, u, amount, rng, ctx.by ?? null);
   },
-  /** Inside another creature: its holder's grapple over, and where its holder is (inside.js). */
-  startTurn(run, u) {
-    return insideTurn(run, u);
+  /** Let go as its holder dies: out of a gullet Prone (inside.js). */
+  letGo(run, u, key) {
+    outOfCorpse(run, u, key);
   },
   /**
    * Putting out the fire on itself (Burning), an action: the SRD 5.2's, it goes Prone and rolls on the ground; the 2014
-   * rules', a DC 10 Dexterity check (the SRD 5.1's alchemist's fire). Offered before the core's own way and as
-   * bothersome as it (its burning profile's), so it's the one tried; a friend beside it beats the flames out, the core's.
+   * rules', a DC 10 Dexterity check (the SRD 5.1's alchemist's fire). In place of the core's own way, and as bothersome
+   * as it (its burning profile's); a friend beside it beats the flames out, the core's.
    */
   remedies(run, u) {
     if ( !((Number(u.conds?.burning) || 0) > 0) || u.coreConds?.owned?.includes("burning") ) return [];
@@ -220,16 +233,6 @@ export const dnd5eRules = {
   },
   attackPenalty() {
     return 0;
-  },
-
-  /**
-   * An affliction (a tallied one, Contagion's: adapter.js) takes hold when what carries it lands: the spell's own save
-   * or attack already decided it, so the core's roll on exposure doesn't. Its later saves are counted (the core's
-   * tally); were one staged, a failure would worsen it and a success ease it.
-   */
-  afflictionStep(degree, phase) {
-    if ( phase === "exposure" ) return 1;
-    return degree <= 1 ? 1 : -1;
   },
 
   /** Half damage on a successful save ("basic"), or none when the effect says so. */
@@ -433,9 +436,20 @@ export const dnd5eRules = {
     return keys.length > 0 && keys.every(k => immune.has(k) || immune.has(alias[k]));
   },
 
+  /**
+   * What 5e's fear makes a creature want while it lasts (the core's conditionWishes; Frightened is on or off, so the core
+   * builds how bad it has got itself): it can't willingly move any closer to whatever frightens it (the SRD 5.1's and
+   * 5.2's alike), so it keeps away from it, the same however bold it is. Anything else, the core's.
+   */
+  conditionWishes(run, u, { key, by }) {
+    if ( key !== "frightened" ) return null;
+    return by ? [{ kind: "avoid", targetId: by.id, level: FRIGHTENED_AVOID }] : [];
+  },
+
   /** Share of a creature's fighting a condition takes away each round. */
   conditionWeight(key) {
-    return { paralyzed: 1, stunned: 1, unconscious: 1, petrified: 1, restrained: 0.4, blinded: 0.35, frightened: 0.25, poisoned: 0.2, charmed: 0.3, slowed: 0.3 }[key];
+    // (Inside another creature: Blinded and Restrained in a gullet, Restrained in an ooze.)
+    return { paralyzed: 1, stunned: 1, unconscious: 1, petrified: 1, restrained: 0.4, blinded: 0.35, frightened: 0.25, poisoned: 0.2, charmed: 0.3, slowed: 0.3, swallowed: 0.55, engulfed: 0.4 }[key];
   },
   /**
    * Knocked prone, as numbers: its own attacks at disadvantage, and those against it (up close) at advantage. Hidden

@@ -324,7 +324,8 @@ export function tallied({ id, name, conditions, save, tally, text = "" }) {
   if ( !key || !tally ) return null;
   const type = asArray(save.type)[0];
   const weak = /\bdisadvantage on saving throws made with the chosen ability\b/i.test(text);
-  return { kind: "affliction", ...simpleAffliction({ id, name, key, most: 1, save: { type, dc: save.dc }, tally, traits: [key] }), ...(weak ? { weakSave: type } : {}) };
+  // (It takes hold as the spell's own save went, bySave: the core rolls none of its own on exposure.)
+  return { kind: "affliction", ...simpleAffliction({ id, name, key, most: 1, save: { type, dc: save.dc }, tally, traits: [key] }), bySave: true, ...(weak ? { weakSave: type } : {}) };
 }
 
 /**
