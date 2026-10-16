@@ -9,8 +9,9 @@
  */
 import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine } from "./core.js";
 import { t, conditionName } from "./words.js";
+import { WRITES, SHEET_STATUSES, hasStatus, ownStatus, statusKeys, exhaustionLevels } from "./conditions.js";
 
-/** Engine conditions that are dnd5e statuses worth showing on a creature's sheet. */
+/** Engine conditions a fight's summary names: the dnd5e statuses that outlast it. */
 const LINGERING = { frightened: "frightened", poisoned: "poisoned", blinded: "blinded", restrained: "restrained", paralyzed: "paralyzed", stunned: "stunned", charmed: "charmed", controlled: "charmed", petrified: "petrified" };
 
 const emptyRecord = (tokenDoc, actor) => ({
@@ -65,10 +66,39 @@ function resourceLabel(spec, key) {
   return spec.resourceNames?.[key] ?? spec.actions.find(a => a.resource === key)?.name ?? key;
 }
 
+/**
+ * A status put on (unless it shows already) or taken off, by its own effect. One that's only part of another's
+ * (Incapacitated with Stunned) isn't its to take off: nothing would come off, and the undo record would put it on.
+ */
 async function setStatus(actor, id, active, undo, { overlay = false } = {}) {
-  if ( actor.statuses?.has(id) === active ) return;
+  if ( active ? actor.statuses?.has(id) : !ownStatus(actor, id) ) return;
   await actor.toggleStatusEffect(id, { active, overlay });
   undo.statuses.push({ id, active: !active, overlay });
+}
+
+/**
+ * The engine's conditions set and taken off this turn, on the sheet: each it carries as its own status (conditions.js),
+ * control shown as Charmed, and exhaustion as its level. A status goes on when a condition it shows is set, unless
+ * another going on means it already (Unconscious is Incapacitated too). It comes off when one is taken off, unless
+ * another it shows is set this turn or control still holds it (Charmed taken off a creature still dominated stays).
+ * Prone is its own change (changes.prone); a status this world's dnd5e doesn't have isn't written.
+ */
+async function writeConditions(actor, conditions, final, set, undo) {
+  const on = conditions.set ?? {};
+  const cleared = conditions.cleared ?? [];
+  const statusOf = k => (k !== "prone" && Object.hasOwn(WRITES, k) && hasStatus(WRITES[k]) ? WRITES[k] : null);
+  const wanted = new Set(Object.keys(on).map(statusOf).filter(Boolean));
+  const implied = new Set([...wanted].flatMap(s => statusKeys(s).slice(1)).map(statusOf));
+  const held = new Set(Object.entries(final.conditions ?? {})
+    .filter(([k, v]) => (Number(v) || 0) > 0 && !Object.hasOwn(SHEET_STATUSES, k)).map(([k]) => statusOf(k)).filter(Boolean));
+  for ( const status of wanted ) if ( !implied.has(status) ) await setStatus(actor, status, true, undo);
+  for ( const status of new Set(cleared.map(statusOf).filter(Boolean)) ) {
+    if ( !wanted.has(status) && !held.has(status) ) await setStatus(actor, status, false, undo);
+  }
+  if ( Object.hasOwn(on, "exhaustion") ) {
+    const level = on.exhaustion === true ? 1 : Math.round(Number(on.exhaustion) || 0);
+    set("system.attributes.exhaustion", Math.max(0, Math.min(exhaustionLevels(), level)));
+  } else if ( cleared.includes("exhaustion") ) set("system.attributes.exhaustion", 0);
 }
 
 /**
@@ -139,10 +169,7 @@ export async function commitDnd5eChanges(tokenDoc, spec, changes, final, options
   }
   if ( changes.revived ) await setStatus(actor, "unconscious", false, undo);
   if ( changes.prone && !dead && !changes.fell ) await setStatus(actor, "prone", !!changes.prone.to, undo);
-  if ( changes.conditions && !dead ) {
-    for ( const k of Object.keys(changes.conditions.set) ) if ( LINGERING[k] ) await setStatus(actor, LINGERING[k], true, undo);
-    for ( const k of changes.conditions.cleared ) if ( LINGERING[k] ) await setStatus(actor, LINGERING[k], false, undo);
-  }
+  if ( changes.conditions && !dead ) await writeConditions(actor, changes.conditions, final, set, undo);
   // A spell's effects on it (Bless, Bane, Hold Person): its own, put on for the rounds it has; and off when it ends.
   if ( !dead ) for ( const e of changes.effects?.added ?? [] ) await layEffect(actor, e, options, undo);
   for ( const e of changes.effects?.ended ?? [] ) await liftEffect(actor, e, undo);

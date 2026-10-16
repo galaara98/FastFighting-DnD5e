@@ -44,6 +44,17 @@ export function conditionName(key) {
   return sysOr(c?.label ?? c?.name, `Cond.${key}`, key).toLocaleLowerCase();
 }
 
+/**
+ * A status's own name ("Grappled", "Sleeping"), as the system writes it, for the Battle Interface: null where the system
+ * has none, or isn't translated into the reader's language (FastFighting's own word stands in).
+ */
+export function statusName(id) {
+  const dnd5e = globalThis.CONFIG?.DND5E;
+  const entry = dnd5e?.conditionTypes?.[id] ?? dnd5e?.statusEffects?.[id];
+  const word = sys(entry?.name ?? entry?.label);
+  return word && systemTranslated() ? word : null;
+}
+
 /** A CONFIG entry's name: the entry itself (a key or text) or its label. */
 const labelOf = entry => sys(typeof entry === "string" ? entry : entry?.label);
 

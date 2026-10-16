@@ -10,13 +10,14 @@ import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, s
 import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
 import { commitDnd5eChanges, describeDnd5eOutcome, commitDnd5eConcession } from "./commit.js";
+import { SHEET_STATUSES, sheetCarries, sheetConditions, sheetConditionChoices } from "./conditions.js";
 import { readDnd5eTurn } from "./read-turn.js";
 import { modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "./effects.js";
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 import { edgeActions, studyCheck } from "./edges.js";
 import { loreBoost } from "./lore.js";
 import { formulaNumber, plainDice } from "./arithmetic.js";
-import { t, skillName, conditionName, coin, englishName, englishDescription, languageNames } from "./words.js";
+import { t, skillName, conditionName, statusName, coin, englishName, englishDescription, languageNames } from "./words.js";
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 const MODES = ["walk", "fly", "swim", "climb", "burrow"];
@@ -60,8 +61,12 @@ export function rechargeOf(uses) {
   return { recharge: { on: Number.isFinite(on) ? Math.min(6, Math.max(2, on)) : 6, die: 6 } };
 }
 
-/** dnd5e statuses -> engine conditions (the engine's own: prone, immobilized, incapacitated). */
-const STATUS_CONDITIONS = {
+/**
+ * What a spell's or a feature's effect does to its target, by the dnd5e statuses it puts on: the engine's conditions
+ * (its own: prone, immobilized, incapacitated), a charm (or domination) turning it to its caster's side. A grapple is
+ * the engine's grab (#effects). What a sheet's statuses mean is conditions.js's.
+ */
+const EFFECT_CONDITIONS = {
   prone: { prone: 1 },
   frightened: { frightened: 1 },
   poisoned: { poisoned: 1 },
@@ -73,11 +78,9 @@ const STATUS_CONDITIONS = {
   petrified: { petrified: 1 },
   unconscious: { unconscious: 1, incapacitated: 1 },
   incapacitated: { incapacitated: 1 },
-  charmed: { charmed: 1 },
+  charmed: { controlled: 1 },
   deafened: { deafened: 1 }
 };
-/** What a spell's effect does to its target: the same, except that a charm (or domination) turns it to its caster's side. */
-const EFFECT_CONDITIONS = { ...STATUS_CONDITIONS, charmed: { controlled: 1 } };
 /** Statuses that help their bearer, as bonuses: unseen, it attacks with advantage and is attacked at disadvantage. */
 const STATUS_MODS = { invisible: { adv: 1, defAdv: -1 } };
 /**
@@ -545,12 +548,9 @@ export class Dnd5eAdapter extends SystemAdapter {
     return iwr;
   }
 
+  /** Its conditions as its sheet has them: its statuses and its exhaustion (conditions.js), read again each live turn. */
   #conditions(actor) {
-    const out = {};
-    for ( const status of actor.statuses ?? [] ) Object.assign(out, STATUS_CONDITIONS[status] ?? {});
-    const exhaustion = Number(actor.system.attributes?.exhaustion) || 0;
-    if ( exhaustion ) out.exhaustion = exhaustion;
-    return out;
+    return sheetConditions(actor);
   }
 
   #valuables(actor) {
@@ -1728,6 +1728,26 @@ export class Dnd5eAdapter extends SystemAdapter {
   /** A live battle: one turn's changes, and only those (commit.js commitDnd5eChanges). */
   async commitChanges(tokenDoc, spec, changes, final, options) {
     return commitDnd5eChanges(tokenDoc, spec, changes, final, options);
+  }
+
+  /**
+   * dnd5e's sheets carry its own conditions: each written as its status and read back as the same key (Grappled as the
+   * engine's grabbed), and exhaustion as its level (conditions.js). The engine's others (off guard, dazed, held in place)
+   * the core keeps.
+   */
+  sheetCarries(key) {
+    return sheetCarries(key);
+  }
+
+  /** dnd5e's own name for a condition it has (Grappled, for the engine's grabbed), in the table's language. */
+  conditionLabel(key) {
+    const status = key === "exhaustion" ? key : Object.hasOwn(SHEET_STATUSES, key) ? SHEET_STATUSES[key] : null;
+    return status ? statusName(status) : null;
+  }
+
+  /** dnd5e's own conditions (as the engine's keys; exhaustion counted, by its level), then the core's. */
+  conditionChoices() {
+    return [...sheetConditionChoices(), ...(super.conditionChoices?.() ?? [])];
   }
 
   /** A player's turn in a live battle, read from the cards dnd5e made for it (read-turn.js). */
