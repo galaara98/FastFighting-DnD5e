@@ -8,7 +8,7 @@ Dungeons & Dragons Fifth Edition support for [FastFighting Core](https://github.
 
 - **Foundry:** v14
 - **System:** dnd5e 4.0 or later (written against 6.0)
-- **Needs:** FastFighting Core (API 14)
+- **Needs:** FastFighting Core (API 16)
 
 ## Installation
 
