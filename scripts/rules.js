@@ -17,6 +17,8 @@ export function proficiency(level) {
 
 /** Conditions that let attackers strike with advantage. */
 const HELPLESS = ["paralyzed", "stunned", "unconscious", "incapacitated", "restrained", "blinded", "petrified"];
+/** Cover from the walls (the core's: some of the target hidden, most of it): half cover +2, three-quarters +5. */
+const coverBonus = cover => (cover === "some" ? 2 : cover === "most" ? 5 : 0);
 /** Conditions that give the creature disadvantage on its own attacks. */
 const HAMPERED = ["poisoned", "frightened", "restrained", "blinded", "prone"];
 
@@ -106,6 +108,9 @@ export const dnd5eRules = {
     const dice = Math.min(20, Math.floor((Number(feet) || 0) / 10));
     return dice > 0 ? [part([{ n: dice, faces: 6 }], 0, "bludgeoning")] : [];
   },
+  /** Cover is 5e's (half, three-quarters: coverBonus), not the core's. */
+  handlesCover: true,
+
   /**
    * Getting past another creature on the way (the core's behavior/space.js), the SRD 5.2's: through an ally's space, an
    * Incapacitated creature's (or one down), a Tiny creature's, or one two sizes larger or smaller, as Difficult Terrain;
@@ -296,8 +301,9 @@ export const dnd5eRules = {
       if ( HELPLESS.some(k => has(target, k)) ) return true;
       return !!target.prone && !!action?.melee && (distance ?? 5) <= 5;
     },
-    defense() {
-      return 0;
+    /** Cover from the walls (the core's: some of the target hidden, most of it): half cover, +2 to AC and Dexterity saves; three-quarters, +5. */
+    defense({ cover } = {}) {
+      return coverBonus(cover);
     },
     attack({ attacker, target, action, distance, positioning, alliesAdjacent, attackerEngaged }) {
       let adv = HELPLESS.some(k => has(target, k));
@@ -312,12 +318,12 @@ export const dnd5eRules = {
       if ( ranged && positioning && action.range.increment && distance > action.range.increment ) dis = true; // long range
       return { bonus: tired(attacker), advantage: net(adv, dis) };
     },
-    save({ unit, type }) {
+    save({ unit, type, cover }) {
       // Paralyzed, stunned or unconscious creatures automatically fail Strength and Dexterity saves.
       const helpless = ["paralyzed", "stunned", "unconscious", "incapacitated", "petrified"].some(k => has(unit, k));
       if ( helpless && (type === "str" || type === "dex") ) return { bonus: -99, advantage: 0 };
       const dis = type === "dex" && has(unit, "restrained");
-      return { bonus: tired(unit), advantage: dis ? -1 : 0 };
+      return { bonus: tired(unit) + (type === "dex" ? coverBonus(cover) : 0), advantage: dis ? -1 : 0 };
     },
     check({ unit }) {
       const dis = has(unit, "poisoned") || has(unit, "frightened");

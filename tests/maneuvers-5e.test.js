@@ -205,3 +205,13 @@ describe("in the engine", () => {
     }
   });
 });
+
+describe("cover from the walls, 5e's", () => {
+  test("half cover (some of it hidden) +2 to AC and Dexterity saves, three-quarters (most) +5; the core's own none", () => {
+    expect(dnd5eRules.handlesCover).toBe(true);
+    expect(["none", "some", "most"].map(cover => dnd5eRules.modifiers.defense({ cover }))).toEqual([0, 2, 5]);
+    const u = { conds: {}, spec: {} };
+    expect(dnd5eRules.modifiers.save({ unit: u, type: "dex", cover: "most" }).bonus).toBe(5 + dnd5eRules.modifiers.save({ unit: u, type: "dex" }).bonus);
+    expect(dnd5eRules.modifiers.save({ unit: u, type: "wis", cover: "most" }).bonus).toBe(dnd5eRules.modifiers.save({ unit: u, type: "wis" }).bonus);
+  });
+});
