@@ -4,8 +4,7 @@
  * works.
  */
 import {
-  SystemAdapter, parseFormula, part, meanPart, simpleAffliction, localize, listItems, plainText as sheetText, englishName, englishDescription
-} from "./core.js";
+  SystemAdapter, parseFormula, part, meanPart, simpleAffliction, localize, listItems, plainText as sheetText, englishName, englishDescription, formulaNumber, plainDice } from "./core.js";
 import { dnd5eRules, proficiency } from "./rules.js";
 import { deriveDnd5eTraits, isMindless } from "./traits.js";
 import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, speaksAtAll } from "./auto.js";
@@ -18,7 +17,6 @@ import { modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 import { edgeActions, studyCheck } from "./edges.js";
 import { loreBoost } from "./lore.js";
-import { formulaNumber, plainDice } from "./arithmetic.js";
 import { escapeWords, grabEscapeDC } from "./holds.js";
 import { t, skillName, conditionName, statusName, coin, languageNames, inSentence, playersOf } from "./words.js";
 
