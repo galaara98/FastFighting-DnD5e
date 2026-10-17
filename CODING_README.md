@@ -15,7 +15,7 @@ How this helper teaches FastFighting Core the dnd5e system. For what it does at 
 
 ### The core's API version
 
-The core's API version is `major.bug`: `api.version` is `"19.0"`, `api.major` 19, `api.bug` 0. The helper decides whether it works with a core; the core never refuses it. `KNOWN_API` in `main.js` lists the API majors this helper is known to work with, now `[18, 19]`.
+The core's API version is `major.bug`: `api.version` is `"19.0"`, `api.major` 19, `api.bug` 0. The helper decides whether it works with a core; the core never refuses it. `KNOWN_API` in `main.js` lists the API majors this helper is known to work with, now `[19]`.
 
 - Below the oldest major listed, it doesn't register, and tells the GM the core is too old (`FFDND5E.CoreTooOld`).
 - On any other major it isn't known to work with, it registers, and warns the GM once that it hasn't been tried with that core (`FFDND5E.CoreUntested`).
