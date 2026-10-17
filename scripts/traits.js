@@ -20,6 +20,15 @@ export function isMindless(int, creature) {
   return (int ?? 10) <= 3 && !["beast", "monstrosity", "dragon"].includes(creature);
 }
 
+/**
+ * Does it fight as an animal (the core's spec.animalistic)? A beast that doesn't speak; else animal wits, very low to
+ * middling (Intelligence 11 or less), with no language. Never a mindless one (isMindless: a zombie, a golem, an ooze).
+ */
+export function isAnimalistic(int, creature, speaks) {
+  if ( speaks || isMindless(int, creature) ) return false;
+  return creature === "beast" || (int ?? 10) <= 11;
+}
+
 /** What a class leans toward (the SRD's twelve, and the artificer), by identifier. Several classes count by their share of levels. */
 const CLASS_LEANS = Object.freeze({
   barbarian: { brave: 5, tactical: -4 }, bard: { loyal: 2 }, cleric: { selfish: -4, loyal: 2 }, fighter: { brave: 2 },

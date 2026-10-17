@@ -6,7 +6,7 @@
 import {
   SystemAdapter, parseFormula, part, meanPart, simpleAffliction, localize, listItems, plainText as sheetText, englishName, englishDescription, formulaNumber, plainDice } from "./core.js";
 import { dnd5eRules, proficiency } from "./rules.js";
-import { deriveDnd5eTraits, isMindless } from "./traits.js";
+import { deriveDnd5eTraits, isMindless, isAnimalistic } from "./traits.js";
 import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, speaksAtAll } from "./auto.js";
 import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
@@ -1079,6 +1079,8 @@ export class Dnd5eAdapter extends SystemAdapter {
       // Investigation, Nature, Religion).
       sizeUp: isMindless(sys.abilities?.int?.value, creature) ? undefined : studyCheck(sys, loreBoost()),
       creatureTraits: [creature],
+      // (Whether it fights as an animal does: the core's behavior/animal.js. Never a character.)
+      animalistic: actor.type !== "character" && isAnimalistic(sys.abilities?.int?.value, creature, speaksAtAll(sys.traits?.languages, languageNames())),
       // A halfling's Nimbleness: through the space of any creature larger than it (rules.passThrough), by identifier or
       // the flag its effect sets.
       throughLarger: hasFeature(features, "halfling-nimbleness", "halfling nimbleness") || !!actor.flags?.dnd5e?.halflingNimbleness || undefined,

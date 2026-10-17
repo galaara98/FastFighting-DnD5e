@@ -40,7 +40,7 @@ When new functionality can't be played "close enough" with what the core already
 | `holds.js` | Breaking grapples, restraints and bonds; escape words and DCs. Pure. |
 | `inside.js` | Swallowed and engulfed: a gullet's hold, being brought up, out of a corpse. Pure. |
 | `multiattack.js` | A Multiattack description into strike sequences. Pure. |
-| `traits.js` | Personality traits and flags. Pure. |
+| `traits.js` | Personality traits and flags; `isMindless`, and `isAnimalistic` (the core's `spec.animalistic`: a beast that doesn't speak, else Intelligence 11 or less with no language; never a mindless one or a character). Pure. |
 | `auto.js` | Playstyle hints, "Let this character decide" answers, biography, languages. Pure. |
 | `leadership.js` | Ranking leaders and their bonus. |
 | `conditions.js` | dnd5e statuses and the core's conditions, both ways. |
