@@ -1,11 +1,12 @@
 /**
- * A reaction's strike rolled with dnd5e's own rolls in a live battle (core API 19): the attack activity the engine's
+ * A strike rolled with dnd5e's own rolls in a live battle (core API 19 rollStrike): the attack activity the engine's
  * strike came from, found by its id; rolled at the target (its AC and the cards' targets given to the roll, the user's
- * own targets left alone), with no dialog, in a melee mode; its degree (critical, hit, miss, fumble) with the natural
- * d20 and the total; on a hit its damage by type as rolled, a critical's rolled as one; and null where it can't be.
+ * own targets left alone), with no dialog, in the mode it's made in (in hand, thrown, a shot), with the engine's
+ * advantage, for the GMs only when secret; its degree (critical, hit, miss, fumble) with the natural d20 and the total;
+ * on a hit its damage by type as rolled, a critical's rolled as one; and null where it can't be.
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { Dnd5eAdapter, attackActivityOf, rollDnd5eReaction } from "../scripts/adapter.js";
+import { Dnd5eAdapter, attackActivityOf, rollDnd5eStrike } from "../scripts/adapter.js";
 
 const was = { dnd5e: globalThis.dnd5e, ChatMessage: globalThis.ChatMessage, Roll: globalThis.Roll };
 afterEach(() => {
@@ -93,7 +94,7 @@ describe("the attack the engine's strike came from, found by its id", () => {
     const strike = spec.actions.find(a => a.kind === "strike" && a.itemId === "dagger");
     expect(attackActivityOf(actor, strike.id)).toBe(stab);
     stab.next.attack = d20(9, 12);
-    await new Dnd5eAdapter().rollReaction(token, { action: { id: strike.id, name: strike.name }, target: goblin() });
+    await new Dnd5eAdapter().rollStrike(token, { action: { id: strike.id, name: strike.name }, target: goblin() });
     expect(stab.rollAttack).toHaveBeenCalledTimes(1);
     expect(axe.rollAttack).not.toHaveBeenCalled();
   });
@@ -126,7 +127,7 @@ describe("rolled the dnd5e way, at the target", () => {
     globalThis.game.user = { targets: new Set(["someone else"]) };
     axe.next.attack = d20(14, 19);
     axe.next.damage = [damageRoll(9, "slashing")];
-    await rollDnd5eReaction(token, { action: { id: "orc.greataxe.atk" }, target: goblin() });
+    await rollDnd5eStrike(token, { action: { id: "orc.greataxe.atk" }, target: goblin() });
     expect(axe.rollAttack).toHaveBeenCalledWith({ target: 15, attackMode: "twoHanded" }, { configure: false }, { data: { system: { targets: [GOBLIN] } } });
     expect(axe.rollDamage.mock.calls[0][1]).toEqual({ configure: false });
     expect(axe.rollDamage.mock.calls[0][2]).toEqual({ data: { system: { targets: [GOBLIN] } } });
@@ -141,7 +142,7 @@ describe("rolled the dnd5e way, at the target", () => {
     globalThis.ChatMessage = { implementation: { getSpeaker } };
     const target = goblin();
     axe.next.attack = d20(9, 15);
-    await rollDnd5eReaction(token, { action: { id: "orc.greataxe.atk" }, target });
+    await rollDnd5eStrike(token, { action: { id: "orc.greataxe.atk" }, target });
     expect(getDescriptors).toHaveBeenCalledWith([target]);
     expect(getSpeaker).toHaveBeenCalledWith({ token });
     expect(axe.rollAttack).toHaveBeenCalledWith({ target: 16, attackMode: "twoHanded" }, { configure: false },
@@ -151,17 +152,43 @@ describe("rolled the dnd5e way, at the target", () => {
   test("in a melee mode: a dagger last thrown strikes in hand; one last used two-handed stays so; a feature's attack, dnd5e's own", async () => {
     const thrown = orc({ last: "thrown" });
     thrown.stab.next.attack = d20(9, 12);
-    await rollDnd5eReaction(thrown.token, { action: { id: "orc.dagger.stab" }, target: goblin() });
+    await rollDnd5eStrike(thrown.token, { action: { id: "orc.dagger.stab" }, target: goblin() });
     expect(thrown.stab.rollAttack.mock.calls[0][0]).toEqual({ target: 15, attackMode: "oneHanded" });
     const bite = attack("bite");
     const sword = attack("cut");
     const actor = actorOf([weapon("jaws", [bite], { type: "feat", modes: [] }), weapon("longsword", [sword], { modes: ["oneHanded", "twoHanded"], last: "twoHanded" })]);
     bite.next.attack = d20(9, 12);
     sword.next.attack = d20(9, 12);
-    await rollDnd5eReaction({ actor }, { action: { id: "orc.jaws.bite" }, target: goblin() });
-    await rollDnd5eReaction({ actor }, { action: { id: "orc.longsword.cut" }, target: goblin() });
+    await rollDnd5eStrike({ actor }, { action: { id: "orc.jaws.bite" }, target: goblin() });
+    await rollDnd5eStrike({ actor }, { action: { id: "orc.longsword.cut" }, target: goblin() });
     expect(bite.rollAttack.mock.calls[0][0]).toEqual({ target: 15 });
     expect(sword.rollAttack.mock.calls[0][0]).toEqual({ target: 15, attackMode: "twoHanded" });
+  });
+
+  test("a throw in a throw's mode; a shot in dnd5e's own", async () => {
+    const thrown = orc();
+    thrown.stab.next.attack = d20(9, 12);
+    await rollDnd5eStrike(thrown.token, { action: { id: "orc.dagger.stab", ranged: true, thrown: true }, target: goblin() });
+    expect(thrown.stab.rollAttack.mock.calls[0][0]).toEqual({ target: 15, attackMode: "thrown" });
+    const shot = orc();
+    shot.stab.next.attack = d20(9, 12);
+    await rollDnd5eStrike(shot.token, { action: { id: "orc.dagger.stab", ranged: true }, target: goblin() });
+    expect(shot.stab.rollAttack.mock.calls[0][0]).toEqual({ target: 15 });
+  });
+
+  test("with the engine's advantage or disadvantage; secret, for the GMs only, the attack and its damage", async () => {
+    for ( const [advantage, edge] of [[1, { advantage: true }], [-2, { disadvantage: true }], [0, {}]] ) {
+      const { token, axe } = orc();
+      axe.next.attack = d20(14, 19);
+      await rollDnd5eStrike(token, { action: { id: "orc.greataxe.atk" }, target: goblin(), advantage });
+      expect(axe.rollAttack.mock.calls[0][0]).toEqual({ target: 15, attackMode: "twoHanded", ...edge });
+    }
+    const { token, axe } = orc();
+    axe.next.attack = d20(14, 19);
+    axe.next.damage = [damageRoll(9, "slashing")];
+    await rollDnd5eStrike(token, { action: { id: "orc.greataxe.atk" }, target: goblin(), secret: true });
+    expect(axe.rollAttack.mock.calls[0][2]).toMatchObject({ rollMode: "gm" });
+    expect(axe.rollDamage.mock.calls[0][2]).toMatchObject({ rollMode: "gm" });
   });
 });
 
@@ -170,7 +197,7 @@ describe("what the roll came to", () => {
     const { token, axe } = orc();
     axe.next.attack = attackRoll;
     axe.next.damage = damage;
-    const out = await rollDnd5eReaction(token, { action: { id: "orc.greataxe.atk" }, target: goblin() });
+    const out = await rollDnd5eStrike(token, { action: { id: "orc.greataxe.atk" }, target: goblin() });
     return { out, axe };
   };
 
@@ -206,7 +233,7 @@ describe("what the roll came to", () => {
     actor.items.push(arrow);
     stab.next.attack = d20(15, 20, { options: { ability: "dex", attackMode: "oneHanded", ammunition: "arrow" } });
     stab.next.damage = [damageRoll(4, "piercing"), damageRoll(3, "fire"), damageRoll(2, "piercing"), damageRoll(-1, "cold")];
-    const out = await rollDnd5eReaction(token, { action: { id: "orc.dagger.stab" }, target: goblin() });
+    const out = await rollDnd5eStrike(token, { action: { id: "orc.dagger.stab" }, target: goblin() });
     expect(out.damage).toEqual({ byType: { piercing: 6, fire: 3, cold: 0 } });
     expect(stab.rollDamage.mock.calls[0][0]).toEqual({ isCritical: false, ability: "dex", attackMode: "oneHanded", ammunition: arrow });
   });
@@ -217,7 +244,7 @@ describe("what the roll came to", () => {
     axe.next.attack = d20(12, 15);
     axe.rollDamage.mockRejectedValueOnce(new Error("no"));
     const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await rollDnd5eReaction(token, { action: { id: "orc.greataxe.atk" }, target: goblin() })).toEqual({ attack: { degree: 2, natural: 12, total: 15 }, damage: null });
+    expect(await rollDnd5eStrike(token, { action: { id: "orc.greataxe.atk" }, target: goblin() })).toEqual({ attack: { degree: 2, natural: 12, total: 15 }, damage: null });
     quiet.mockRestore();
   });
 });
@@ -225,23 +252,23 @@ describe("what the roll came to", () => {
 describe("null, for the engine's own dice", () => {
   test("no such attack: nothing is rolled", async () => {
     const { token, axe, stab } = orc();
-    expect(await new Dnd5eAdapter().rollReaction(token, { action: { id: "orc.club.atk", name: "Club" }, target: goblin() })).toBeNull();
-    expect(await rollDnd5eReaction(token, { action: null, target: goblin() })).toBeNull();
+    expect(await new Dnd5eAdapter().rollStrike(token, { action: { id: "orc.club.atk", name: "Club" }, target: goblin() })).toBeNull();
+    expect(await rollDnd5eStrike(token, { action: null, target: goblin() })).toBeNull();
     expect(axe.rollAttack).not.toHaveBeenCalled();
     expect(stab.rollAttack).not.toHaveBeenCalled();
   });
 
   test("no target, or one with no AC to hit (total cover): nothing is rolled", async () => {
     const { token, axe } = orc();
-    expect(await rollDnd5eReaction(token, { action: { id: "orc.greataxe.atk" }, target: null })).toBeNull();
-    expect(await rollDnd5eReaction(token, { action: { id: "orc.greataxe.atk" }, target: goblin({ cover: true }) })).toBeNull();
+    expect(await rollDnd5eStrike(token, { action: { id: "orc.greataxe.atk" }, target: null })).toBeNull();
+    expect(await rollDnd5eStrike(token, { action: { id: "orc.greataxe.atk" }, target: goblin({ cover: true }) })).toBeNull();
     expect(axe.rollAttack).not.toHaveBeenCalled();
   });
 
   test("an attack dnd5e didn't roll (a module cancelled it)", async () => {
     const { token, axe } = orc();
     axe.next.attack = null;
-    expect(await rollDnd5eReaction(token, { action: { id: "orc.greataxe.atk" }, target: goblin() })).toBeNull();
+    expect(await rollDnd5eStrike(token, { action: { id: "orc.greataxe.atk" }, target: goblin() })).toBeNull();
     expect(axe.rollDamage).not.toHaveBeenCalled();
   });
 });

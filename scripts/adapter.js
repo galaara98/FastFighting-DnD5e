@@ -572,14 +572,21 @@ export function attackActivityOf(actor, id) {
 /** dnd5e's attack modes for a plain melee attack (a reaction's strike is one): not thrown, nor the off hand's. */
 const MELEE_MODES = ["oneHanded", "twoHanded"];
 
+/** dnd5e's attack modes for a throw. */
+const THROWN_MODES = ["thrown", "thrown-offhand"];
+
 /**
- * The attack mode a reaction's melee strike is made in: the one last used with the weapon if it's a melee mode, else its
- * first (a dagger last thrown strikes in hand). Undefined for what has no modes (a feature's attack): dnd5e's own.
+ * The attack mode a strike is made in, as the engine makes it: thrown, a throw's mode (the one last used, if a throw;
+ * else its first); a melee strike (a reaction's is one), the one last used with the weapon if it's a melee mode, else
+ * its first (a dagger last thrown strikes in hand); a shot, dnd5e's own. Undefined for what has no modes (a feature's
+ * attack): dnd5e's own.
  */
-function meleeMode(activity) {
+function attackModeFor(activity, { ranged = false, thrown = false } = {}) {
+  if ( ranged && !thrown ) return undefined;
+  const allowed = thrown ? THROWN_MODES : MELEE_MODES;
   const modes = Array.from(activity.item?.system?.attackModes ?? [], m => m?.value).filter(Boolean);
   const last = activity.item?.getFlag?.("dnd5e", `last.${activity.id}.attackMode`);
-  return MELEE_MODES.includes(last) && modes.includes(last) ? last : modes.find(m => MELEE_MODES.includes(m));
+  return allowed.includes(last) && modes.includes(last) ? last : modes.find(m => allowed.includes(m));
 }
 
 /**
@@ -596,14 +603,16 @@ function targetsOf(token) {
 }
 
 /**
- * A reaction's strike rolled with dnd5e's own attack and damage rolls (core API 19), their cards in the chat. The target
- * goes to the roll itself, as dnd5e would take it from the user's targets (the roll's `target`, its AC; the cards'
- * `system.targets`), so the user's own targets are never touched. No dialog. dnd5e 6 keeps no count of reactions, so
+ * A strike rolled with dnd5e's own attack and damage rolls (core API 19 rollStrike: every strike in a turn FastFighting
+ * plays, and a reaction's), their cards in the chat. The target goes to the roll itself, as dnd5e would take it from the
+ * user's targets (the roll's `target`, its AC; the cards' `system.targets`), so the user's own targets are never
+ * touched. No dialog; with advantage or disadvantage as the engine has it (`advantage` above or below 0), in the attack
+ * mode it's made in (a throw, a shot, in hand); for the GMs only when `secret`. dnd5e 6 keeps no count of reactions, so
  * there's nothing to mark. On a hit, its damage, a critical's as dnd5e doubles it (its critical settings).
  * Returns {attack: {degree: 0 fumble, 1 miss, 2 hit, 3 critical, natural, total}, damage: {byType} | null}, or null
  * when it can't be rolled here (the engine's own dice).
  */
-export async function rollDnd5eReaction(token, { action, target } = {}) {
+export async function rollDnd5eStrike(token, { action, target, advantage = 0, secret = false } = {}) {
   const actor = token?.actor;
   const activity = actor ? attackActivityOf(actor, action?.id) : null;
   if ( !activity || !target?.actor ) return null;
@@ -612,9 +621,10 @@ export async function rollDnd5eReaction(token, { action, target } = {}) {
   if ( !Number.isFinite(ac) ) return null;
   // (Each roll its own message settings: dnd5e keeps and changes what it's given.)
   const speaker = globalThis.ChatMessage?.implementation?.getSpeaker?.({ token });
-  const message = () => ({ data: { ...(speaker ? { speaker: { ...speaker } } : {}), system: { targets: targets.map(t => ({ ...t })) } } });
-  const mode = meleeMode(activity);
-  const rolls = await activity.rollAttack({ target: ac, ...(mode ? { attackMode: mode } : {}) }, { configure: false }, message());
+  const message = () => ({ ...(secret ? { rollMode: "gm" } : {}), data: { ...(speaker ? { speaker: { ...speaker } } : {}), system: { targets: targets.map(t => ({ ...t })) } } });
+  const mode = attackModeFor(activity, action ?? {});
+  const edge = Number(advantage) > 0 ? { advantage: true } : Number(advantage) < 0 ? { disadvantage: true } : {};
+  const rolls = await activity.rollAttack({ target: ac, ...edge, ...(mode ? { attackMode: mode } : {}) }, { configure: false }, message());
   const roll = rolls?.[0];
   if ( !roll ) return null;
   const total = Number(roll.total);
@@ -2418,9 +2428,9 @@ export class Dnd5eAdapter extends SystemAdapter {
     return null;
   }
 
-  /** API 19: a reaction's strike rolled with dnd5e's own attack and damage rolls, at its target (rollDnd5eReaction). */
-  async rollReaction(token, { action, target } = {}) {
-    return rollDnd5eReaction(token, { action, target });
+  /** API 19: a strike rolled with dnd5e's own attack and damage rolls, at its target (rollDnd5eStrike). */
+  async rollStrike(token, options = {}) {
+    return rollDnd5eStrike(token, options);
   }
 
   /**
