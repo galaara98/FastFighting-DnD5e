@@ -476,6 +476,10 @@ export function moreProjectilesPerLevel(description) {
   return m ? (/two/i.test(m[1]) ? 2 : 1) : 0;
 }
 
+/** The level its spells' darts and beams go by (projectileCount): a character's level, else its spellcaster level. */
+const casterLevelOf = actor => (actor?.type === "character" ? (actor.system?.details?.level ?? 1)
+  : (actor?.system?.attributes?.spell?.level ?? actor?.system?.details?.spellLevel ?? 1));
+
 /**
  * The words of an HTML description, with dnd5e's enrichers read: [[/item .id]]{label} (or the item's own name),
  * [[lookup @name]]{label}, @UUID[...]{label}.
@@ -800,6 +804,139 @@ export async function rollDnd5eCheck(token, { purpose = null, skill = null, dc, 
     return null;
   }
   return graded(rolls, target, "check");
+}
+
+/**
+ * The activity an action's name names, as #fromActivity names them: `<item>: <activity>`, or `<item>` (its only
+ * activity, its attack, or one named as the item is; never an "at Advantage" variant). {item, activity}, or null.
+ */
+function activityNamed(actor, name) {
+  const said = String(name ?? "");
+  if ( !said ) return null;
+  for ( const item of actor?.items ?? [] ) {
+    const all = Array.from(item?.system?.activities ?? []);
+    const plain = a => !ADVANTAGE_VARIANT.test(a?.name ?? "") && (all.length === 1 || a?.type === "attack" || !a?.name || a.name === item.name);
+    const activity = all.find(a => a?.name && `${item.name}: ${a.name}` === said) ?? (item.name === said ? all.find(plain) : null);
+    if ( activity ) return { item, activity };
+  }
+  return null;
+}
+
+/**
+ * The item and activity an action came from (core API 19 useAction and rollDamage), by its id: `<actor>.<item>.<activity>`
+ * (#fromActivity), with whatever #actions adds after it (`.0`, `.extra`, `@slots:3`, `@pact`). A Multiattack's part
+ * (`<multiattack>.<k>.<i>`) and a legendary copy (`<item>.legendary`) name an item but none of its activities: the one
+ * their name names (activityNamed). {item, activity, slot}: `slot`, the spell slot it's cast with, as dnd5e keys it
+ * (`spell3`, `pact`; null, the spell's own). Null when the id names none of this actor's items (the helper's own
+ * actions: Dodge, a shove), or nothing fits.
+ */
+export function activityOf(actor, { id, name } = {}) {
+  const [path, at = ""] = String(id ?? "").split("@");
+  const keys = path.split(".");
+  const level = /^slots:(\d+)/.exec(at)?.[1];
+  const slot = level ? `spell${level}` : at.startsWith("pact") ? "pact" : null;
+  for ( let i = 0; i < keys.length; i++ ) {
+    const activities = actor?.items?.get?.(keys[i])?.system?.activities;
+    if ( !activities ) continue;
+    const own = activities.get?.(keys[i + 1]) ?? Array.from(activities).find(a => a?.id === keys[i + 1]);
+    const found = own ? { item: actor.items.get(keys[i]), activity: own } : activityNamed(actor, name);
+    return found ? { ...found, slot } : null;
+  }
+  return null;
+}
+
+/** The activities whose card an action shows (useAction): what #fromActivity plays that isn't an attack or a summoning. */
+const SHOWN = new Set(["save", "damage", "heal", "utility", "enchant"]);
+
+/** The activities whose damage is rolled once for all it catches (rollDamage): a save's, and damage that simply lands. */
+const ROLLED_ONCE = new Set(["save", "damage"]);
+
+/** A card's message settings (cardFor), with its system data: its targets, the card it came from. */
+function cardWith(token, secret, system) {
+  const base = cardFor(token, secret);
+  return { ...base, data: { ...(base.data ?? {}), system } };
+}
+
+/**
+ * An action's own card, as its user would show it from the sheet (core API 19 useAction: a spell's, a breath's, in a
+ * turn FastFighting plays): dnd5e's `activity.use` with no dialog, nothing consumed (no slot, use or recharge spent),
+ * nothing created (no template, no summons), no concentration begun, and none of what it does next (a damage
+ * activity's damage, a heal's healing: its subsequent actions); cast with the slot the action is cast with, at its
+ * targets (their TargetsField descriptors as the card's, the user's own targets untouched), the token its speaker, for
+ * the GMs only when `secret`. FastFighting spends, lays and rolls it all itself. {card: the usage card's id}; null for an
+ * attack (its rollStrike card shows it), what isn't an activity of the actor's, one dnd5e won't use, or no card made.
+ */
+export async function useDnd5eAction(token, { action, targets = [], secret = false } = {}) {
+  const found = token?.actor ? activityOf(token.actor, action ?? {}) : null;
+  const activity = found?.activity;
+  if ( !activity || !SHOWN.has(activity.type) || typeof activity.use !== "function" || activity.canUse === false ) return null;
+  const usage = { consume: false, create: false, concentration: { begin: false }, subsequentActions: false, ...(found.slot ? { spell: { slot: found.slot } } : {}) };
+  let results = null;
+  try {
+    results = await activity.use(usage, { configure: false }, cardWith(token, secret, { targets: Array.from(targets ?? []).flatMap(targetsOf) }));
+  } catch ( err ) {
+    console.error(`fast-fighting-dnd5e | showing an action's card`, err);
+    return null;
+  }
+  const id = results?.message?.id;
+  return typeof id === "string" ? { card: id } : null;
+}
+
+/**
+ * Darts dnd5e rolls one at a time: a spell's damage activity whose dice are a dart's (Magic Missile), where #fromActivity
+ * counts every dart it makes (projectileCount), and more for a higher slot.
+ */
+function dartsApart(actor, item, activity) {
+  if ( activity?.type !== "damage" || item?.type !== "spell" ) return false;
+  const text = englishDescription(item);
+  return projectileCount(text, casterLevelOf(actor)) > 1 || moreProjectilesPerLevel(text) > 0;
+}
+
+/**
+ * How many levels above its own a spell is cast at, as dnd5e works it out with no dialog: at the slot it's cast with
+ * (its level, as the actor's spell slots have it, else as its key says), else a pact spell at its pact slot's level,
+ * any other at its own. 0 for anything else (dnd5e scales a cantrip itself).
+ */
+function scalingOf(actor, item, slot) {
+  const level = Number(item?.system?.level) || 0;
+  if ( item?.type !== "spell" || !level ) return 0;
+  const key = slot ?? ((item.system.method ?? item.system.preparation?.mode) === "pact" ? "pact" : null);
+  const at = Number(actor?.system?.spells?.[key]?.level) || Number(/^spell(\d+)$/.exec(key ?? "")?.[1]) || level;
+  return Math.max(0, at - level);
+}
+
+/**
+ * The damage of an action that isn't an attack (core API 19 rollDamage: a save's, a breath's, damage that simply lands,
+ * in a turn FastFighting plays), rolled once for all it catches as its usage card's Damage button rolls it: dnd5e's
+ * `activity.rollDamage` with no dialog, on the item scaled as the card is (its `system.scaling`; with no card, the slot
+ * the action is cast with: scalingOf), the card its origin and its targets the card's, the token its speaker, for the
+ * GMs only when `secret`. Nothing applied: FastFighting applies each target's share with applyDamageCard.
+ * {damage: {byType}, card: the damage card's id}, as rolled (before resistances); null for an attack (rollStrike rolls
+ * it), healing or anything else, darts dnd5e rolls one at a time (dartsApart: the engine's dice), or nothing rolled.
+ */
+export async function rollDnd5eDamage(token, { action, card = null, secret = false } = {}) {
+  const actor = token?.actor;
+  const found = actor ? activityOf(actor, action ?? {}) : null;
+  const { item, activity } = found ?? {};
+  if ( !activity || !ROLLED_ONCE.has(activity.type) || typeof activity.rollDamage !== "function" || dartsApart(actor, item, activity) ) return null;
+  const usage = typeof card === "string" ? globalThis.game?.messages?.get?.(card) ?? null : null;
+  const scaling = Number(usage?.system?.scaling) || scalingOf(actor, item, found.slot);
+  // (dnd5e's own way to roll at a higher level: a copy of the item at that scaling, as its card's buttons use.)
+  const scaled = scaling > 0 && typeof item.scaledClone === "function" ? item.scaledClone(scaling)?.system?.activities?.get?.(activity.id) ?? activity : activity;
+  const system = { targets: Array.from(usage?.system?.targets ?? [], t => ({ ...t })), ...(usage ? { origin: usage.id } : {}) };
+  let rolls = null;
+  try {
+    rolls = await scaled.rollDamage({}, { configure: false }, cardWith(token, secret, system));
+  } catch ( err ) {
+    console.error(`fast-fighting-dnd5e | rolling an action's damage`, err);
+    return null;
+  }
+  const byType = {};
+  for ( const d of rolls?.length ? damagesOf({ rolls }) : [] ) byType[d.type || "untyped"] = (byType[d.type || "untyped"] ?? 0) + d.value;
+  if ( !Object.keys(byType).length ) return null;
+  // (dnd5e gives each roll the message it made.)
+  const id = rolls.find(r => typeof r?.parent?.id === "string")?.parent.id ?? null;
+  return { damage: { byType }, card: id };
 }
 
 export class Dnd5eAdapter extends SystemAdapter {
@@ -2154,8 +2291,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     };
     if ( inside && activity.id === inside.taker.id ) return this.#takeIn(actor, item, activity, inside, base);
     const reachOf = () => inFeet(range.reach, range.units) || 5;
-    const casterLevel = actor.type === "character" ? (actor.system.details?.level ?? 1) : (actor.system.attributes?.spell?.level ?? actor.system.details?.spellLevel ?? 1);
-    const projectiles = item.type === "spell" ? projectileCount(englishDescription(item), casterLevel) : 1;
+    const projectiles = item.type === "spell" ? projectileCount(englishDescription(item), casterLevelOf(actor)) : 1;
     const targets = areaTargets(target);
 
     if ( activity.type === "attack" ) {
@@ -2599,6 +2735,16 @@ export class Dnd5eAdapter extends SystemAdapter {
   /** API 19: a check rolled with dnd5e's own skill or ability check (rollDnd5eCheck). */
   async rollCheck(token, options = {}) {
     return rollDnd5eCheck(token, options);
+  }
+
+  /** API 19: an action's own usage card, as from the sheet, nothing spent, laid or rolled (useDnd5eAction). */
+  async useAction(token, options = {}) {
+    return useDnd5eAction(token, options);
+  }
+
+  /** API 19: the damage of an action that isn't an attack, rolled with dnd5e's own damage roll once for all it catches (rollDnd5eDamage). */
+  async rollDamage(token, options = {}) {
+    return rollDnd5eDamage(token, options);
   }
 
   /**

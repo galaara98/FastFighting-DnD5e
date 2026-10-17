@@ -243,13 +243,17 @@ const byId = collection => new Map(Array.from(collection ?? [], d => [d.id, d]))
 /**
  * A player's damage (or healing) card applied to a creature in a live battle, as dnd5e's own damage tray applies it:
  * the actor's applyDamage with the card's damages by type (so its resistances, immunities, vulnerabilities, damage
- * threshold and temporary hit points count), times `multiplier`, the card as its origin. Returns one undo record: hit
- * points, temporary and temporary maximum as they were (and the death saves, which healing from 0 clears), what came
- * and went of its items and effects, and its statuses before (dnd5e lays Bloodied, Dead or Unconscious by itself).
+ * threshold and temporary hit points count), times `multiplier`, the card as its origin. In a turn FastFighting plays,
+ * also a strike's damage card (rollDnd5eStrike) and an action's rolled once for all it catches (rollDnd5eDamage), each
+ * target its share (a save's half). Nothing at a multiplier of 0. Returns one undo record: hit points, temporary and
+ * temporary maximum as they were (and the death saves, which healing from 0 clears), what came and went of its items and
+ * effects, and its statuses before (dnd5e lays Bloodied, Dead or Unconscious by itself).
  */
 export async function applyDnd5eDamageCard(message, tokenDoc, { multiplier = 1, halve = false } = {}) {
+  let times = Number.isFinite(multiplier) ? multiplier : 1;
   // (Halved by a reaction the target used against it, in a live battle: 5e's Uncanny Dodge.)
-  if ( halve ) multiplier *= 0.5;
+  if ( halve ) times *= 0.5;
+  if ( !(times > 0) ) return [];
   const actor = tokenDoc?.actor;
   const attributes = actor?.system?.attributes;
   if ( !message || !attributes?.hp || typeof actor.applyDamage !== "function" ) return [];
@@ -268,7 +272,7 @@ export async function applyDnd5eDamageCard(message, tokenDoc, { multiplier = 1, 
   }
   const kinds = [["items", "createdItems", "deletedItems"], ["effects", "createdEffects", "deletedEffects"]];
   const had = kinds.map(([kind]) => byId(actor[kind]));
-  await actor.applyDamage(damages, { multiplier: Number.isFinite(multiplier) ? multiplier : 1, isDelta: true, originatingMessage: message, origin: message });
+  await actor.applyDamage(damages, { multiplier: times, isDelta: true, originatingMessage: message, origin: message });
   kinds.forEach(([kind, created, deleted], i) => {
     const now = byId(actor[kind]);
     for ( const id of now.keys() ) if ( !had[i].has(id) ) undo[created].push(id);
