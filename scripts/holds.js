@@ -14,7 +14,7 @@
  *    unties them with no roll.
  * Each try is an action, and so is freeing a friend (2024: the Utilize action).
  */
-import { STATUS, rollD20, edgeDistance } from "./core.js";
+import { STATUS, rollD20, edgeDistance, systemRolled } from "./core.js";
 
 /** Rope, the SRD's: what it takes to get out of it (2024), or to burst it. */
 export const ROPE = Object.freeze({ modern: Object.freeze({ escape: 15, burst: 20 }), legacy: Object.freeze({ burst: 17 }) });
@@ -155,18 +155,22 @@ const checkMod = (work, { ability, skill }) => (skill && Number.isFinite(work[sk
  * check against a DC; it makes the one it's likeliest to pass, with what its conditions say (poisoned, frightened:
  * disadvantage; exhaustion). A grapple: Athletics or Acrobatics. Bonds: 2024, Acrobatics against 15 or Athletics against
  * 20; 2014, Strength against 17; a friend unties them (null: the core's, no roll). Webs, plants, a net: the check their
- * words name (escapeWords); without it, as a grapple. Null when there's nothing to go on.
+ * words name (escapeWords); without it, as a grapple. Null when there's nothing to go on. In a turn FastFighting plays
+ * the system rolls it (the core's systemRolled, as its own escapes ask: the one held its target, the hold's key its
+ * label, the way's skill or ability by dnd5e's key), against the same DC: 2014's contest with a grappler stays the
+ * engine's DC of 10 + its Athletics, the roll the escaper's alone.
  */
 export function breakFree(run, who, hold, { freeing = false, held = null } = {}) {
   const work = who?.spec?.escapeWork;
   if ( !work || (freeing && hold.key === "bound") ) return null;
   let ways;
   if ( hold.key === "bound" ) {
-    ways = legacy(who) ? [{ mod: work.str, dc: hold.dc ?? ROPE.legacy.burst }]
-      : [{ mod: work.acr, dc: hold.dc ?? ROPE.modern.escape }, { mod: work.ath, dc: ROPE.modern.burst }];
+    ways = legacy(who) ? [{ mod: work.str, dc: hold.dc ?? ROPE.legacy.burst, check: "str" }]
+      : [{ mod: work.acr, dc: hold.dc ?? ROPE.modern.escape, check: "acr" }, { mod: work.ath, dc: ROPE.modern.burst, check: "ath" }];
   } else {
     const checks = hold.key === "grabbed" ? null : escapeChecks(run, held ?? (freeing ? null : who), hold);
-    ways = checks ? checks.map(c => ({ mod: checkMod(work, c), dc: hold.dc })) : [{ mod: work.mod, dc: hold.dc }];
+    ways = checks ? checks.map(c => ({ mod: checkMod(work, c), dc: hold.dc, check: c.skill ?? c.ability }))
+      : [{ mod: work.mod, dc: hold.dc, check: (Number(work.acr) || 0) > (Number(work.ath) || 0) ? "acr" : "ath" }];
   }
   ways = ways.filter(w => Number.isFinite(w.mod) && Number.isFinite(w.dc));
   if ( !ways.length ) return null;
@@ -174,6 +178,8 @@ export function breakFree(run, who, hold, { freeing = false, held = null } = {})
   const rules = run.prep.rules;
   const { bonus = 0, advantage = 0 } = rules.modifiers?.check?.({ unit: who }) ?? {};
   const mod = way.mod + bonus;
-  const roll = rollD20(rules, run.rng, mod, way.dc, { advantage, kind: "check" });
+  // (The system's roll taken as it came out, as the core's rollCheck takes `rolled`.)
+  const rolled = systemRolled(run, who, "check", { dc: way.dc, target: held, purpose: "escape", skill: way.check ?? null, label: hold.key });
+  const roll = rolled ? { natural: rolled.natural ?? null, total: rolled.total ?? null, degree: rolled.degree } : rollD20(rules, run.rng, mod, way.dc, { advantage, kind: "check" });
   return { success: roll.degree >= 2, degree: roll.degree, natural: roll.natural, mod, total: roll.total, dc: way.dc };
 }

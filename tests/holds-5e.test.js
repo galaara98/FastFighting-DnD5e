@@ -3,7 +3,7 @@
  * grappler's escape DC, 2024's 8 + Strength + proficiency or 2014's contest as 10 + Athletics), what webs, plants and
  * nets say breaks them, FastFighting's bonds as rope, each try an action; and the free hands each action needs.
  */
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { beginRun, beginRound, takeTurn, prepareBattle } from "../../FastFighting/scripts/engine/simulator.js";
 import { holdsOf, tryHold, release } from "../../FastFighting/scripts/engine/behavior/holds.js";
 import { Dnd5eAdapter } from "../scripts/adapter.js";
@@ -204,6 +204,54 @@ describe("the rules' say", () => {
     caught.effects[0].escape = { dc: 10, others: null, checks: [{ ability: "str", skill: null }] };
     caught.spec.escapeWork.str = 4;
     expect(breakFree(run, caught, hold)).toMatchObject({ mod: 4, total: 10, success: true });
+  });
+});
+
+describe("in a turn FastFighting plays: the system's roll", () => {
+  /** A live battle's run, the system rolling checks: each request kept, each answered with `answer`. */
+  const live = (units, answer, rng = dice(10)) => {
+    const run = runOf(units, rng);
+    run.live = { playing: true, roll: vi.fn(() => answer) };
+    return run;
+  };
+  const asked = run => run.live.roll.mock.calls.map(([, request]) => request);
+
+  test("an escape asks for it as the core's own do (the one held its target, the hold's key its label), and takes it as rolled", () => {
+    const u = unit("a", "friendly", { escapeWork: { mod: 6, ath: 2, acr: 6, str: 1, dex: 4 } });
+    const run = live([u], { degree: 2, natural: 4, total: 13 });
+    // (The engine's own die would have failed it.)
+    run.rng = dice(1);
+    expect(breakFree(run, u, { key: "grabbed", dc: 13 }, { held: u })).toEqual({ success: true, degree: 2, natural: 4, mod: 6, total: 13, dc: 13 });
+    expect(asked(run)).toEqual([{ kind: "check", unitId: "a", targetId: "a", purpose: "escape", skill: "acr", against: null, dc: 13, action: { id: null, name: "grabbed" } }]);
+    const failed = live([u], { degree: 1, natural: 18, total: 12 }, dice(20));
+    expect(breakFree(failed, u, { key: "grabbed", dc: 13 })).toMatchObject({ success: false, natural: 18, total: 12 });
+  });
+
+  test("the way out it takes, by dnd5e's key: bonds' Acrobatics or Athletics (2014: Strength), a net's or a web's own check", () => {
+    const skillOf = (who, hold, units = [who], options = {}) => {
+      const run = live(units, { degree: 2, natural: 10, total: 15 });
+      breakFree(run, who, hold, options);
+      return asked(run).map(r => [r.skill, r.dc]);
+    };
+    expect(skillOf(unit("a", "friendly", { escapeWork: { mod: 6, ath: 2, acr: 6, str: 1, dex: 4 } }), { key: "bound", dc: 15 })).toEqual([["acr", 15]]);
+    expect(skillOf(unit("b", "friendly", { escapeWork: { mod: 9, ath: 9, acr: 0, str: 5, dex: 0 } }), { key: "bound", dc: 15 })).toEqual([["ath", 20]]);
+    expect(skillOf(unit("c", "friendly", { rulesVersion: "legacy", escapeWork: { mod: 9, ath: 9, acr: 6, str: 5, dex: 4 } }), { key: "bound", dc: 17 })).toEqual([["str", 17]]);
+    expect(skillOf(unit("d", "friendly", { escapeWork: { mod: 2, ath: 2, acr: 0, str: 1, dex: 0 } }), { key: "grabbed", dc: 12 })).toEqual([["ath", 12]]);
+    const caught = unit("e", "friendly", { escapeWork: { mod: 8, ath: 0, acr: 8, str: 0, dex: 4 } });
+    caught.effects.push({ key: "orc.net", sourceId: "orc", conditions: { restrained: 1, immobilized: 1 }, escape: { dc: 10, others: "check", checks: [{ ability: "str", skill: "ath" }] } });
+    const hold = { key: "restrained", byId: "orc", dc: 10, others: "check", effectKey: "orc.net" };
+    expect(skillOf(caught, hold)).toEqual([["ath", 10]]);
+    caught.effects[0].escape = { dc: 10, others: null, checks: [{ ability: "str", skill: null }] };
+    expect(skillOf(caught, hold)).toEqual([["str", 10]]);
+  });
+
+  test("none to roll (no answer, or not a turn FastFighting plays): the engine's own die", () => {
+    const u = unit("a", "friendly", { escapeWork: { mod: 6, ath: 2, acr: 6, str: 1, dex: 4 } });
+    expect(breakFree(live([u], null, dice(7)), u, { key: "grabbed", dc: 13 })).toMatchObject({ success: true, natural: 7, total: 13 });
+    const idle = live([u], { degree: 1, natural: 1, total: 7 }, dice(7));
+    idle.live.playing = false;
+    expect(breakFree(idle, u, { key: "grabbed", dc: 13 })).toMatchObject({ success: true, natural: 7 });
+    expect(idle.live.roll).not.toHaveBeenCalled();
   });
 });
 
