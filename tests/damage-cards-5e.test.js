@@ -169,6 +169,12 @@ describe("a damage card applied, the dnd5e way", () => {
     expect(calls[0].options.multiplier).toBe(1);
     expect(records[0].actorUpdate["system.attributes.hp.value"]).toBe(20);
   });
+
+  test("halved, in a live battle, by a reaction the target used against the blow (Uncanny Dodge): dnd5e's own application at half", async () => {
+    const { token, calls } = creature({ hp: 20 });
+    await new Dnd5eAdapter().applyDamageCard(card("damage", { targets: [goblin] }, [roll(8, "slashing")]), token, { multiplier: 1, halve: true });
+    expect(calls[0].options.multiplier).toBe(0.5);
+  });
 });
 
 describe("dnd5e's own settings and players' damage", () => {

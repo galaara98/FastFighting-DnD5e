@@ -1305,7 +1305,8 @@ export class Dnd5eAdapter extends SystemAdapter {
         continue;
       }
       if ( item.type !== "feat" ) continue;
-      if ( id === "uncanny-dodge" ) out.push({ id: `${actor.id}.${item.id}`, label: item.name, on: "hit", halve: true });
+      // (In a live battle, dnd5e's own damage application halves the blow it's used against: applyDamageCard's halve.)
+      if ( id === "uncanny-dodge" ) out.push({ id: `${actor.id}.${item.id}`, label: item.name, on: "hit", halve: true, applies: "halve" });
       else if ( id === "deflect-attacks" || id === "deflect-missiles" ) {
         out.push({ id: `${actor.id}.${item.id}`, label: item.name, on: "hit", reduce: part([{ n: 1, faces: 10 }], dex + level, "untyped"), physical: true, ranged: id === "deflect-missiles" || undefined });
       } else if ( id === "parry" || id === "riposte" ) {

@@ -247,7 +247,9 @@ const byId = collection => new Map(Array.from(collection ?? [], d => [d.id, d]))
  * points, temporary and temporary maximum as they were (and the death saves, which healing from 0 clears), what came
  * and went of its items and effects, and its statuses before (dnd5e lays Bloodied, Dead or Unconscious by itself).
  */
-export async function applyDnd5eDamageCard(message, tokenDoc, { multiplier = 1 } = {}) {
+export async function applyDnd5eDamageCard(message, tokenDoc, { multiplier = 1, halve = false } = {}) {
+  // (Halved by a reaction the target used against it, in a live battle: 5e's Uncanny Dodge.)
+  if ( halve ) multiplier *= 0.5;
   const actor = tokenDoc?.actor;
   const attributes = actor?.system?.attributes;
   if ( !message || !attributes?.hp || typeof actor.applyDamage !== "function" ) return [];
