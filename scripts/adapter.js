@@ -721,13 +721,19 @@ export function checkOf(actor, { purpose = null, skill = null, action = null } =
 }
 
 /**
- * Is a Constitution save named for a spell (or feature) of its own that takes concentration its concentration save?
- * The engine names that save for what it concentrates on, as the helper named the action (`<item>` or `<item>: <activity>`).
+ * Is a Constitution save for a spell (or feature) of its own that takes concentration its concentration save? The
+ * engine sends that save with what it concentrates on: the action's id as the helper made it (`<actor>.<item>...`), or
+ * with none, its name (`<item>` or `<item>: <activity>`).
  */
-function concentrationSave(actor, name) {
-  const said = String(name ?? "");
+function concentrationSave(actor, action) {
   const takes = item => !!(item?.system?.properties?.has?.("concentration") || item?.system?.duration?.concentration);
-  return !!said && Array.from(actor?.items ?? []).some(i => takes(i) && i.name && (said === i.name || said.startsWith(`${i.name}: `)));
+  const items = Array.from(actor?.items ?? []);
+  if ( typeof action?.id === "string" && action.id ) {
+    const [owner, itemId] = action.id.split(".");
+    return owner === actor?.id && takes(items.find(i => i.id === itemId));
+  }
+  const said = String(action?.name ?? "");
+  return !!said && items.some(i => takes(i) && i.name && (said === i.name || said.startsWith(`${i.name}: `)));
 }
 
 /** A save's or a check's card: the token as its speaker, for the GMs only when secret. */
@@ -749,8 +755,8 @@ function graded(rolls, dc, kind) {
 /**
  * A save rolled with dnd5e's own saving throw (core API 19 rollSave: every save in a turn FastFighting plays), its card
  * in the chat, against `dc`: no dialog, for the GMs only when `secret`. `save`: the ability, as the spec keys saves
- * ("dex"); of several (a shove's Strength or Dexterity), its better, as the engine takes it. A Constitution save named
- * for what it concentrates on (concentrationSave) is dnd5e's concentration save, with what it adds (War Caster). The
+ * ("dex"); of several (a shove's Strength or Dexterity), its better, as the engine takes it. A Constitution save for
+ * what it concentrates on (concentrationSave) is dnd5e's concentration save, with what it adds (War Caster). The
  * helper plays shoves and grapples the SRD 5.2's way in both rule sets (the target's save; 2014's contests aren't
  * played), so nothing here needs a GM's say. {degree, natural, total} (degreeOfSuccess); null where it can't be rolled
  * or read (the engine's own dice).
@@ -761,7 +767,7 @@ export async function rollDnd5eSave(token, { save, dc, action = null, secret = f
   const target = dcOf(dc);
   if ( !actor || !keys.length || !Number.isFinite(target) || typeof actor.rollSavingThrow !== "function" ) return null;
   const ability = keys.reduce((a, b) => (saveBonus(actor.system, b) > saveBonus(actor.system, a) ? b : a));
-  const concentration = ability === "con" && !action?.id && typeof actor.rollConcentration === "function" && concentrationSave(actor, action?.name);
+  const concentration = ability === "con" && typeof actor.rollConcentration === "function" && concentrationSave(actor, action);
   let rolls = null;
   try {
     rolls = concentration ? await actor.rollConcentration({ target }, { configure: false }, cardFor(token, secret))

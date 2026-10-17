@@ -60,18 +60,20 @@ describe("a save, dnd5e's own", () => {
     expect(out.gm).toBeUndefined();
   });
 
-  test("a Constitution save named for what it concentrates on: dnd5e's concentration save; any other, a plain one", async () => {
+  test("a Constitution save for what it concentrates on: dnd5e's concentration save; any other, a plain one", async () => {
     const { token, actor } = orc({ items: [spell("Bless", true), spell("Fire Bolt")] });
-    await rollDnd5eSave(token, { save: "con", dc: 12, action: { id: null, name: "Bless" } });
+    // (By the action's id, as the engine sends it: its own, of a spell that takes concentration.)
+    await rollDnd5eSave(token, { save: "con", dc: 12, action: { id: "orc.Bless.cast", name: "Bless" } });
     expect(actor.rollConcentration).toHaveBeenCalledWith({ target: 12 }, NO_DIALOG, {});
-    // (A save named for one of its activities, "<item>: <activity>", too.)
+    // (With no id, by its name, or one of its activities', "<item>: <activity>".)
+    await rollDnd5eSave(token, { save: "con", dc: 10, action: { id: null, name: "Bless" } });
     await rollDnd5eSave(token, { save: "con", dc: 10, action: { id: null, name: "Bless: Cast" } });
-    expect(actor.rollConcentration).toHaveBeenCalledTimes(2);
-    for ( const action of [{ id: "pc.poison.cast", name: "Bless" }, { id: null, name: "Fire Bolt" }, { id: null, name: "Poisoned" }] ) {
+    expect(actor.rollConcentration).toHaveBeenCalledTimes(3);
+    for ( const action of [{ id: "pc.Bless.cast", name: "Bless" }, { id: "orc.Fire Bolt.cast", name: "Fire Bolt" }, { id: null, name: "Fire Bolt" }, { id: null, name: "Poisoned" }] ) {
       await rollDnd5eSave(token, { save: "con", dc: 12, action });
     }
-    expect(actor.rollConcentration).toHaveBeenCalledTimes(2);
-    expect(actor.rollSavingThrow).toHaveBeenCalledTimes(3);
+    expect(actor.rollConcentration).toHaveBeenCalledTimes(3);
+    expect(actor.rollSavingThrow).toHaveBeenCalledTimes(4);
   });
 });
 
