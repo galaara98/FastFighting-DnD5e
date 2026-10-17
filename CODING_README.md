@@ -15,7 +15,7 @@ How this helper teaches FastFighting Core the dnd5e system. For what it does at 
 
 ### The core's API version
 
-The core's API version is `major.bug`: `api.version` is `"18.0"`, `api.major` 18, `api.bug` 0. The helper decides whether it works with a core; the core never refuses it. `KNOWN_API` in `main.js` lists the API majors this helper is known to work with, now `[18]`.
+The core's API version is `major.bug`: `api.version` is `"19.0"`, `api.major` 19, `api.bug` 0. The helper decides whether it works with a core; the core never refuses it. `KNOWN_API` in `main.js` lists the API majors this helper is known to work with, now `[18, 19]`.
 
 - Below the oldest major listed, it doesn't register, and tells the GM the core is too old (`FFDND5E.CoreTooOld`).
 - On any other major it isn't known to work with, it registers, and warns the GM once that it hasn't been tried with that core (`FFDND5E.CoreUntested`).
@@ -51,7 +51,7 @@ When new functionality can't be played "close enough" with what the core already
 
 ## The adapter
 
-`Dnd5eAdapter` (`systemId = "dnd5e"`) overrides: `label`, `rules`, `canHandle` (actor types `character` and `npc`), `toCombatantSpec`, `deriveTraits`, `playstyleHints`, `tacticHints`, `biography`, `detectLeaders`, `itemCatalog`, `describeRegionBehavior` (`dnd5e.difficultTerrain` → `{difficult: true}`), `term` (`DND5E.AC`, `DND5E.HP`), `resourceLabel`, `supportsLive` (true), `placeSummons`, `commitChanges`, `sheetCarries`, `conditionLabel`, `conditionChoices`, `readTurn`, `reactionsOf`, `rerollResource`, `describeOutcome`, `commitConcession`. It leaves `supportsLoot` false, so the core hides its loot and corpse settings.
+`Dnd5eAdapter` (`systemId = "dnd5e"`) overrides: `label`, `rules`, `canHandle` (actor types `character` and `npc`), `toCombatantSpec`, `deriveTraits`, `playstyleHints`, `tacticHints`, `biography`, `detectLeaders`, `itemCatalog`, `describeRegionBehavior` (`dnd5e.difficultTerrain` → `{difficult: true}`), `term` (`DND5E.AC`, `DND5E.HP`), `resourceLabel`, `supportsLive` (true), `placeSummons`, `commitChanges`, `sheetCarries`, `conditionLabel`, `conditionChoices`, `readTurn`, `damageCard`, `applyDamageCard`, `appliesPlayerDamage`, `reactionsOf`, `rerollResource`, `describeOutcome`, `commitConcession`. It leaves `supportsLoot` false, so the core hides its loot and corpse settings.
 
 It's written against dnd5e 6 on Foundry v14, and reads values defensively so older data still works (`s.method ?? s.preparation?.mode` and the like).
 
@@ -193,6 +193,8 @@ Everything is read from the item's English (`englishDescription`: what Babele ke
 - spell effects laid with `layEffect` from the action's `effectRef`, for the rounds left, flagged `fast-fighting.laid: {key, sourceId}` so `liftEffect` takes them off.
 
 `commitDnd5eConcession` pays coins with the core's `payFrom` (`COINS`; the receiver gets gp, sp and cp) and hands items over with `handOverItem`, unequipped and out of any container. `describeDnd5eOutcome` gives the planner's summary lines. `placeSummons` uses dnd5e's own `Actor5e.fetchExisting`, `activity.getChanges` and `getTokenData` (no rolled NPC HP), and falls back to the core's way. `readDnd5eTurn` reads dnd5e 6 cards (`system` data) and older ones (`flags.dnd5e`): attacks (hit against the target's AC, `sure` when the AC is known), damage onto the last hit, healing, and Persuasion, Intimidation or Deception checks (never `sure`). `reactionsOf` lists a reaction spell once, whatever its slot, and never a passive or free one.
+
+Players' damage (API 19): `damageCard` is `damageCardOf` (`read-turn.js`: the damage rolls' total, healing for a `healing` card or one of healing types only, targets by `system.targets[].token`, `save` for an `onSave` of `half` or `none`); `applyDamageCard` is `applyDnd5eDamageCard` (`commit.js`: `actor.applyDamage` with the tray's damages and `{multiplier, isDelta, originatingMessage, origin}`, as dnd5e's damage tray calls it; undo: stored HP, temp and tempmax, death saves at 0, items and effects made or removed, `statusesBefore`); `appliesPlayerDamage` is null (dnd5e's `allowPlayerDamageTray` and `autoApplyDowned` don't apply players' damage; Midi-QOL isn't asked).
 
 ## Safety
 

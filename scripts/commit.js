@@ -1,6 +1,6 @@
 /**
- * D&D 5e: what a live battle changes, written onto a token's actor (one turn's changes, and anything handed over), each
- * write returning an undo record; and what a fight changes, in words, for the planner.
+ * D&D 5e: what a live battle changes, written onto a token's actor (one turn's changes, a player's damage card, and
+ * anything handed over), each write returning an undo record; and what a fight changes, in words, for the planner.
  *
  * Undo record shape (the core puts these back when the GM rewinds a turn or the encounter):
  *   { tokenUuid, actorUuid, actorUpdate, itemUpdates: [{id, update}], createdItems: [id], deletedItems: [data],
@@ -10,6 +10,7 @@
 import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, toggleStatus, undoRecord, payFrom, handOverItem } from "./core.js";
 import { t, conditionName, playersOf } from "./words.js";
 import { modeledChange } from "./effects.js";
+import { damagesOf } from "./read-turn.js";
 import { WRITES, SHEET_STATUSES, hasStatus, ownStatus, statusKeys, exhaustionLevels } from "./conditions.js";
 
 /** Engine conditions a fight's summary names: the dnd5e statuses that outlast it. */
@@ -230,6 +231,48 @@ async function liftEffect(actor, e, undo) {
   if ( !laid.length ) return;
   undo.deletedEffects.push(...laid.map(x => x.toObject()));
   await actor.deleteEmbeddedDocuments("ActiveEffect", laid.map(x => x.id));
+}
+
+/* -------------------------------------------- */
+/*  A player's damage card                      */
+/* -------------------------------------------- */
+
+/** What an actor holds of a kind (its items, its effects), each by its id. */
+const byId = collection => new Map(Array.from(collection ?? [], d => [d.id, d]));
+
+/**
+ * A player's damage (or healing) card applied to a creature in a live battle, as dnd5e's own damage tray applies it:
+ * the actor's applyDamage with the card's damages by type (so its resistances, immunities, vulnerabilities, damage
+ * threshold and temporary hit points count), times `multiplier`, the card as its origin. Returns one undo record: hit
+ * points, temporary and temporary maximum as they were (and the death saves, which healing from 0 clears), what came
+ * and went of its items and effects, and its statuses before (dnd5e lays Bloodied, Dead or Unconscious by itself).
+ */
+export async function applyDnd5eDamageCard(message, tokenDoc, { multiplier = 1 } = {}) {
+  const actor = tokenDoc?.actor;
+  const attributes = actor?.system?.attributes;
+  if ( !message || !attributes?.hp || typeof actor.applyDamage !== "function" ) return [];
+  const damages = damagesOf(message);
+  if ( !damages.length ) return [];
+  // (The stored values, as dnd5e itself works from: the prepared ones may be capped.)
+  const source = actor.system._source?.attributes ?? actor._source?.system?.attributes ?? attributes;
+  const hp = source.hp ?? attributes.hp;
+  const undo = undoRecord(tokenDoc, actor);
+  Object.assign(undo.actorUpdate, {
+    "system.attributes.hp.value": hp.value ?? attributes.hp.value ?? 0, "system.attributes.hp.temp": hp.temp ?? 0, "system.attributes.hp.tempmax": hp.tempmax ?? 0
+  });
+  const death = source.death ?? attributes.death;
+  if ( death && (Number(attributes.hp.value) || 0) <= 0 ) {
+    Object.assign(undo.actorUpdate, { "system.attributes.death.success": death.success ?? 0, "system.attributes.death.failure": death.failure ?? 0 });
+  }
+  const kinds = [["items", "createdItems", "deletedItems"], ["effects", "createdEffects", "deletedEffects"]];
+  const had = kinds.map(([kind]) => byId(actor[kind]));
+  await actor.applyDamage(damages, { multiplier: Number.isFinite(multiplier) ? multiplier : 1, isDelta: true, originatingMessage: message, origin: message });
+  kinds.forEach(([kind, created, deleted], i) => {
+    const now = byId(actor[kind]);
+    for ( const id of now.keys() ) if ( !had[i].has(id) ) undo[created].push(id);
+    for ( const [id, d] of had[i] ) if ( !now.has(id) && typeof d?.toObject === "function" ) undo[deleted].push(d.toObject());
+  });
+  return [undo];
 }
 
 /* -------------------------------------------- */

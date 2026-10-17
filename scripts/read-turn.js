@@ -7,7 +7,8 @@
  *     (the sheets settle how much).
  *   - Persuasion, Intimidation or Deception: words, for the GM to confirm (at whom and how well).
  *   - Healing: told as healing (the sheets say how much).
- * Each event says whether it's `sure`.
+ * Each event says whether it's `sure`. A damage or healing card is also read as it's made (damageCardOf), for the core
+ * to apply at once or put before a GM.
  */
 import { tokenIdIn as tokenIdOf } from "./core.js";
 
@@ -58,6 +59,55 @@ export function cardOf(m) {
     type, skill: s.skill ?? null, targets: (s.targets ?? []).map(t => ({ uuid: t.token ?? t.actor ?? t.uuid, ac: t.ac })),
     item: s.item?.name ?? null, ranged, launched: ranged && s.item?.type === "weapon" && roll?.options?.attackMode !== "thrown", kind: roll?.options?.type ?? null
   };
+}
+
+/** dnd5e's healing types (healing, temporary hit points), from its CONFIG where it's loaded. */
+const healingType = type => {
+  const types = globalThis.CONFIG?.DND5E?.healingTypes;
+  return types ? Object.hasOwn(types, type) : ["healing", "temphp"].includes(type);
+};
+
+/**
+ * A card's damage as dnd5e's own damage tray takes it to apply (DamageApplicationElement): its damage rolls, split by
+ * damage type and properties (dnd5e.dice.aggregateDamageRolls, where it's loaded), each {type, properties, value} with
+ * no value below 0.
+ */
+export function damagesOf(m) {
+  const DamageRoll = globalThis.CONFIG?.Dice?.DamageRoll;
+  const rolls = (m?.rolls ?? []).filter(r => typeof DamageRoll !== "function" || r instanceof DamageRoll);
+  const aggregate = globalThis.dnd5e?.dice?.aggregateDamageRolls;
+  const parts = typeof aggregate === "function" && rolls.length ? aggregate(rolls, { respectProperties: true }) : rolls;
+  return parts.map(r => ({ type: r.options?.type, properties: new Set(r.options?.properties ?? []), value: Math.max(0, Number(r.total) || 0) }));
+}
+
+/**
+ * Whether the damage waits on the target's save, and so on a GM (dnd5e 6: the card's onSave; earlier: the roll's
+ * damageOnSave; else a save activity's own). "full" lands whatever the save, so it doesn't.
+ */
+function savedAgainst(m) {
+  const s = m.system;
+  const f = m.flags?.dnd5e;
+  let onSave = s?.onSave ?? f?.roll?.damageOnSave ?? null;
+  if ( !onSave ) {
+    const activity = lookUp(s?.activity?.uuid ?? f?.activity?.uuid) ?? f?.activity;
+    if ( activity?.type === "save" ) onSave = activity.damage?.onSave ?? "half";
+  }
+  return !!onSave && onSave !== "full";
+}
+
+/**
+ * A damage or healing card, as the core's live battles take one (adapter.damageCard): {amount (its damage rolls'
+ * total, as the card shows it), kind: "damage"|"healing", targets (the tokens it was rolled at, by id), save}, or null
+ * for any other card. The core works out which targets are FastFighting's.
+ */
+export function damageCardOf(m) {
+  const card = m ? cardOf(m) : null;
+  if ( card?.type !== "damage" && card?.type !== "healing" ) return null;
+  const damages = damagesOf(m);
+  if ( !damages.length ) return null;
+  const healing = card.type === "healing" || m.type === "healing" || m.system?.isHealing === true || damages.every(d => healingType(d.type));
+  const targets = [...new Set(card.targets.map(t => tokenIdOf(t.uuid)).filter(Boolean))];
+  return { amount: damages.reduce((sum, d) => sum + d.value, 0), kind: healing ? "healing" : "damage", targets, save: !healing && savedAgainst(m) };
 }
 
 /**

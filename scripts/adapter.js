@@ -10,9 +10,9 @@ import { deriveDnd5eTraits, isMindless } from "./traits.js";
 import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, speaksAtAll } from "./auto.js";
 import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
-import { commitDnd5eChanges, describeDnd5eOutcome, commitDnd5eConcession } from "./commit.js";
+import { commitDnd5eChanges, describeDnd5eOutcome, commitDnd5eConcession, applyDnd5eDamageCard } from "./commit.js";
 import { SHEET_STATUSES, sheetCarries, sheetConditions, sheetConditionChoices } from "./conditions.js";
-import { readDnd5eTurn } from "./read-turn.js";
+import { readDnd5eTurn, damageCardOf } from "./read-turn.js";
 import { modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "./effects.js";
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 import { edgeActions, studyCheck } from "./edges.js";
@@ -2305,6 +2305,26 @@ export class Dnd5eAdapter extends SystemAdapter {
   /** A player's turn in a live battle, read from the cards dnd5e made for it (read-turn.js). */
   readTurn(messages, context) {
     return readDnd5eTurn(messages, context);
+  }
+
+  /** API 19: a player's damage or healing card, as it's made (read-turn.js damageCardOf). */
+  damageCard(message, context) {
+    return damageCardOf(message);
+  }
+
+  /** API 19: a damage card applied to a token as dnd5e's own damage tray applies it (commit.js applyDnd5eDamageCard). */
+  async applyDamageCard(message, token, options = {}) {
+    return applyDnd5eDamageCard(message, token, options);
+  }
+
+  /**
+   * API 19: nothing in dnd5e applies a player's damage by itself. Its Allow Player Damage Application
+   * (allowPlayerDamageTray) lets a player apply a card from its tray only to tokens they own, at a click; Auto-Apply
+   * Downed (autoApplyDowned) only marks the Dead or Unconscious at 0 HP. Midi-QOL can apply damage itself, but it isn't
+   * installed here to check its setting's key and values against its source, so it isn't asked.
+   */
+  appliesPlayerDamage() {
+    return null;
   }
 
   /**
