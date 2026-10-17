@@ -12,7 +12,7 @@ import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
 import { commitDnd5eChanges, describeDnd5eOutcome, commitDnd5eConcession, applyDnd5eDamageCard } from "./commit.js";
 import { SHEET_STATUSES, sheetCarries, sheetConditions, sheetConditionChoices } from "./conditions.js";
-import { readDnd5eTurn, damageCardOf } from "./read-turn.js";
+import { readDnd5eTurn, damageCardOf, damagesOf } from "./read-turn.js";
 import { modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "./effects.js";
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 import { edgeActions, studyCheck } from "./edges.js";
@@ -543,6 +543,97 @@ const WEAPON_LOOKS = Object.freeze({
 export function weaponLook(item) {
   if ( item?.type !== "weapon" ) return undefined;
   return WEAPON_LOOKS[item.system?.type?.baseItem] ?? (item.system?.properties?.has?.("fir") ? "ballistic" : undefined);
+}
+
+/* -------------------------------------------- */
+/*  A reaction's strike, rolled the dnd5e way   */
+/* -------------------------------------------- */
+
+/**
+ * The attack activity an engine strike came from, by the strike's id: `<actor>.<item>.<activity>` (#fromActivity), with
+ * whatever #actions adds after it (`.extra`, `.off-hand`, `.martial-arts`, `.0`, `@slots:2`). A legendary copy's
+ * `<actor>.<item>.legendary` names no activity: the item's attack (not an "at Advantage" variant). Null when the id
+ * names none of this actor's attacks.
+ */
+export function attackActivityOf(actor, id) {
+  const keys = String(id ?? "").split("@")[0].split(".");
+  const attacks = activities => Array.from(activities ?? []).filter(a => a?.type === "attack" && typeof a.rollAttack === "function");
+  for ( let i = 0; i < keys.length; i++ ) {
+    const activities = actor?.items?.get?.(keys[i])?.system?.activities;
+    if ( !activities ) continue;
+    const named = activities.get?.(keys[i + 1]) ?? Array.from(activities).find(a => a?.id === keys[i + 1]);
+    if ( named ) return attacks([named])[0] ?? null;
+    const all = attacks(activities);
+    return all.find(a => !ADVANTAGE_VARIANT.test(a.name ?? "")) ?? all[0] ?? null;
+  }
+  return null;
+}
+
+/** dnd5e's attack modes for a plain melee attack (a reaction's strike is one): not thrown, nor the off hand's. */
+const MELEE_MODES = ["oneHanded", "twoHanded"];
+
+/**
+ * The attack mode a reaction's melee strike is made in: the one last used with the weapon if it's a melee mode, else its
+ * first (a dagger last thrown strikes in hand). Undefined for what has no modes (a feature's attack): dnd5e's own.
+ */
+function meleeMode(activity) {
+  const modes = Array.from(activity.item?.system?.attackModes ?? [], m => m?.value).filter(Boolean);
+  const last = activity.item?.getFlag?.("dnd5e", `last.${activity.id}.attackMode`);
+  return MELEE_MODES.includes(last) && modes.includes(last) ? last : modes.find(m => MELEE_MODES.includes(m));
+}
+
+/**
+ * A token as dnd5e describes a target on its cards (TargetsField.getDescriptors, as it does the user's own targets): its
+ * actor, its AC (none behind total cover), picture, name and token.
+ */
+function targetsOf(token) {
+  const fields = globalThis.dnd5e?.dataModels?.chatMessage?.fields?.TargetsField;
+  if ( typeof fields?.getDescriptors === "function" ) return fields.getDescriptors([token]);
+  const actor = token?.actor;
+  if ( !actor ) return [];
+  const ac = actor.statuses?.has?.("coverTotal") ? null : actor.system?.attributes?.ac?.value;
+  return [{ actor: actor.uuid, ac: ac ?? null, img: token.texture?.src, name: token.name, token: token.uuid }];
+}
+
+/**
+ * A reaction's strike rolled with dnd5e's own attack and damage rolls (core API 19), their cards in the chat. The target
+ * goes to the roll itself, as dnd5e would take it from the user's targets (the roll's `target`, its AC; the cards'
+ * `system.targets`), so the user's own targets are never touched. No dialog. dnd5e 6 keeps no count of reactions, so
+ * there's nothing to mark. On a hit, its damage, a critical's as dnd5e doubles it (its critical settings).
+ * Returns {attack: {degree: 0 fumble, 1 miss, 2 hit, 3 critical, natural, total}, damage: {byType} | null}, or null
+ * when it can't be rolled here (the engine's own dice).
+ */
+export async function rollDnd5eReaction(token, { action, target } = {}) {
+  const actor = token?.actor;
+  const activity = actor ? attackActivityOf(actor, action?.id) : null;
+  if ( !activity || !target?.actor ) return null;
+  const targets = targetsOf(target);
+  const ac = Number(targets[0]?.ac ?? NaN);
+  if ( !Number.isFinite(ac) ) return null;
+  // (Each roll its own message settings: dnd5e keeps and changes what it's given.)
+  const speaker = globalThis.ChatMessage?.implementation?.getSpeaker?.({ token });
+  const message = () => ({ data: { ...(speaker ? { speaker: { ...speaker } } : {}), system: { targets: targets.map(t => ({ ...t })) } } });
+  const mode = meleeMode(activity);
+  const rolls = await activity.rollAttack({ target: ac, ...(mode ? { attackMode: mode } : {}) }, { configure: false }, message());
+  const roll = rolls?.[0];
+  if ( !roll ) return null;
+  const total = Number(roll.total);
+  const natural = Number(roll.d20?.total ?? roll.dice?.find?.(d => d.faces === 20)?.total ?? NaN);
+  const degree = roll.isFumble ? 0 : roll.isCritical ? 3 : total >= ac ? 2 : 1;
+  const attack = { degree, natural: Number.isFinite(natural) ? natural : null, total };
+  if ( degree < 2 ) return { attack, damage: null };
+  // (As dnd5e's own Damage button rolls it after that attack: its ability, mode and ammunition, critical or not.)
+  const { ability, attackMode, ammunition } = roll.options ?? {};
+  let rolled = null;
+  try {
+    rolled = await activity.rollDamage({ isCritical: degree === 3, ability, attackMode: attackMode ?? mode, ammunition: ammunition ? actor.items?.get?.(ammunition) : undefined },
+      { configure: false }, message());
+  } catch ( err ) {
+    console.error(`fast-fighting-dnd5e | rolling a reaction's damage`, err);
+  }
+  const byType = {};
+  for ( const d of rolled?.length ? damagesOf({ rolls: rolled }) : [] ) byType[d.type || "untyped"] = (byType[d.type || "untyped"] ?? 0) + d.value;
+  return { attack, damage: Object.keys(byType).length ? { byType } : null };
 }
 
 export class Dnd5eAdapter extends SystemAdapter {
@@ -2325,6 +2416,11 @@ export class Dnd5eAdapter extends SystemAdapter {
    */
   appliesPlayerDamage() {
     return null;
+  }
+
+  /** API 19: a reaction's strike rolled with dnd5e's own attack and damage rolls, at its target (rollDnd5eReaction). */
+  async rollReaction(token, { action, target } = {}) {
+    return rollDnd5eReaction(token, { action, target });
   }
 
   /**
