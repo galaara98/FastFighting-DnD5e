@@ -198,6 +198,8 @@ Players' damage (API 19): `damageCard` is `damageCardOf` (`read-turn.js`: the da
 
 `rollStrike` (API 19) is `rollDnd5eStrike` (`adapter.js`), for every strike in a turn FastFighting plays and for reactions: the strike's attack activity by its id (`attackActivityOf`), rolled with `activity.rollAttack` (no dialog; the attack mode it's made in, a throw's for a throw, dnd5e's own for a shot, else in hand; the engine's advantage or disadvantage; message `rollMode: "gm"` when secret; the target's AC as the roll's `target` and its `TargetsField` descriptor as the cards' `system.targets`, so the user's own targets are untouched); on a hit `activity.rollDamage` (`isCritical` on a critical), damage by type from `damagesOf`; null with no such attack or no AC to hit.
 
+Surprise (API 19): `rules.surprise` (`rules.js`, the planner's Follow System): each hidden token rolls Stealth (d20 + Stealth); anyone against them whose passive Perception (10 + Perception) is under every roll is surprised: `surprised` under the 2014 rules (its first turn lost, no reactions until then), `disadvantage` on initiative under the 2024 rules (the creature's `rulesVersion`). No surprise round.
+
 ## Safety
 
 Item data is a player's to write, and the GM's client acts on it:

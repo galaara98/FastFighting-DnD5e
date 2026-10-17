@@ -6,7 +6,7 @@
  * disadvantage, which cancel each other out. A creature at 0 HP makes death saves; three successes stabilize it,
  * three failures kill it, and taking damage while down counts as a failure (two on a critical).
  */
-import { DOWNED_MODELS, STATUS, rollD20, bestReactionStrike, dropCondition, part } from "./core.js";
+import { DOWNED_MODELS, STATUS, rollD20, bestReactionStrike, dropCondition, part, areEnemies } from "./core.js";
 import { t } from "./words.js";
 import { escapeFrom, bondsDC, breakFree, HOLD_COST } from "./holds.js";
 import { insideHolds, spitUp, outOfCorpse } from "./inside.js";
@@ -66,7 +66,26 @@ function net(adv, dis) {
 /** Damage-type imagery for the story (5e's names for the core's families). */
 const STORY_TYPES = { lightning: "electricity", thunder: "sonic", necrotic: "void", radiant: "radiant", psychic: "mental" };
 
+/**
+ * Surprise as 5e has it (the planner's Follow System): those trying not to be seen as it starts (hidden tokens) each
+ * roll Stealth, and anyone against them that notices none of them (its passive Perception, 10 + its Perception, under
+ * every one's roll) is surprised. The 2014 rules: it loses its first turn, and can't react until it's gone by; the 2024
+ * rules: it rolls initiative at a disadvantage. No surprise round either way.
+ */
+function surprise(run) {
+  const hiders = run.units.filter(u => u.spec.hidden);
+  if ( !hiders.length ) return null;
+  const stealth = new Map(hiders.map(h => [h, run.rng.die(20) + (Number(h.spec.initiative?.stealth) || 0)]));
+  const caught = run.units.filter(o => {
+    const against = hiders.filter(h => h !== o && areEnemies(run, h, o));
+    return against.length && against.every(h => 10 + (Number(o.spec.perception) || 0) < stealth.get(h));
+  });
+  const legacy = o => o.spec?.rulesVersion === "legacy";
+  return { by: [...new Set(hiders.map(h => h.side))], surprised: caught.filter(legacy).map(o => o.id), disadvantage: caught.filter(o => !legacy(o)).map(o => o.id) };
+}
+
 export const dnd5eRules = {
+  surprise,
   id: "dnd5e",
 
   /* Turn ------------------------------------------------------------------ */
