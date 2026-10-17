@@ -255,6 +255,10 @@ describe("mending", () => {
     expect(regenerationFrom("The troll regains 15 Hit Points at the start of each of its turns. If the troll takes Acid or Fire damage, this trait doesn't function on the troll's next turn."))
       .toEqual({ amount: 15, stoppedBy: ["acid", "fire"] });
     expect(regenerationFrom("It can fly.")).toBeNull();
+    // (Words a player wrote, long and crafted: read a sentence at a time, at once.)
+    const start = Date.now();
+    expect(regenerationFrom(`It regains 10 hit points at the start of its turn. ${"takes fire damage or ".repeat(3000)}`)).toMatchObject({ amount: 10, stoppedBy: [] });
+    expect(Date.now() - start).toBeLessThan(1000);
     // The amount only in the trait's own healing; "if it has at least 1 hit point": it can die at 0.
     expect(regenerationFrom("The vampire regains [[/healing]] at the start of its turn if it has at least 1 hit point. If the vampire takes radiant damage or damage from holy water, this trait doesn't function.", 20))
       .toEqual({ amount: 20, stoppedBy: ["radiant"], needsHp: true });

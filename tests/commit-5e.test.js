@@ -5,7 +5,7 @@
 import { afterEach, describe, expect, test } from "vitest";
 import { commitDnd5eChanges } from "../scripts/commit.js";
 
-const before = { fromUuid: globalThis.fromUuid, foundry: globalThis.foundry };
+const before = { fromUuid: globalThis.fromUuid, foundry: globalThis.foundry, game: globalThis.game };
 afterEach(() => Object.assign(globalThis, before));
 
 /** An actor whose ActiveEffects are a plain list, with the calls made on it kept. */
@@ -41,6 +41,35 @@ describe("a spell's effects in a live turn", () => {
     expect(made).toMatchObject({ name: "Bless", origin: "Item.bless", transfer: false, duration: { value: 9, units: "rounds" } });
     expect(made.flags["fast-fighting"].laid).toEqual({ key: "bless", sourceId: "cleric" });
     expect(undo.createdEffects).toEqual(["made0"]);
+  });
+
+  test("from an item a player could write: only as the engine plays it (no status it doesn't, no macro, no other module's flags)", async () => {
+    const effect = {
+      _id: "fx", name: "Bane", statuses: ["dead", "frightened"],
+      changes: [{ key: "system.bonuses.abilities.save", mode: 2, value: "-1d4" }, { key: "macro.execute", mode: 0, value: "PwnTheGM" }, { key: "system.attributes.hp.value", mode: 5, value: "0" }],
+      flags: { dae: { macroRepeat: "startEveryTurn" }, "midi-qol": { x: 1 }, dnd5e: { type: "spell" } }
+    };
+    const players = ["p1"];
+    const bane = { documentName: "Item", uuid: "Actor.pc.Item.bane", testUserPermission: (u, level) => level === "OWNER" && players.includes(u.id), effects: { get: () => ({ toObject: () => structuredClone(effect) }) } };
+    globalThis.fromUuid = async () => bane;
+    globalThis.foundry = { utils: { getProperty: () => undefined } };
+    globalThis.game = { users: [{ id: "gm", isGM: true }, { id: "p1", isGM: false }] };
+    const source = { action: { effectRef: { uuid: bane.uuid, ids: ["fx"] } } };
+    const lay = async () => {
+      const { actor, calls } = actorWith();
+      await commitDnd5eChanges({ uuid: "Token.t", actor }, { actions: [] }, { effects: { added: [{ key: "bane", sourceId: "pc", rounds: 3 }], ended: [] } }, { status: "standing" }, { effectSource: () => source });
+      return calls.created[0].data[0];
+    };
+    const played = await lay();
+    expect(played.statuses).toEqual(["frightened"]);
+    expect(played.changes).toEqual([{ key: "system.bonuses.abilities.save", mode: 2, value: "-1d4" }]);
+    expect(Object.keys(played.flags).sort()).toEqual(["dnd5e", "fast-fighting"]);
+    // (The GM's own spell, owned by no player: copied as it is.)
+    players.length = 0;
+    const whole = await lay();
+    expect(whole.statuses).toEqual(["dead", "frightened"]);
+    expect(whole.changes).toHaveLength(3);
+    expect(whole.flags.dae).toBeTruthy();
   });
 
   test("not an item, nothing laid; ended, the one laid for it comes off and the record can put it back", async () => {

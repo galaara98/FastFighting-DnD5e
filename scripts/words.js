@@ -108,8 +108,41 @@ export function legendaryActionsName() {
 /** An item's name as the English books have it. */
 export const englishName = item => item?.flags?.babele?.originalName ?? item?.name ?? "";
 
-/** An item's description as the English books have it. */
+/**
+ * The most of a description read: twice the longest the books have (about 9,000 characters). A description is item
+ * data a player can write, and the GM's client reads it.
+ */
+export const DESCRIPTION_MOST = 20000;
+
+/** An item's description as the English books have it (up to DESCRIPTION_MOST). */
 export function englishDescription(item) {
   const original = item?.flags?.babele?.originalPayload?.description;
-  return typeof original === "string" && original ? original : item?.system?.description?.value ?? "";
+  const text = typeof original === "string" && original ? original : item?.system?.description?.value ?? "";
+  return typeof text === "string" ? text.slice(0, DESCRIPTION_MOST) : "";
+}
+
+/**
+ * The most of a sentence a reading searches: five times a long one of the books'. A pattern that can't cross a full
+ * stop, searched a sentence at a time, costs little however long the text; one sentence longer than this isn't a
+ * book's, and isn't read.
+ */
+const SENTENCE_MOST = 1000;
+
+/** The first match of a pattern that can't cross a full stop (it has no "."), a sentence at a time; or null. */
+export function inSentence(text, pattern) {
+  for ( const s of String(text ?? "").split(".") ) {
+    if ( s.length > SENTENCE_MOST ) continue;
+    const m = pattern.exec(s);
+    if ( m ) return m;
+  }
+  return null;
+}
+
+/**
+ * The players of a document: the users besides the GMs who own it (or the compendium it's in). None: the GM's own.
+ * What a player owns is theirs to write, and the GM's client must not take it at its word.
+ */
+export function playersOf(doc) {
+  const pack = doc?.pack ? globalThis.game?.packs?.get(doc.pack) : null;
+  return [...(globalThis.game?.users ?? [])].filter(u => !u.isGM && !!(pack ?? doc)?.testUserPermission?.(u, "OWNER"));
 }

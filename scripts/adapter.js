@@ -18,7 +18,7 @@ import { edgeActions, studyCheck } from "./edges.js";
 import { loreBoost } from "./lore.js";
 import { formulaNumber, plainDice } from "./arithmetic.js";
 import { escapeWords, grabEscapeDC } from "./holds.js";
-import { t, skillName, conditionName, statusName, coin, englishName, englishDescription, languageNames } from "./words.js";
+import { t, skillName, conditionName, statusName, coin, englishName, englishDescription, languageNames, inSentence, playersOf } from "./words.js";
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 const MODES = ["walk", "fly", "swim", "climb", "burrow"];
@@ -259,6 +259,19 @@ function inParty(actor) {
 }
 
 /** How much of an embedded page a biography reads (a page can be a whole chapter). */
+/**
+ * Could a summoning's players call this creature themselves, as dnd5e lets them? An Actor: from a compendium each of
+ * them may open, or one in the world each of them owns. A summoning of the GM's own (owned by no player) calls any. The
+ * link is the item's data, a player's to write, and the GM's client would bring the creature in.
+ */
+function mayCall(item, src) {
+  if ( src?.documentName !== "Actor" ) return false;
+  const players = playersOf(item);
+  const pack = src.pack ? globalThis.game?.packs?.get(src.pack) : null;
+  if ( src.pack ) return !players.length || (!!pack && players.every(u => pack.testUserPermission(u, "OBSERVER")));
+  return players.every(u => src.testUserPermission(u, "OWNER"));
+}
+
 const EMBED_CAP = 5000;
 
 /**
@@ -305,8 +318,9 @@ export function regenerationFrom(text, healed = null) {
   // (How much: in its words, or the trait's own healing when the words only point to it.)
   const words = /regains (\d+) hit points at the start of (?:its|each of its|their) turns?/i.exec(text ?? "");
   const amount = words ? Number(words[1]) : Number(healed) || 0;
-  if ( !(amount > 0) || !/regains\b[^.]*\bat the start of/i.test(text ?? "") ) return null;
-  const stop = /takes ([^.]*?) damage(?: or [^.]*?)?, this (?:trait|ability) doesn['’]t function/i.exec(text) ?? /if (?:it|the \w+) takes ([^.]*?) damage/i.exec(text);
+  // (A sentence at a time: the words are item data a player can write, and a search over all of them backtracks.)
+  if ( !(amount > 0) || !inSentence(text, /regains\b[^.]*\bat the start of/i) ) return null;
+  const stop = inSentence(text, /takes ([^.]*?) damage(?: or [^.]*?)?, this (?:trait|ability) doesn['’]t function/i) ?? inSentence(text, /if (?:it|the \w+) takes ([^.]*?) damage/i);
   // "If it has at least 1 hit point": nothing keeps it from dying at 0.
   const needsHp = /if it has at least 1 hit point/i.test(text);
   return { amount, stoppedBy: stop ? damageWordsIn(stop[0]) : [], ...(needsHp ? { needsHp: true } : {}) };
@@ -1243,7 +1257,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       try {
         src = p.uuid ? await fromUuid(p.uuid) : await creatureByCr(value(p.cr, 0), [...(p.types ?? [])]);
       } catch ( err ) { /* not installed */ }
-      if ( !src ) continue;
+      if ( !src || !mayCall(item, src) ) continue;
       // As dnd5e summons it: a temporary copy (never saved) that knows the casting's level, the caster's modifier and
       // proficiency, so formulas such as "(4 + 2 * (@flags.dnd5e.summon.level - 5))d8" come out right.
       let creature = src;

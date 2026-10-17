@@ -8,7 +8,8 @@
  *     statuses: [{id, active}], combatant }
  */
 import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine } from "./core.js";
-import { t, conditionName } from "./words.js";
+import { t, conditionName, playersOf } from "./words.js";
+import { modeledChange } from "./effects.js";
 import { WRITES, SHEET_STATUSES, hasStatus, ownStatus, statusKeys, exhaustionLevels } from "./conditions.js";
 
 /** Engine conditions a fight's summary names: the dnd5e statuses that outlast it. */
@@ -202,8 +203,27 @@ export async function commitDnd5eChanges(tokenDoc, spec, changes, final, options
 }
 
 /**
+ * The dnd5e statuses the engine plays (the ones it reads from a sheet and writes to one). A status not among them (dead,
+ * one of another module's) an effect a player wrote doesn't carry onto another's sheet.
+ */
+const PLAYED_STATUSES = new Set(Object.values(WRITES));
+
+/**
+ * An effect from an item a player could write, as the engine plays it: its statuses and changes the engine reads, and
+ * none of another module's flags (a macro to run, Midi-QOL's and DAE's own). The GM's client writes it onto a sheet the
+ * player couldn't write to, so it carries nothing the fight didn't play out.
+ */
+function asPlayed(data) {
+  data.statuses = (data.statuses ?? []).filter(s => PLAYED_STATUSES.has(s));
+  data.changes = (data.changes ?? []).filter(c => modeledChange(c) && !/^macro\./i.test(String(c?.key ?? "")));
+  data.flags = Object.fromEntries(Object.entries(data.flags ?? {}).filter(([scope]) => ["core", "dnd5e"].includes(scope)));
+  return data;
+}
+
+/**
  * A buff or debuff laid this turn: the spell's own effects (the action's effectRef, options.effectSource), copied onto
- * the creature for the rounds it has, marked as laid by FastFighting (and by whom) so it comes off when it ends.
+ * the creature for the rounds it has, marked as laid by FastFighting (and by whom) so it comes off when it ends. From an
+ * item a player could write, only as the engine played it (asPlayed).
  */
 async function layEffect(actor, e, options, undo) {
   const ref = options?.effectSource?.(e.key)?.action?.effectRef;
@@ -213,9 +233,11 @@ async function layEffect(actor, e, options, undo) {
     item = await fromUuid(ref.uuid);
   } catch ( err ) { /* gone */ }
   if ( item?.documentName !== "Item" ) return;
+  const theirs = playersOf(item).length > 0;
   for ( const id of ref.ids ?? [] ) {
-    const data = item.effects?.get(id)?.toObject();
-    if ( !data ) continue;
+    const found = item.effects?.get(id)?.toObject();
+    if ( !found ) continue;
+    const data = theirs ? asPlayed(found) : found;
     delete data._id;
     Object.assign(data, {
       origin: item.uuid, transfer: false, disabled: false,

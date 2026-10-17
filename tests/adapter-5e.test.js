@@ -26,7 +26,7 @@ const item = (type, identifier, name, system = {}) => ({ id: identifier, type, n
 /** An actor as Foundry's dnd5e prepares one, with only what these tests look at. */
 function actorOf({ id = "actor", type = "npc", creature = "humanoid", int = 10, hp = 20, items = [], details = {}, owners = [], rollData = null } = {}) {
   return {
-    id, uuid: `Actor.${id}`, type, name: id, img: "", flags: {}, statuses: new Set(), appliedEffects: [], classes: {},
+    id, uuid: `Actor.${id}`, documentName: "Actor", type, name: id, img: "", flags: {}, statuses: new Set(), appliedEffects: [], classes: {},
     items: listOf(items),
     testUserPermission: (user, level) => level === "OWNER" && owners.includes(user.id),
     getRollData: () => rollData ?? {},
@@ -183,6 +183,36 @@ describe("a summoning's formulas, with its caster's numbers", () => {
     expect(called.creatures).toHaveLength(1);
     expect(called.creatures[0].hp).toMatchObject({ value: 51, max: 51 });
     expect(called.creatures[0].actions.find(a => a.name === "Bite").damage[1]).toMatchObject({ dice: [{ n: 1, faces: 12 }], flat: 3, type: "piercing" });
+  });
+
+  test("a player's summoning calls only what they could summon themselves: a world creature of theirs, a compendium's they may open", async () => {
+    const bite = {
+      id: "bite", type: "attack", activation: { type: "action" }, attack: { type: { value: "melee" } }, labels: { modifier: "+4" },
+      getDamageConfig: () => ({ rolls: [{ parts: ["1d6 + 2"], options: { types: ["piercing"] } }] }), getRollData: () => ({})
+    };
+    const beast = (id, owners, pack = null) => Object.assign(actorOf({ id, creature: "beast", hp: 11, owners, items: [item("weapon", "bite", "Bite", { activities: [bite], range: {} })] }), pack ? { pack } : {});
+    const ACTORS = { "Actor.mine": beast("mine", ["player"]), "Actor.gms": beast("gms", []), "Compendium.open.wolf": beast("wolf", [], "open"), "Compendium.hidden.boss": beast("boss", [], "hidden") };
+    globalThis.fromUuid = async uuid => ACTORS[uuid] ?? null;
+    const was = { users: globalThis.game.users, packs: globalThis.game.packs };
+    globalThis.game.users = [{ id: "gm", isGM: true }, { id: "player", isGM: false }];
+    globalThis.game.packs = new Map([["open", { testUserPermission: () => true }], ["hidden", { testUserPermission: u => u.isGM }]]);
+    try {
+      const calls = async (uuid, owners) => {
+        const summon = { id: "call", type: "summon", activation: { type: "action" }, match: {}, profiles: [{ count: "1", uuid, level: {} }], bonuses: {}, getRollData: () => ({}) };
+        const spell = { ...item("spell", "call", "Call", { level: 3, activities: [summon], duration: { units: "minute", value: 1 } }), testUserPermission: (u, level) => level === "OWNER" && owners.includes(u.id) };
+        const spec = await specOf(actorOf({ items: [spell], owners }));
+        return spec.actions.some(a => a.kind === "summon");
+      };
+      expect(await calls("Actor.mine", ["player"])).toBe(true);
+      expect(await calls("Compendium.open.wolf", ["player"])).toBe(true);
+      expect(await calls("Actor.gms", ["player"])).toBe(false);
+      expect(await calls("Compendium.hidden.boss", ["player"])).toBe(false);
+      // (The GM's own creature's summoning calls any.)
+      expect(await calls("Compendium.hidden.boss", [])).toBe(true);
+      expect(await calls("Actor.gms", [])).toBe(true);
+    } finally {
+      Object.assign(globalThis.game, was);
+    }
   });
 });
 

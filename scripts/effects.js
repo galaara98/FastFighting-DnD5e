@@ -37,6 +37,16 @@ export function bonusOf(raw) {
 const average = b => (b?.flat ?? (b?.die ? (Math.sign(b.die) * (Math.abs(b.die) + 1)) / 2 : 0));
 
 /** An effect's changes as engine bonuses and penalties, plus any temporary hit points (Aid's extra maximum). */
+/** Is it a change the engine reads (modsFromChanges)? Any other plays as nothing. */
+export function modeledChange(c) {
+  const key = String(c?.key ?? "");
+  const mode = Number(c?.mode);
+  if ( key === "system.magicalBonus" ) return [ADD, UPGRADE, OVERRIDE].includes(mode);
+  if ( mode === MULTIPLY ) return key === "system.attributes.movement.multiplier";
+  return mode === ADD && (ATTACK_BONUS.test(key) || DAMAGE_BONUS.test(key) || SPEED_BONUS.test(key) || /^system\.attributes\.hp\.(?:tempmax|temp)$/.test(key)
+    || ["system.bonuses.abilities.save", "system.attributes.ac.bonus", "system.traits.dr.value", "system.traits.di.value"].includes(key));
+}
+
 export function modsFromChanges(changes) {
   const mods = {};
   let tempHp = 0;
