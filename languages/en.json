@@ -2,17 +2,18 @@
   "FFDND5E": {
     "Label": "D&D 5e",
     "NeedsCore": "FastFighting D&D 5e needs the FastFighting Core module. Install and enable it.",
-    "CoreTooOld": "FastFighting D&D 5e needs a newer FastFighting Core. Update FastFighting Core in Add-on Modules.",
+    "CoreTooOld": "FastFighting D&D 5e needs a newer FastFighting Core. Update it in Add-on Modules.",
+    "CoreUntested": "FastFighting D&D 5e hasn't been tried with FastFighting Core API {major}; some things may not work.",
     "SpellSlot": "Level {level} spell slot",
     "PactSlot": "Pact slot",
     "Surrendered": "Surrendered",
-    "SurrenderedHint": "Laid down arms during a FastFighting battle and is at the victors' mercy.",
+    "SurrenderedHint": "Laid down arms in a FastFighting battle.",
     "HeroicInspiration": "Heroic Inspiration",
     "Inspiration": "Inspiration",
     "Settings": {
       "loreBoost": {
         "Name": "Lore-Collector advantage",
-        "Hint": "How much likelier a Lore-Collector's rolls against a foe it has sized up are to succeed, through its next turn, after spending its action on the Study action (when the check worked; never without it). 1.25× is a nudge, 3× a sure thing more often than not. Default 2.5×: Study takes the whole turn, and works only a little over half the time. Ordinary attacks already hit often, and the dice stop a roll near 95%, so above about 1.75× little changes for them; the rest helps long-shot rolls (a hard AC, a hard talk)."
+        "Hint": "How much likelier a Lore-Collector's rolls against a foe are to succeed through its next turn, after a successful Study. Above about 1.75×, only long-shot rolls gain much."
       }
     },
     "Passive": "passive {skill}",

@@ -4,11 +4,13 @@
 > - **Programming:** I am a skilled programmer by profession, but AI was used heavily as a co-pilot.
 > - **Strings:** ALL initial strings were proposed by a LLM to get the concepts out, ALL strings were  tracked to make sure they were re-written (for simple or ttrpg/game specific phrases, approved by) a native speaker.
 
-Dungeons & Dragons Fifth Edition support for [FastFighting Core](https://github.com/galaara98/FastFighting), the Foundry VTT module that simulates a battle (or a tense standoff) thousands of times, tells the story of one fair draw, and plays it for real on the Combat Tracker, a turn at a time, with **Do it For Real Now**.
+Dungeons & Dragons Fifth Edition support for [FastFighting Core](https://github.com/galaara98/FastFighting), the Foundry VTT module that simulates a battle (or a tense standoff) thousands of times, tells the story of a typical fight, and plays it for real on the Combat Tracker with **Do it For Real Now**.
+
+The core offers a large but fixed set of options: conditions, maneuvers, holds, reactions, resources, outcomes and more. Each system's helper maps its system into them. This one maps D&D 5e; the sections below say how each 5e idea maps, and why.
 
 - **Foundry:** v14
 - **System:** dnd5e 4.0 or later (written against 6.0)
-- **Needs:** FastFighting Core (API 18)
+- **Needs:** FastFighting Core 0.3.0 or later
 
 ## Installation
 
@@ -19,194 +21,177 @@ https://github.com/galaara98/FastFighting/releases/latest/download/module.json
 https://github.com/galaara98/FastFighting-DnD5e/releases/latest/download/module.json
 ```
 
-Foundry only offers this module in D&D 5e worlds. Metric worlds work too: speeds, reach and ranges are converted (1.5 m to a 5-foot square).
+Foundry offers this module only in D&D 5e worlds.
 
-## What it reads
+## 2014 and 2024 rules
 
-Everything works from the free SRD alone, the 2014 SRD 5.1 and the 2024 SRD 5.2 (their wordings differ, and both are read). The Player's Handbook, the Dungeon Master's Guide and other books only add more spells and features, read the same way: from what an item does (its activities and effects), then its words, never from a list of names. Features it has to recognise (Extra Attack, Sneak Attack, Rage's companions Reckless Attack and Action Surge, Pack Tactics, Nimble Escape, Multiattack, Halfling Nimbleness, a creature's Swallow, Engulf or Deadly Leap) are found by their identifier, the same in every book and language.
+The module needs only the free SRD, 5.1 (2014) and 5.2 (2024), and reads both wordings; other books add spells and features, read the same way. Grapples, bonds, Burning and fate follow the world's dnd5e rules version, legacy (2014) or modern (2024). A spell or feature plays as the version on the sheet.
 
-- **Attacks:** weapons and features through their attack activities: to-hit, damage (with your modifiers), melee reach, and ranged normal and long range.
-  - A save beside an attack on the same item happens on a hit: a wolf's bite (Strength or prone), a spider's venom (Constitution, half on a success).
-  - A grapple from an attack uses the core's grab, which the target can try to escape.
-- **Multiattack:** NPCs make every strike their Multiattack lists in one action, read from the stat block's wording in both the 2014 and 2024 styles ("one with its bite and two with its claws", "one Bite attack and one Claw attack", "two melee attacks", "using Scimitar or Pistol in any combination"). Where there's a choice, each way is an option, and the simulation picks one each turn (melee up close, ranged from afar). Checked against all 329 SRD monsters with a Multiattack.
-- **Extra Attack:** characters with Extra Attack (or more) make several weapon attacks with the Attack action (from two classes it doesn't add up; a warlock's Thirsting Blade counts).
-- **Multiclassing:** each spell's attack bonus and save DC come from its own class; a spell can be cast from any slot it can use, a higher one adding its damage (and darts or rays) for each level up, and, as the multiclassing rules allow, from a warlock's pact slot (or a warlock's spell from the other slots), the cheapest first.
-- **Sneak Attack:** for characters, once a turn on a finesse or ranged weapon, with advantage or an ally next to the target.
-- **What rides on a hit** (by identifier, or for anything that says it works "after you hit"), each used when this hit is worth what it costs:
-  - Divine Smite (2014's feature with any slot up to 5d8, 2024's spell with the bonus action) and the smite spells, at each slot level the character has, the bigger version against fiends and undead;
-  - Eldritch Smite (a pact slot), Stunning Strike (a Focus or ki point), Battle Master maneuvers (a superiority die: Trip, Menacing, Pushing, Disarming ... and Precision Attack on a close miss);
-  - Improved Divine Smite (Radiant Strikes): a d8 of radiant on every melee weapon hit.
-- **Reactions:** Shield (perhaps a miss after all), Uncanny Dodge (half the blow), Hellish Rebuke, Counterspell (2014: by the slot's level or a check; 2024: the caster's Constitution save), a Battle Master's Parry and Riposte, a monk's Deflect Attacks (or Missiles), and any reaction spell whose effect raises AC. Spells spend the cheapest slot that works.
-- **Summons:** a summon activity's creatures (Spiritual Weapon, Flaming Sphere, Animate Objects, Conjure Animals, a magic item's elementals ...), read like any creature as dnd5e would summon them (at the casting's level), with the caster's spell attack and save DC where the spell says, and more damage for a higher slot. How many come, and their bonuses, are worked out with the caster's own numbers as dnd5e works them out (@scaling, its spellcasting modifier, class levels, hit points; the creature's own where a bonus counts them), as arithmetic only, never run as code. A spell that names a challenge rating and type gets one from the installed books. A spiritual weapon or a flaming sphere can't be attacked, and acts only when the caster spends its bonus action. Rituals and what can't fight (Find Familiar, Mage Hand) are left out.
-- **Regeneration, Undead Fortitude and Relentless Endurance:** a troll's (or a vampire's) Regeneration, read from its words: so many hit points a turn, stopped by the damage it names; the Regenerate spell's hit point at the start of each turn, after its heal, for its hour (and on a creature it was cast on before the fight); a zombie's Undead Fortitude: the Constitution save against 5 + the damage, never against radiant damage or a critical hit; an orc's Relentless Endurance: 1 hit point instead of 0, no save, once a long rest (Do it For Real Now spends it), never when the blow kills it outright.
-- **Swallowed and engulfed:** a purple worm's, a behir's or a tarrasque's swallow (and the like: a giant toad's, a kraken's), and a gelatinous cube's engulfing, by identifier: the core's swallowed and engulfed, for a creature no bigger than the words allow (and, where they say so, one it's grappling: a behir goes for the one in its coils rather than a weaker foe beside it). Inside, it has Total Cover (nobody outside can go for it, and it goes only for its holder, wherever that moves: the core's, as in every system), is Blinded and Restrained in a gullet and Restrained in an ooze (and nothing more: not the core's own penalty on top), and takes its holder's own damage at the start of each of its turns (a worm's 6d6 acid; the SRD has it at the start of the holder's). No action gets it out of a gullet: so much damage from inside in one turn (30; a tarrasque's 60) calls for the holder's save, and a failure brings them all up, Prone; the holder's death lets them go, out of a gullet Prone. A cube's engulfing is broken with an action and a DC 12 Strength check (2024: Strength (Athletics)), and a friend beside it can pull one out; one who saves is pushed clear.
-- **Fire and acid that last:** a creature set alight (dnd5e's Burning status, or words that say so: an alchemist's fire, a fire elemental's or a magmin's touch) takes 1d4 fire at the start of each of its turns, the SRD 5.2's Burning (or what the fire's source says: a 2014 fire elemental's 1d10), until it puts the fire out with an action (Prone from rolling on the ground; under the 2014 rules, a DC 10 Dexterity check: 5e's way, in place of the core's own) or a friend beside it beats the flames out. Acid Arrow and Vitriolic Sphere leave their acid for the end of the target's next turn, and nothing scrapes it off.
-- **Recharge and legendary creatures:** "Recharge 5–6" abilities come back on a d6; legendary actions (by their cost, including one that only names its attack, "makes a tail attack") are taken between other creatures' turns; Legendary Resistance turns a failed save that matters into a success, and Do it For Real Now spends it.
-- **Saves:** Magic Resistance (advantage against spells), Evasion, and a paladin's Aura of Protection (Charisma to its own and nearby friends' saves, 10 feet, 30 from 18th level).
-- **Bonus-action strikes:** a light weapon in each hand gives a bonus-action attack with the second (without its ability modifier, unless the character has the Two-Weapon Fighting style); a monk's Martial Arts (an unarmed strike) and Flurry of Blows (two unarmed strikes, three with Heightened Focus, for a point of Focus or ki).
-- **Pushes:** spells and features that push, by identifier (Thunderwave, Gust of Wind, Thunderous Smite, Repelling Blast, a bronze dragon's breath ...); a bulette's Deadly Leap, which pushes whoever saves out of its way; and a weapon's Push mastery (10 feet, a creature Large or smaller), for a wielder with mastery of that weapon.
-- **Size:** Shove only works on a creature up to one size larger.
-- **Terrain:** dnd5e's own difficult terrain regions (Spike Growth's, Plant Growth's, or one the GM draws) are difficult terrain.
-- **Spells:**
-  - attack, save and damage activities, plus the conditions their effects impose (Hold Person's paralysis, a Web's restraint, and so on);
-  - spell slots, pact slots and innate uses, and one slot a turn (Healing Word and Guiding Bolt can't share a turn; Healing Word and a cantrip can);
-  - darts, rays and beams: Magic Missile's three darts, Scorching Ray's three rays, Eldritch Blast's extra beams at levels 5, 11 and 17;
-  - cones and lines from yourself reach as far as they're long, and areas catch more foes the bigger they are;
-  - characters only use cantrips and prepared spells.
-- **Healing:** spells and potions, as actions or bonus actions. Cure Wounds is a touch (walk over first); Healing Word reaches 60 feet.
-- **Buffs and debuffs** (from their effects' changes, statuses and words):
-  - for friends: Bless (+1d4 to attacks and saves), Shield of Faith, Haste (and its extra action), Aid and False Life (extra hit points), Divine Favor, Magic Weapon, Longstrider, Blur, Mirror Image, Greater Invisibility, Protection from Evil and Good, Warding Bond;
-  - for foes: Bane (−1d4), Faerie Fire (advantage against it), Slow, Ray of Enfeeblement, Vicious Mockery's disadvantage, Ray of Frost's slowing;
-  - Hunter's Mark and Hex: extra damage on your own hits, moved to a new foe when the first one drops, at no new slot;
-  - Hold Person, Hideous Laughter, Confusion, Command, Entangle, Fear, Grease, Sleep and the like, with the save they repeat each turn;
-  - 2024's Contagion: Poisoned (its Constitution saves at Disadvantage, the caster's choice taken as the save that ends it), taking hold as the spell's own save went (no second roll), the save repeated at the end of each of its turns until three made end it or three failed keep it for the fight;
-  - Charm Person and the Dominate spells turn the target to your side (saved with advantage in a fight, as the spells say), until it shakes it off, your concentration breaks, or (for a charm) your side harms it;
-  - class features: Rage (its damage and its resistance to weapons), Reckless Attack, Action Surge, Bardic Inspiration, Turn Undead, Intimidating Presence and others with effects;
-  - concentration: one spell at a time; damage calls for a Constitution save (DC 10 or half the damage), and being incapacitated ends it;
-  - anyone can Dodge; characters and humanoids can Shove a foe prone (Strength or Dexterity save, whichever is better);
-  - gaining an edge, good for one roll and aimed where it counts: anyone with a mind can **Help** (advantage on a friend's next attack at a foe within 5 feet of the helper, or its next ability check toward whoever it's set on: its words, a Medicine check); a creature proficient in Insight that can talk may first read the one it means to talk round (**Insight** against DC 15: advantage on its next words to them); **Guidance** (2014: a d4 on one ability check; 2024: on every check with the skill), **Bardic Inspiration** (the bard's own die on one attack, check or save), **Guiding Bolt** (the next attack at the target has advantage), **Vicious Mockery** (disadvantage on its next attack), **Steady Aim** and 2014 **True Strike** (advantage on your next attack) are each spent by the roll they help;
-  - a Lore-Collector sizes a foe up with the **Study** action: its best of Arcana, History, Investigation, Nature and Religion; it has to work to pay off, by the **Lore-Collector advantage** setting (1.25× to 3× as likely to succeed, through its next turn; default 2.5×, since it costs the whole turn; ordinary attacks get all they can by about 1.75×, the rest helps long-shot rolls); what it learns holds for every foe of the same sort;
-  - already on a creature when the fight starts: what dnd5e's numbers leave out (Bless's d4 on attacks and saves, invisibility, a Faerie Fire outline); flat bonuses such as Shield of Faith's AC are already in them;
-  - in a live battle, on the creature as the spell's own effect, for the rounds it has.
-- **Senses:** sorted into the core's with their ranges: darkvision and truesight see in the dark; blindsight and tremorsense are felt; blinded and deafened.
-- **Fate:** a character's (Heroic) Inspiration is spent to keep someone from dying, and Do it For Real Now takes it away.
-- **Defenses:**
-  - damage immunities, resistances and vulnerabilities;
-  - condition immunities, so a spell isn't wasted on a creature immune to everything it would do.
-- **Talking:**
-  - Persuasion persuades, Intimidation threatens and Deception bluffs, all against passive Insight;
-  - Sleight of Hand steals, against passive Perception (a character, or a creature with the wits to: not a beast, nor one with an animal's Intelligence or none);
-  - languages: those on its sheet, and those its custom languages name ("Common plus one other language"); none for one that understands but can't speak;
-  - Wisdom saves set how strong-willed a creature is.
-- **A creature's personality** comes from what it is: its Intelligence, its Wisdom save for its challenge rating and its creature type (beasts and the mindless fight on instinct; Pack Tactics). Then its alignment moves it (good less selfish, evil more, lawful more loyal, chaotic less), and so do its kind's loyalty (a devil's hierarchy, a demon's chaos, a celestial's devotion), an immunity to being frightened (a fearless one) or charmed, its features (Brave, Martial Advantage, Aggressive, Pack Tactics, a reckless or frenzied one ...), healing others, exhaustion, and a loyalty score where the world keeps one. A creature dnd5e summoned serves its summoner. Nothing moves the mindless.
-- **A player character's personality** starts as the usual hero's (bold, loyal, unselfish, a good head), and everything on its sheet moves it a little:
-  - Intelligence, Wisdom and experience for Tactical; its Wisdom save against the usual hero's at its level, and its Constitution, for Brave;
-  - its classes (by their share of its levels) and subclasses: a paladin selfless and loyal, a berserker bold and rash, a thief or a fiend's warlock out for itself, a wizard or a lore bard a planner;
-  - its background: an acolyte selfless, a criminal less so, a sage a planner, a soldier bold and loyal;
-  - its alignment, half as much as a creature's;
-  - its features by what their effects do (an immunity to being frightened; advantage on Wisdom saves, like Gnomish Cunning; Mindless Rage's immunities count half, being on only while it rages), the rest by identifier (Brave, Aura of Courage, Relentless Endurance, Danger Sense, Indomitable ...). Its species speaks through its traits;
-  - its condition immunities, and the features and prepared spells it heals others with;
-  - skills that say something (Sleight of Hand, Deception, Medicine, Investigation, History, Insight, Perception, Intimidation, Persuasion), expertise more;
-  - exhaustion, and whether it's in the party (dnd5e's primary party).
+| | 2014 | 2024 |
+| --- | --- | --- |
+| Grapple escape DC, when the stat block gives none | 10 + the grappler's Athletics | 8 + the grappler's Strength modifier + proficiency |
+| FastFighting's bonds, taken as rope | DC 17 Strength to burst | DC 15 Acrobatics to slip, DC 20 Athletics to burst |
+| Putting out Burning (an action) | DC 10 Dexterity check | drop Prone, no roll |
+| Counterspell | fails a spell of the slot's level or lower; a check for a higher one | the caster's Constitution save |
+| Divine Smite | a feature: any slot, up to 5d8 | a spell, with the bonus action |
+| Guidance | a d4 on one check | a d4 on every check with the chosen skill |
+| Fate | Inspiration | Heroic Inspiration |
 
-  Each trait's tooltip in the planner lists where it started and every part that moved it.
-- **Already under way:** current HP, death saves, conditions (prone, frightened, poisoned, restrained, grappled, paralyzed, stunned, unconscious and others) and exhaustion.
+## How 5e maps into the core
 
-## The 5e rules it plays
+### Reading a creature
 
-- **The turn:** an action, a bonus action and your movement. Dash spends the action on a second move, and standing up costs half your movement.
-- **Rolls:**
-  - attacks crit on a 20 (dice doubled, not modifiers) and miss on a 1;
-  - saves and checks simply meet the DC or don't;
-  - half damage on a successful save, or none when the spell says so.
-- **Doors:** a wooden door is AC 15 with 18 hit points, locked against a DC 15 Strength (Athletics) check or thieves' tools (proficiency, and the tools themselves for a character); opening one is a free object interaction, forcing or picking it takes an action.
-- **Moving past others:** through an ally's space, one that's down or Incapacitated, a Tiny creature's or one two sizes off, as Difficult Terrain; round any other foe. A halfling's Nimbleness takes it through any creature larger than it.
-- **Opportunity attacks:** anyone with a melee weapon swings once (its reaction) at a foe leaving its reach. Disengage gets you out safely; rogues (Cunning Action) and goblins (Nimble Escape) do it as a bonus action.
-- **Breaking free** (each try an action, and so is freeing a friend):
-  - a grapple: an Athletics or Acrobatics check, whichever is better, against the grappler's escape DC: the one its attack gives ("escape DC 13"), else 8 + its Strength modifier + proficiency (2024), or 10 + its Athletics (2014's contest, as a passive check). Grappled on the sheet with no grabber known: the hardest grab among the foes within reach, else a typical DC for its level;
-  - webs, grasping plants and a net say what breaks them: a Strength check (2024: Strength (Athletics)) against the spell's save DC, or DC 10 for a net, which a friend beside it can make too;
-  - FastFighting's bonds are taken as rope: 2024, DC 15 Acrobatics to slip them or DC 20 Athletics to burst them; 2014, a DC 17 Strength check to burst them. A friend unties them with no roll.
-- **Free hands:** tied up, a creature can still use what needs none: a bite, an unarmed strike (a kick will do), a spell with only a verbal component. A weapon takes one hand (two-handed, two), and so do claws, a fist, a spell with a somatic or material component, a potion or a net, and a grapple.
-- **Advantage and disadvantage:** helpless, prone or restrained targets; poisoned, frightened or blinded attackers; Pack Tactics; ranged attacks at long range or in melee. They cancel out.
-- **Exhaustion:** −2 per level to d20 tests.
-- **Frightened:** besides its Disadvantage, it can't come any closer to what frightens it, so it keeps away from it, however bold it is. Frightened is on or off, and being frightened again and again wears on it all the same (the core's).
-- **Dying:**
-  - death saves at DC 10; a 20 brings you back with 1 HP and a 1 counts as two failures;
-  - damage while down is a failure, two on a critical;
-  - massive damage kills outright;
-  - allies stabilize the dying with a DC 10 Medicine check (an action, in the fight as after it) or heal them.
+FastFighting reads each item by what it does (its activities and effects), then by its words, never from a list of names, so homebrew and unseen books work too. Features it must recognise, such as Extra Attack or Pack Tactics, it finds by identifier, the same in every book and language. Babele-translated compendiums are read from the English Babele keeps; metric worlds count 1.5 m as a 5-foot square.
 
-## Playstyles in 5e
+- An attack activity is the core's attack. A save on the same item happens on a hit when the item says so: a wolf's bite (Strength or prone).
+- Multiattack: an NPC makes every strike it names, read from 2014 and 2024 wording ("one with its bite and two with its claws"). Each choice is an option the simulation picks per turn.
+- Extra Attack (and Thirsting Blade) gives several weapon attacks with the Attack action; from two classes, it doesn't add up. Two light weapons, Martial Arts and Flurry of Blows give bonus-action strikes.
+- Characters fight with equipped weapons and cast cantrips and prepared spells (and pact, innate and at-will ones). Magic Missile's darts, Scorching Ray's rays and Eldritch Blast's beams count, more for a higher slot.
+- Summons (Spiritual Weapon, Conjure Animals ...) are the core's summons: the creatures dnd5e would call, with the caster's attack and DC where the spell says, and only what its players could call themselves. A spiritual weapon or a flaming sphere can't be attacked, and acts only on the caster's bonus action.
 
-Every perk a playstyle (or a tactics answer) can switch on does something here. Most play as they do in any system (who a character goes for, when it loses heart, whom it listens to, how it talks). These lean on 5e's own:
+### The turn
+
+A 5e turn is the core's turn with an action, a bonus action and movement, plus one spell slot, which plays 5e's rule on bonus-action spells: Healing Word and Guiding Bolt can't share a turn, Healing Word and a cantrip can. Dash spends the action on a second move; standing up costs half your movement. Slowed (the Slow spell): an action or a bonus action, not both, and no reaction.
+
+### Rolls
+
+5e's d20 tests are the core's rolls with two results, since 5e has nothing beyond meeting the DC. Attacks crit on a natural 20 (dice doubled) and miss on a 1. A successful save halves the damage, or stops it where the spell says so. Advantage and disadvantage cancel out. They come from the conditions (a restrained target, a poisoned attacker), prone (up close or from afar), Pack Tactics, and ranged attacks in melee or at long range. Cover adds +2 (half) or +5 (three-quarters) to AC and Dexterity saves; exhaustion is −2 a level to d20 tests.
+
+### Conditions
+
+dnd5e's conditions are the core's: read from the sheet when the fight starts, and written back in a live battle. Most map one to one (Prone, Poisoned). Where the core splits an idea, the 5e condition sets both: Restrained also holds the creature in place, and Paralyzed or Stunned also stop it acting. Grappled is the core's grabbed, Sleeping its asleep, Hiding its hidden. A charm or a Dominate spell is the core's control, so the target fights for its caster; the sheet shows Charmed. FastFighting keeps conditions dnd5e has no status for (off guard, dazed) itself.
+
+5e's Frightened is on or off. A frightened creature can't come closer to what frightens it, so it keeps away, however bold it is.
+
+A creature immune to every condition a spell would lay is immune to the spell, so nobody wastes one on it.
+
+### Holds
+
+5e's grapples, webs and nets are the core's holds. Each try to break free takes an action, and so does freeing a friend.
+
+- Grappled is the core's grabbed hold: escaping rolls the better of Athletics and Acrobatics against the grappler's escape DC ("escape DC 13"; else see the table above). A friend can't break a grapple for you.
+- Webs, grasping plants and nets are the core's restraint, broken by the check their words name: a Strength check against the spell's DC, or DC 10 for a net, which a friend beside it can make too.
+- FastFighting's bonds are rope (see the table above). A friend unties them with no roll.
+
+### Swallowed and engulfed
+
+A purple worm's swallow is the core's swallowed, and a gelatinous cube's engulfing its engulfed: the one inside moves with its holder, nobody outside can reach it, and it can go only for its holder. 5e adds Blinded and Restrained in a gullet, Restrained in an ooze, and the holder's damage each turn (a worm's 6d6 acid). No action gets it out of a gullet: enough damage from inside in one turn (30 for a worm) calls for the holder's save, and a failure brings them all up, Prone, as does the holder's death. An ooze is escaped with an action and its check (a cube's: DC 12 Strength), or by a friend's pull.
+
+### Harm that lasts
+
+Burning is the core's burning: 1d4 fire at the start of each of its turns, or what the source says (a 2014 fire elemental's 1d10). It comes from dnd5e's Burning status or words that set the target alight (alchemist's fire). Putting it out takes an action (see the table above), or a friend's. Acid Arrow's later acid is the core's corroding, and nothing scrapes it off.
+
+### Riders on a hit
+
+Smites, Stunning Strike and Battle Master maneuvers aren't actions: they're the core's riders, offered when a hit lands, and the creature decides whether that hit is worth the slot, Focus or superiority die. Divine Smite has a bigger version against fiends and undead, and Precision Attack rides on a close miss. Anything with no attack of its own that works "after you hit" counts too.
+
+Free extras ride on the attack itself: Sneak Attack (once a turn, with a finesse or ranged weapon, with advantage or an ally beside the target), Radiant Strikes (a d8 radiant on every melee weapon hit), Hunter's Mark and Hex (moved to a new foe when the first drops), and Push mastery (10 feet, Large or smaller).
+
+### Reactions
+
+5e's reactions are the core's, one a round. Anyone with a melee weapon makes an opportunity attack on a foe leaving its reach; Disengage avoids it (a bonus action for Cunning Action and Nimble Escape). Shield, Uncanny Dodge, Hellish Rebuke, Counterspell, Parry, Riposte, Deflect Attacks, the Protection fighting style and any reaction spell that raises AC play too; a spell uses the cheapest slot that works.
+
+### Resources
+
+Spell slots, pact slots, a feature's uses, consumables, Legendary Resistance and legendary actions are the core's resources, spent in the simulation and on the sheet in a live battle.
+
+- A multiclass character casts each spell with its own class's numbers, from any slot it can use (a pact slot too), cheapest first.
+- "Recharge 5–6" comes back on a d6 at the start of the creature's turn.
+- Legendary actions come between other creatures' turns, by their cost. Legendary Resistance turns a failed save that matters into a success.
+- (Heroic) Inspiration is the core's fate: spent to keep someone from dying.
+
+### Dying
+
+A character at 0 HP makes death saves: DC 10; a 20 brings it back with 1 HP, and a 1 counts twice. Damage while down is a failure (two on a critical), and massive damage kills outright. NPCs die at 0 HP. An ally stabilizes the dying with a DC 10 Medicine check, or heals them.
+
+The core's ways back up take 5e's numbers: Regeneration, read from its words (a troll's, stopped by acid or fire), and the Regenerate spell's hit point a turn; Undead Fortitude (a Constitution save against 5 + the damage, never against radiant or a critical hit); Relentless Endurance (1 HP instead of 0, once a long rest).
+
+### Buffs, debuffs and edges
+
+Spell and feature effects are the core's buffs and debuffs, read from their changes (Bless's d4, Shield of Faith's AC, Rage), their statuses (Hold Person's Paralyzed) and what only their words say (Faerie Fire's advantage, Haste's extra action, a save repeated each turn). Effects on a creature before the fight count too.
+
+- Charm Person and the Dominate spells turn the target to your side until it saves, your concentration breaks, or, for a charm, your side harms it.
+- Concentration: one spell at a time. Damage calls for a Constitution save (DC 10 or half the damage); being incapacitated ends it.
+- 2024's Contagion is the core's tallied affliction: Poisoned until three saves made end it, or three failed keep it for the fight.
+
+One-roll edges are the core's, each spent by the roll it helps: Help (advantage on a friend's next attack at a foe beside the helper), Insight before talking (DC 15: advantage on its next words), Guidance, Bardic Inspiration, Guiding Bolt, Vicious Mockery, Steady Aim and 2014's True Strike. A Lore-Collector sizes a foe up with the Study action: its best of Arcana, History, Investigation, Nature and Religion.
+
+### Everyday actions
+
+| Action | In 5e |
+| --- | --- |
+| Dodge | Anyone. A 5e shield is already in the AC, so the core's shield answer says how readily it Dodges instead. |
+| Hide | Stealth against DC 15 (the SRD 5.2's), as an action, a bonus action with Cunning Action. Hidden, it's Invisible until it attacks; never with a foe beside it. |
+| Shove, Grapple | Characters and humanoids: the target's Strength or Dexterity save against 8 + Strength + proficiency, at most one size larger. A shove pushes 5 feet or knocks prone. |
+| Pushes | Thunderwave, Gust of Wind, Repelling Blast, a bronze dragon's breath ...: the core's forced movement. A fall deals 1d6 per 10 feet. |
+| Moving past others | Through an ally's space, or one that's down, Incapacitated, Tiny or two sizes off, as difficult terrain; round anyone else. dnd5e's difficult terrain regions count. |
+| Doors | AC 15, 18 HP; locked against DC 15 Athletics or thieves' tools. Opening is free; forcing or picking takes an action. |
+| Free hands | Tied up, a creature can still bite, kick, or cast a verbal-only spell. A weapon (two-handed: two), a potion, a net, a grapple and a spell with a somatic or material component each take a hand. |
+
+### Talking and stealing
+
+Persuasion, Intimidation and Deception are the core's persuading, threatening and bluffing, against passive Insight. Sleight of Hand steals against passive Perception, for anyone with the wits (not a beast, nor Intelligence 3 or less). A creature speaks its sheet's languages, custom ones too; one that can't speak has none. A side's leader has the best Persuasion or Intimidation for its level, more with a feature like Leadership. In a standoff, a character can ask for something by dnd5e's item type, material (silvered) or rarity.
+
+### Personality
+
+The core's personality traits come from the sheet; each trait's tooltip in the planner says what moved it. A creature's traits start from its Intelligence, its Wisdom save and its type (beasts and the mindless fight on instinct), then move with its alignment, its kind (a devil's hierarchy, a demon's chaos), its features (Brave, Pack Tactics) and a loyalty score. A player character starts as the usual hero, and its abilities, level, classes, background, alignment, features, skills and exhaustion each move it a little. A summoned creature serves its summoner.
+
+### Playstyles and tactics
+
+Every perk a playstyle or tactics answer switches on does something here. These lean on 5e's own:
 
 | Perk (playstyles) | In 5e |
 | --- | --- |
-| Hard to spot (Chicken, Fragile, Wallflower) | Foes' attention slides off it, and it would rather **Hide**: Dexterity (Stealth) against DC 15 (the SRD 5.2's), as an action (a rogue's Cunning Action: a bonus action). Hidden, it's Invisible: its attacks at advantage, those against it at disadvantage, until it attacks. Not with a foe beside it; whether there's cover enough is the GM's call, so the simulation only asks that. |
-| Spoiling (Instigator most; Cruel, Wants to Lead, Wallflower, Puzzle-Maniac) | **Shove** (prone) or **Grapple** (the SRD 5.2's Unarmed Strike: a Strength or Dexterity save against 8 + Strength + proficiency, or Grappled until it breaks free), and spells and features that lay a condition, over a plain blow. |
-| Helping (Enabler, People-Pleaser, Moralist, Martyr, Redeem-Seeker, Tank) | **Help**; healing and buff spells. |
-| In a hurry (Impatient, Speed-Runner) | It doesn't Disengage (it takes the opportunity attacks), Dodge or Hide; it Dashes when it has to. |
+| Hard to spot (Chicken, Fragile, Wallflower) | Hides readily; foes' attention slides off it. |
+| Spoiling (Instigator most; Cruel, Wants to Lead, Wallflower, Puzzle-Maniac) | Shove, Grapple, and spells that lay a condition, over a plain blow. |
+| Helping (Enabler, People-Pleaser, Moralist, Martyr, Redeem-Seeker, Tank) | Help; healing and buff spells. |
+| In a hurry (Impatient, Speed-Runner) | No Disengage, Dodge or Hide; Dash when it has to. |
 | Acting first (Instigator) | Its initiative. |
-| Lore-Collector | The **Study** action. |
+| Lore-Collector | The Study action. |
 | Weak spots (Puzzle-Maniac) | Damage vulnerabilities. |
-| Thief | Sleight of Hand, against passive Perception. |
-| Trap avoiders | A token the GM marks as a hazard (5e has no hazard actors of its own). |
-| Finishing the fallen (Cruel) | Death saves: a blow on one who's down is a failed save (two on a critical). |
-| Sparing the fallen (Moralist, Peacekeeper, a Diplomat now and then) | Knocks a foe out with a melee blow that would kill it (the rules allow any melee attack to), and leaves the fallen be. |
-| Mending, healing, rescue | Healing spells and potions; a friend dying is stabilized with a DC 10 Medicine check, in the fight as after it. |
-| Locked doors | Strength (Athletics) or thieves' tools. |
+| Thief | Sleight of Hand. |
+| Trap avoiders | A token the GM marks as a hazard (5e has no hazard actors). |
+| Finishing the fallen (Cruel) | A blow on the downed is a failed death save. |
+| Sparing the fallen (Moralist, Peacekeeper, a Diplomat now and then) | Knocks a foe out with the melee blow that would kill it. |
+| Locked doors | Athletics or thieves' tools. |
 
-Tactics answers:
+The Shields answer says how readily a creature Dodges. Magic and specialties means spells, features (Second Wind, a breath weapon), Reckless Attack and Action Surge.
 
-- **Shields** (keep it raised, raise it with spare actions, don't bother): a 5e shield is already in the AC, so this says how readily it **Dodges** instead: half again as readily; as it would anyway; never.
-- **Magic and specialties** (an Un-Mundane character leans on them): spells, and the activities of its features (a class's, a species', a creature's own: Second Wind, a breath weapon), Reckless Attack, Action Surge. Its weapons, Dodge, Help, Hide, Shove and potions are what anyone could do.
+### Set up by itself
 
-## Set up by itself
+When FastFighting first sets a character up by itself, 5e suggests playstyles from its class (a Rogue a Thief, a Paladin a Tank and a Martyr), species (an orc's Relentless Endurance), kind of creature (a fiend Cruel), alignment (neutral evil a Mercenary) and armor (a shield or heavy armor: a Tank). Keywords come from its appearance, personality traits, ideals and flaws, and a little from its biography, but not its bonds.
 
-When FastFighting sets a character up by itself (the first time it sees it: see the core's README), 5e has its say:
-- **Classes, by identifier** (several add up):
-  - a Barbarian a Brawler, impatient; a Bard a People-Pleaser and a Diplomat; a Cleric an Enabler; a Druid Un-Mundane and a Lore-Collector; a Fighter a Brawler or a Tank; a Monk a Speed-Runner;
-  - a Paladin a Tank and a Martyr; a Ranger a Wallflower; a Rogue a Thief; a Sorcerer or Warlock Un-Mundane; a Wizard Un-Mundane and a Lore-Collector; an Artificer a Puzzle-Maniac.
-- **Species, by identifier,** only where an SRD trait leans somewhere (an orc's Relentless Endurance, a gnome's cunning).
-- **Kind of creature:** a beast a Brawler; undead, constructs, oozes and plants Relentless (constructs and oozes never run); a fiend Cruel; a celestial a Moralist; fey a Wildcard; a giant a Brawler.
-- **Alignment** (read by the system's own names for them, in any language): good leans Moralist, chaotic neutral Wildcard, neutral evil Mercenary, evil Cruel.
-- **Gear:** a shield or heavy armor worn makes a Tank likelier.
-- **Keywords:** what's said of a character (its appearance, personality traits, ideals and flaws) counts in full, and its biography, a story with others in it, a little; its bonds are about others, and left out. A creature's biography is its lore, said of it. A lore page a biography embeds is read only where the character's players could read it themselves.
-
-### Let this character decide
-
-What "Let this character decide" stands for comes from 5e's own data wherever it says something, each answer shown to the GM with the system's name for what decided it (a class, feature, spell, skill, alignment or kind of creature). Classes, subclasses and features are known by identifier (and by what they do: healing that reaches others, healing only itself, a condition immunity, what recharges). Where the sheet says nothing, the core's reading of the character stands; for a player character only what its build clearly implies.
-- **Signature attack:** a creature's Multiattack (when it makes it one way); a warlock's Eldritch Blast with Agonizing Blast; the one weapon its fighting style is made for (Archery a bow or crossbow, Great Weapon Fighting a two-handed weapon, Dueling a one-handed one).
-- **Style:** its main class (the one with the most levels): Paladins protect, Barbarians and Fighters hold the front line, Monks and Rogues skirmish, Rangers shoot, spellcasters cast. Its fighting style before that (Protection guards, Archery shoots, a ranger with a melee style closes in), a pact blade, a cleric's or druid's armored order, Nimble Escape (a skirmisher), a creature's Spellcasting where its spells are its best attacks, a shield guardian's guarding.
-- **Target:** a paladin and Protection guard their friends; the mindless and a berserk golem go for the nearest; Rampage, Blood Frenzy and Colossus Slayer for the hurt.
-- **Resources:** what recharges, and a legendary creature's, is for this fight (spent freely); so are a short rest's: Pact Magic, Action Surge, ki or focus. A full caster's spell slots last the day (conserved).
-- **Magic and specialties:** by its main class's spellcasting (full or pact: strong; half, third or an artificer's: some); a creature's Spellcasting where its spells are its best attacks.
-- **Consumables:** an artificer, a thief's Fast Hands or Use Magic Device, and a creature with a flask or bomb to throw use them freely; a merchant sparingly.
-- **Talking:** never for the mindless, one with no language (or that understands but can't speak) or one serving a master; a devil and a bard talk first; Persuasion, Deception and Intimidation make it likelier (expertise counts double).
-- **Healing others:** a Life Domain cleric at all costs; a cleric, Lay on Hands and a celestial readily; an evil creature sparingly; any other healer as it comes.
-- **Potions:** Regeneration needs none; Relentless Endurance, Relentless Rage or Undead Fortitude wait; a d6 Hit Die drinks at half its hit points, a d12 at a quarter.
-- **A friend down:** a paladin, a cleric, a healer, Spare the Dying, the Healer feat, a good creature or a celestial, and a hero with Medicine go to them; the mindless, constructs and evil creatures fight on; Redirect Attack looks after itself.
-- **Back up from 0 HP:** Regeneration, Undead Fortitude, Relentless Endurance, Relentless Rage and Rejuvenation rejoin at once (so do the mindless and constructs); Second Wind or its own healing heal itself first; a beast runs.
-- **Running:** never for one serving a master, the mindless, constructs, oozes, Dark Devotion, Berserk, a reckless berserker or Bloodied Fury; Pack Tactics when the pack is losing; Nimble Escape when hurt; one immune to being frightened only when losing; a beast when hurt.
-- **Dodge** (the shield answer: a 5e shield is in its AC): anyone can Dodge, but not the mindless, one with an animal's Intelligence (3 or less) or the reckless; a monk's Patient Defense makes it a bonus action (always).
-- **Others nearby:** one serving a master, the mindless, constructs and beasts stay; Pack Tactics, Aggressive, Rampage and Blood Frenzy hunt; Leadership and Aura of Authority call for help.
-- **Offer and expect:** nothing without a mind, words or a will of its own. A devil offers to spare those who pay; a true dragon wants tribute; a creature with thieves' cant wants a toll; a merchant or noble offers a tenth of its money; a good creature offers and expects no harm; a neutral evil one (a humanoid, fey or giant) wants paying; a chaotic evil one offers nothing. A demand is ten gold for each level or challenge rating.
+**Let this character decide** answers the tactics questions from 5e's data where it says something, and names what decided each: a Multiattack made only one way is the signature attack; a paladin protects its friends; a pack hunter runs when the pack is losing; a full caster saves its slots, while short-rest resources go freely; a true dragon wants tribute, ten gold for each challenge rating.
 
 ## Do it For Real Now
 
-In a live battle, each turn's changes go onto the tokens as the turn is played:
-- HP and temporary HP;
-- death saves;
-- unconscious, prone and other conditions, as dnd5e's own (Grappled for the core's grabbed, Sleeping for asleep, Hiding for hidden; exhaustion as its level), put on and taken off, and read back from the sheet each turn (the GM's too, from the Battle Vantage); those dnd5e has no condition for (off guard, dazed) FastFighting keeps itself;
-- death (and defeated in the Combat Tracker);
-- spell and pact slots spent, potions drunk and limited uses spent;
-- a spell's effects (Bless, Bane, Hold Person): the spell's own effect, on for the rounds it has, and off when it ends.
+In a live battle, each turn goes onto the dnd5e sheets as it's played: HP, death saves and death; conditions as dnd5e's own (read back each turn, the GM's changes too); slots, Inspiration, Legendary Resistance, uses and consumables spent; and a spell's buff or debuff as the spell's own effect, for its rounds. Fleeing NPCs are hidden (unless the fled-combatants setting leaves them), the surrendered get an effect, and coins or items change hands. Summons appear the way dnd5e summons them. A player's turn is read from its dnd5e cards (attacks, damage, healing, and talking checks), and the GM confirms what FastFighting isn't sure of.
 
-It also:
-- hides fleeing NPCs (PCs who retreat stay on the map);
-- marks the surrendered;
-- switches the disposition of creatures who change sides (won over: their new side; talked out of the fight: Neutral; a neutral that turned on the party: Hostile);
-- hands coins or items over when someone is talked into giving them up, strikes a deal, or has them stolen.
+## Settings
 
-For bargaining in a standoff, a character can ask for something of a kind: dnd5e's item types, the materials its item properties name (adamantine, silvered) and its rarities, in its own words.
+**Lore-Collector advantage** (1.25× to 3×, default 2.5×): how much likelier a Lore-Collector's rolls against a foe are to succeed through its next turn, after a successful Study. Study costs the turn and works a little over half the time, so the default is high. Above about 1.75×, only long-shot rolls gain much.
 
-Rewind Turn takes one turn back; Rewind This Encounter, all of it.
+## Other languages
 
-D&D 5e has no loot actors, so the "loot pile" setting leaves gear on the corpse.
+In a language other than English, the settings recommend the system's translation module when it isn't on (Spanish: translate-dnd5e-sdr2-es). Babele-translated compendiums play as in English. Skills, conditions and coins go by the system's names, in English until the system is translated, to match the sheets. To translate this module, see **Translating** in the [core README](https://github.com/galaara98/FastFighting/blob/main/README.md).
 
-## Development
+## Not played, or played differently
 
-```
-npm install
-npm test
-```
-
-The tests import FastFighting Core from a checkout beside this one (`../FastFighting`); set `FASTFIGHTING_CORE` to point elsewhere.
-
-Every word this module shows is in `languages/en.json`: the code holds keys, never the English. Translating it takes only a copy of that file (see **Translating** in the core README). `npm run test:reworded` runs the tests again with every word in the language files reworded, so they never depend on the wording.
-
-`hardcoded-toEN.json` lists words that stay in English for now, whatever the reader's language: keys of `languages/en.json` (or a group, `"FFDND5E.Skill"`) whose translation would contradict a game system that isn't translated yet. It has the date it was last updated (`lastUpdated`) and the list (`keys`). It's plain JSON, edited like the language files.
+- 2014's exhaustion table: every level is −2 to d20 tests, under either rules version.
+- An incapacitated creature (Command's halt, Confusion) is attacked with advantage.
+- A swallowed or engulfed creature takes its holder's damage at the start of its own turns (the SRD: the holder's).
+- Lore-Collectors use 2024's Study action under either rules version.
+- Hide never checks for cover; that's the GM's call.
+- Pushes chosen instead of something else (Brutal Strike), moves that put a creature anywhere (Telekinesis), and every weapon mastery but Push.
+- A Death Burst that deals no damage (a dust mephit's blinding).
+- Summons that take longer than a bonus action (Find Familiar) or can't fight (Mage Hand), and more than 8 creatures from one casting.
+- An effect's changes beyond attack, damage, saves, AC, speed, temporary hit points, resistances, immunities and a weapon's magic bonus, unless its words say what they do.
+- Loot and corpses: this module leaves no loot piles and takes no corpses away, so the core's loot and corpse settings don't show in a D&D 5e world.
 
 ## License
 
 MIT
+
+---
+
+Developer notes: [CODING_README.md](CODING_README.md). FastFighting itself: [FastFighting Core](https://github.com/galaara98/FastFighting) and its [developer docs](https://github.com/galaara98/FastFighting/blob/main/CODING_README.md).
