@@ -400,16 +400,49 @@ function copperValue(price) {
   return Math.round((Number(price?.value) || 0) * (per[price?.denomination ?? "gp"] ?? 100));
 }
 
+/** Several areas at once (Meteor Swarm's four spheres, Fire Storm's ten cubes) as one as big as them all: how much wider. */
+const severalOf = template => Math.sqrt(Math.max(1, Number(template?.count) || 1));
+
 /** Rough number of enemies an area catches. */
 function areaTargets(target) {
   const t = target ?? {};
   const count = Number(t.affects?.count);
   if ( count > 1 ) return count;
-  const size = inFeet(t.template?.size, t.template?.units ?? "ft");
+  const size = inFeet(t.template?.size, t.template?.units ?? "ft") * severalOf(t.template);
   if ( !t.template?.type ) return 1;
   if ( t.template.type === "line" ) return size >= 60 ? 3 : 2;
   if ( t.template.type === "cone" ) return size >= 30 ? 3 : 2;
   return size >= 20 ? 4 : size >= 10 ? 3 : 2;
+}
+
+/** 5e's cone: as wide at its end as it is long (dnd5e lays Foundry's cones at this angle). */
+const CONE_ANGLE = 53.13;
+/** The core's areas that spread from the one who makes them (a burst spreads round where it's aimed). */
+const FROM_USER = new Set(["cone", "line", "cube", "emanation"]);
+
+/**
+ * An activity's area template (dnd5e's areaTargetTypes, by key) as the core's area: {shape, feet, angle, width}, or
+ * null where the core has no shape for it (a wall, a ring). `units` and `distance` are the action's range: its units,
+ * and how far it reaches in feet. Put down away from the user (at a touch, anywhere, or farther off than its size), it's
+ * round a point:
+ *  - cone, line: from the user (put down away, none: Earthquake's fissures);
+ *  - cube, square: from the user, one face against it; put down away (Web, Hypnotic Pattern), a burst half its side;
+ *  - sphere, cylinder, circle: a burst round its point; round the user at range self (2014's Antimagic Field);
+ *  - radius (dnd5e's emanation): round the user; put down away, a burst (Ice Knife, 2014's Spike Growth).
+ * Several bursts at once (Meteor Swarm, Fire Storm): one as big as them all.
+ */
+export function areaOf(template, { units = "", distance = 0 } = {}) {
+  const type = template?.type;
+  const feet = inFeet(template?.size, template?.units || "ft");
+  if ( !type || !(feet > 0) ) return null;
+  const away = ["touch", "spec", "any"].includes(units) || (units !== "self" && distance > feet);
+  const burst = radius => ({ shape: "burst", feet: radius * severalOf(template) });
+  if ( type === "cone" ) return away ? null : { shape: "cone", feet, angle: CONE_ANGLE };
+  if ( type === "line" ) return away ? null : { shape: "line", feet, width: inFeet(template.width, template.units || "ft") || 5 };
+  if ( type === "cube" || type === "square" ) return away ? burst(feet / 2) : { shape: "cube", feet };
+  if ( ["sphere", "cylinder", "circle"].includes(type) ) return units === "self" ? { shape: "emanation", feet } : burst(feet);
+  if ( type === "radius" ) return away ? burst(feet) : { shape: "emanation", feet };
+  return null;
 }
 
 const COUNT_WORDS = { two: 2, three: 3, four: 4, five: 5, six: 6 };
@@ -1974,14 +2007,18 @@ export class Dnd5eAdapter extends SystemAdapter {
     // A legendary action: taken between other creatures' turns, for what it costs from the pool.
     const legendary = activation === "legendary" ? legendaryCost(activity, item) : undefined;
     const economy = activation === "bonus" ? "bonus" : undefined;
-    // The activity's own range (dnd5e 4+), else the item's; a cone or line from yourself reaches as far as it is long.
+    // The activity's own range (dnd5e 4+), else the item's; an area from yourself (a cone, a line, a cube, an emanation)
+    // reaches as far as it spreads, where the range gives no distance (self, or none: a creature's breath).
     const range = item.system.range ?? {};
     const own = asCast ? {} : activity.range ?? {};
     const units = own.units ?? range.units;
     const target = asCast ? item.system.target : activity.target ?? item.system.target;
     const template = (asCast ? null : activity.target?.template) ?? item.system.target?.template ?? {};
     // (A weapon's activity range is its long range; the item keeps the normal one.)
-    const rangeFeet = (own.override && inFeet(own.value, own.units)) || inFeet(range.value, range.units) || inFeet(own.value, own.units)
+    const distance = (own.override && inFeet(own.value, own.units)) || inFeet(range.value, range.units) || inFeet(own.value, own.units);
+    // (Its shape and size, for the engine and the live map: areaOf.)
+    const area = areaOf(template, { units, distance });
+    const rangeFeet = distance || (FROM_USER.has(area?.shape) && area.feet)
       || (units === "self" && inFeet(template.size, template.units ?? "ft")) || (units === "touch" ? 5 : null);
     const longFeet = inFeet(range.long, range.units) || inFeet(own.long, own.units);
     const several = !asCast && (item.system.activities?.size ?? 1) > 1 && activity.type !== "attack";
@@ -2038,7 +2075,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       const save = { type, dc, basic: activity.damage?.onSave !== "none", ...(control?.words?.saveAdvantage ? { advantage: 1 } : {}) };
       const common = {
         ...base, melee: false, range: { increment: rangeFeet ?? 30, max: rangeFeet ?? 30, noPenalty: true },
-        area: targets > 1 ? { targets } : undefined
+        area: targets > 1 ? { targets, ...area } : undefined
       };
       // (Pushed away on a failure, and knocked down where it says: FORCED_MOVES.)
       const outcome = proneToo(this.#outcome(control, save), forced?.prone);
@@ -2073,7 +2110,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       const damage = this.#parts(activity).map(p => projectiles > 1 ? { ...p, dice: p.dice.map(d => ({ ...d, n: d.n * projectiles })), flat: p.flat * projectiles } : p);
       return damage.length ? {
         ...base, kind: "auto", damage, melee: false, range: { increment: rangeFeet ?? 120, max: rangeFeet ?? 120, noPenalty: true },
-        area: targets > 1 ? { targets } : undefined
+        area: targets > 1 ? { targets, ...area } : undefined
       } : null;
     }
 
