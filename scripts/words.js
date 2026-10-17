@@ -98,29 +98,6 @@ export function legendaryActionsName() {
   return sysOr(hasWords(key) ? key : null, "LegendaryActions", key);
 }
 
-/*
- * In a translated world (a Babele translation of the 5e compendiums: translate-dnd5e-sdr2-es and the like), an item
- * taken from a compendium reads in the table's language, and the rules it states are worded that way. The rules are
- * read here from the English (what Babele keeps of the original), so they're understood whatever the language. Without
- * Babele, or for an item it didn't translate: the item as it is.
- */
-
-/** An item's name as the English books have it. */
-export const englishName = item => item?.flags?.babele?.originalName ?? item?.name ?? "";
-
-/**
- * The most of a description read: twice the longest the books have (about 9,000 characters). A description is item
- * data a player can write, and the GM's client reads it.
- */
-export const DESCRIPTION_MOST = 20000;
-
-/** An item's description as the English books have it (up to DESCRIPTION_MOST). */
-export function englishDescription(item) {
-  const original = item?.flags?.babele?.originalPayload?.description;
-  const text = typeof original === "string" && original ? original : item?.system?.description?.value ?? "";
-  return typeof text === "string" ? text.slice(0, DESCRIPTION_MOST) : "";
-}
-
 /**
  * The most of a sentence a reading searches: five times a long one of the books'. A pattern that can't cross a full
  * stop, searched a sentence at a time, costs little however long the text; one sentence longer than this isn't a

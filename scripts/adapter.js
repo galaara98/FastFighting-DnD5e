@@ -3,10 +3,12 @@
  * live battle's changes back. Written against dnd5e 6 on Foundry v14; values are read defensively so older data still
  * works.
  */
-import { SystemAdapter, parseFormula, part, simpleAffliction, localize } from "./core.js";
+import {
+  SystemAdapter, parseFormula, part, meanPart, simpleAffliction, localize, listItems, plainText as sheetText, englishName, englishDescription
+} from "./core.js";
 import { dnd5eRules, proficiency } from "./rules.js";
 import { deriveDnd5eTraits, isMindless } from "./traits.js";
-import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, speaksAtAll, plainText as sheetText } from "./auto.js";
+import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, speaksAtAll } from "./auto.js";
 import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
 import { commitDnd5eChanges, describeDnd5eOutcome, commitDnd5eConcession } from "./commit.js";
@@ -18,7 +20,14 @@ import { edgeActions, studyCheck } from "./edges.js";
 import { loreBoost } from "./lore.js";
 import { formulaNumber, plainDice } from "./arithmetic.js";
 import { escapeWords, grabEscapeDC } from "./holds.js";
-import { t, skillName, conditionName, statusName, coin, englishName, englishDescription, languageNames, inSentence, playersOf } from "./words.js";
+import { t, skillName, conditionName, statusName, coin, languageNames, inSentence, playersOf } from "./words.js";
+
+/*
+ * In a translated world (a Babele translation of the 5e compendiums: translate-dnd5e-sdr2-es and the like), an item
+ * taken from a compendium reads in the table's language, and the rules it states are worded that way. The rules are
+ * read here from the English (the core's englishName and englishDescription: what Babele keeps of the original), so
+ * they're understood whatever the language. Without Babele, or for an item it didn't translate: the item as it is.
+ */
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 const MODES = ["walk", "fly", "swim", "climb", "burrow"];
@@ -355,7 +364,7 @@ export function tallied({ id, name, conditions, save, tally, text = "" }) {
   const type = asArray(save.type)[0];
   const weak = /\bdisadvantage on saving throws made with the chosen ability\b/i.test(text);
   // (It takes hold as the spell's own save went, bySave: the core rolls none of its own on exposure.)
-  return { kind: "affliction", ...simpleAffliction({ id, name, key, most: 1, save: { type, dc: save.dc }, tally, traits: [key] }), bySave: true, ...(weak ? { weakSave: type } : {}) };
+  return { ...simpleAffliction({ id, name, key, most: 1, save: { type, dc: save.dc }, tally, traits: [key] }), bySave: true, ...(weak ? { weakSave: type } : {}) };
 }
 
 /**
@@ -369,7 +378,8 @@ export function holdOnFrom(text, label) {
   const save = { strength: "str", dexterity: "dex", constitution: "con", wisdom: "wis", intelligence: "int", charisma: "cha" }[m[1].toLowerCase()];
   return { save, base: Number(m[2]), except: damageWordsIn(unless), notOnCrit: /critical/i.test(unless), label };
 }
-const meanOf = parts => parts.reduce((s, p) => s + (p.flat ?? 0) + (p.dice ?? []).reduce((t, d) => t + (d.n * (d.faces + 1)) / 2, 0), 0);
+/** The mean of a list of damage (or healing) parts. */
+const meanOf = parts => parts.reduce((s, p) => s + meanPart(p), 0);
 
 /**
  * The engine counts in feet. dnd5e can be set to metric, and ranges can be in miles: convert (a metre the table
@@ -950,7 +960,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     const multi = actor.items.find(i => i.type === "feat" && ((i.identifier ?? i.system?.identifier) === "multiattack" || /multiattack/i.test(englishName(i))));
     if ( multi ) {
       // Its everyday attacks, best first (limited uses such as a breath weapon aren't part of a Multiattack).
-      const mean = a => (a.damage ?? []).reduce((s, p) => s + p.flat + p.dice.reduce((t, d) => t + d.n * (d.faces + 1) / 2, 0), 0);
+      const mean = a => meanOf(a.damage ?? []);
       const strikes = out.filter(a => ["strike", "spell-attack", "save"].includes(a.kind) && a.economy !== "bonus" && a.uses === undefined && !a.resource && !a.legendary)
         .sort((a, b) => ((b.bonus ?? 0) + mean(b)) - ((a.bonus ?? 0) + mean(a)));
       // (Read in English, its attacks by their English names; told by the names they go by here.)
@@ -961,7 +971,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       // Several ways to make it ("Scimitar or Pistol in any combination"): one action each, and the simulation picks.
       options.forEach((names, k) => {
         const sequence = names.map((n, i) => ({ ...strikes.find(s => s.name === n), id: `${multi.id}.${k}.${i}` }));
-        const label = options.length > 1 ? `${multi.name} (${[...new Set(names)].join(", ")})` : multi.name;
+        const label = options.length > 1 ? `${multi.name} (${listItems([...new Set(names)])})` : multi.name;
         out.push({ ...sequence[0], id: `${actor.id}.multiattack${k ? `.${k}` : ""}`, name: label, sequence, uses: undefined, resource: undefined });
       });
     }
@@ -1021,7 +1031,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     const regen = featureItem(actor, "regeneration", "regeneration");
     if ( regen ) {
       const heal = (regen.system.activities ?? []).find?.(a => a.type === "heal");
-      const healed = heal ? this.#parts(heal, true).reduce((s, p) => s + p.flat + p.dice.reduce((t, d) => t + d.n * (d.faces + 1) / 2, 0), 0) : null;
+      const healed = heal ? meanOf(this.#parts(heal, true)) : null;
       const r = regenerationFrom(plainText(englishDescription(regen), actor, true), healed);
       if ( r ) out.regen = r;
     }
@@ -1056,7 +1066,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     const light = everyday.filter(a => props(a).has("lig"));
     const lightItems = [...new Set(light.map(a => a.itemId))];
     if ( lightItems.length >= 2 ) {
-      const mean = a => (a.damage ?? []).reduce((s, p) => s + p.flat + p.dice.reduce((t, d) => t + d.n * (d.faces + 1) / 2, 0), 0);
+      const mean = a => meanOf(a.damage ?? []);
       const [, second] = lightItems.map(id => light.filter(a => a.itemId === id).sort((x, y) => mean(y) - mean(x))[0]).sort((x, y) => mean(y) - mean(x));
       const style = hasFeature(features, "two-weapon-fighting", "two-weapon fighting");
       const str = Number(abilities.str?.mod) || 0;
@@ -2226,11 +2236,17 @@ export class Dnd5eAdapter extends SystemAdapter {
 
   /* -------------------------------------------- */
 
+  /**
+   * What a resource is called, in the planner's Resources tab and a fight's summary: a pool its feature names, its
+   * (Heroic) Inspiration, Legendary Resistance, a pact slot, a spell slot. Null for one an action spends: the action's
+   * name says it.
+   */
   resourceLabel(key, spec) {
     if ( spec?.resourceNames?.[key] ) return spec.resourceNames[key];
-    if ( key === "fate" ) return this.#fateLabel();
-    if ( key === "pact" ) return game.i18n.localize("FFDND5E.PactSlot");
-    if ( key.startsWith("slots:") ) return game.i18n.format("FFDND5E.SpellSlot", { level: key.split(":")[1] });
+    if ( key === "fate" ) return spec?.fateLabel ?? this.#fateLabel();
+    if ( key === "legres" ) return spec?.standFirm?.label ?? legendaryLabel();
+    if ( key === "pact" ) return t("PactSlot");
+    if ( key.startsWith("slots:") ) return t("SpellSlot", { level: key.split(":")[1] });
     return null;
   }
 
@@ -2285,7 +2301,7 @@ export class Dnd5eAdapter extends SystemAdapter {
 
   /** dnd5e's own conditions (as the engine's keys; exhaustion counted, by its level), then the core's. */
   conditionChoices() {
-    return [...sheetConditionChoices(), ...(super.conditionChoices?.() ?? [])];
+    return [...sheetConditionChoices(), ...super.conditionChoices()];
   }
 
   /** A player's turn in a live battle, read from the cards dnd5e made for it (read-turn.js). */
@@ -2314,7 +2330,7 @@ export class Dnd5eAdapter extends SystemAdapter {
   }
 
   describeOutcome(spec, final) {
-    return describeDnd5eOutcome(spec, final);
+    return describeDnd5eOutcome(spec, final, key => this.resourceLabel(key, spec));
   }
 
   async commitConcession(giverDoc, receiverDoc, concession) {

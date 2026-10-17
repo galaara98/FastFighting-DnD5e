@@ -3,7 +3,7 @@
  * and features that read like command (Leadership, Rallying Cry, Commander's Strike, Bardic Inspiration ...).
  */
 import { proficiency } from "./rules.js";
-import { listItems } from "./core.js";
+import { listItems, signedNumber } from "./core.js";
 import { t } from "./words.js";
 
 // ("Pack Tactics" is how wolves hunt, not command.) Matched against identifiers too, so hyphens count as spaces.
@@ -20,7 +20,7 @@ export function rankLeaders(entries) {
     const best = Math.max(e.skills?.persuasion ?? -99, e.skills?.intimidation ?? -99);
     if ( best <= -99 ) continue;
     let score = best - (proficiency(e.level) + 2);
-    const reasons = [t("Lead.Best", { n: `${best >= 0 ? "+" : ""}${best}` })];
+    const reasons = [t("Lead.Best", { n: best === 0 ? "+0" : signedNumber(best) })];
     const commanding = (e.features ?? []).map(f => (typeof f === "string" ? { key: f, name: f } : f))
       .filter(f => LEADER_FEATURE.test(f.key ?? "") || LEADER_FEATURE.test(f.name ?? ""));
     if ( commanding.length ) {

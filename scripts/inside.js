@@ -20,8 +20,6 @@ import { t } from "./words.js";
 /** The core's conditions for being inside another creature. */
 export const INSIDE_KEYS = Object.freeze(["swallowed", "engulfed"]);
 
-export { holderOf };
-
 /**
  * A gullet's hold (swallowed): no action breaks it, its own or a friend's. Offered in the place of the core's own hold
  * for it (its holder's escape DC), so nobody spends a turn on it. [hold] or [].

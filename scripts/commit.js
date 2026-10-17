@@ -7,7 +7,7 @@
  *     createdEffects: [id], deletedEffects: [data], tokenUpdate, createdActors, createdTokens, deletedTokens,
  *     statuses: [{id, active}], combatant }
  */
-import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine } from "./core.js";
+import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, toggleStatus, undoRecord, payFrom, handOverItem } from "./core.js";
 import { t, conditionName, playersOf } from "./words.js";
 import { modeledChange } from "./effects.js";
 import { WRITES, SHEET_STATUSES, hasStatus, ownStatus, statusKeys, exhaustionLevels } from "./conditions.js";
@@ -15,27 +15,11 @@ import { WRITES, SHEET_STATUSES, hasStatus, ownStatus, statusKeys, exhaustionLev
 /** Engine conditions a fight's summary names: the dnd5e statuses that outlast it. */
 const LINGERING = { frightened: "frightened", poisoned: "poisoned", blinded: "blinded", restrained: "restrained", paralyzed: "paralyzed", stunned: "stunned", charmed: "charmed", controlled: "charmed", petrified: "petrified" };
 
-const emptyRecord = (tokenDoc, actor) => ({
-  tokenUuid: tokenDoc?.uuid ?? null, actorUuid: actor.uuid, actorUpdate: {}, itemUpdates: [], createdItems: [], deletedItems: [], createdEffects: [], deletedEffects: [],
-  tokenUpdate: null, createdActors: [], createdTokens: [], deletedTokens: [], statuses: [],
-  statusesBefore: [...(actor.statuses ?? [])] // so Undo also lifts what dnd5e adds by itself (Prone with Unconscious)
-});
-
 /**
- * Whose side the token is on now, when words (or a quarrel) changed it: won over (switched sides), talked out of the
- * fight (it takes no side now), or a neutral that turned on the party. Null when nothing changed.
- * @returns {"friendly"|"hostile"|"neutral"|null}
+ * What a fight changes on a creature, a line each, for the planner's summary. `labelOf(key)`: what a resource is called
+ * (the adapter's resourceLabel); null for one an action spends, named for the action.
  */
-export function sideChange(final) {
-  if ( final.swayed === "switched" ) return final.side === "friendly" ? "friendly" : "hostile";
-  if ( final.side !== "neutralParty" || final.status === STATUS.DEAD ) return null;
-  if ( final.against?.includes("friendly") ) return "hostile";
-  return final.swayed === "neutral" ? "neutral" : null;
-}
-const DISPOSITIONS = { friendly: "FRIENDLY", hostile: "HOSTILE", neutral: "NEUTRAL" };
-
-/** What a fight changes on a creature, a line each, for the planner's summary. */
-export function describeDnd5eOutcome(spec, final) {
+export function describeDnd5eOutcome(spec, final, labelOf = () => null) {
   // (Hit points, its fate and a change of side: the core's words.)
   const lines = commonOutcome(spec, final);
   if ( final.status === STATUS.DOWN ) {
@@ -48,7 +32,7 @@ export function describeDnd5eOutcome(spec, final) {
   }
   for ( const [key, start] of Object.entries(spec.resources ?? {}) ) {
     const used = start - (final.resources?.[key] ?? start);
-    if ( used > 0 ) lines.push(outcomeLine("Uses", { n: used, what: resourceLabel(spec, key) }));
+    if ( used > 0 ) lines.push(outcomeLine("Uses", { n: used, what: labelOf(key) ?? spec.actions.find(a => a.resource === key)?.name ?? key }));
   }
   for ( const [id, left] of Object.entries(final.uses ?? {}) ) {
     const a = spec.actions.find(x => x.id === id);
@@ -58,24 +42,15 @@ export function describeDnd5eOutcome(spec, final) {
   return lines;
 }
 
-/** What a used-up resource is called. */
-function resourceLabel(spec, key) {
-  if ( key === "fate" ) return spec.fateLabel ?? t("Inspiration");
-  if ( key === "legres" ) return spec.standFirm?.label ?? t("LegendaryResistance");
-  if ( key === "pact" ) return t("PactSlot");
-  if ( key.startsWith("slots:") ) return t("SpellSlot", { level: key.split(":")[1] });
-  return spec.resourceNames?.[key] ?? spec.actions.find(a => a.resource === key)?.name ?? key;
-}
-
 /**
- * A status put on (unless it shows already) or taken off, by its own effect. One that's only part of another's
- * (Incapacitated with Stunned) isn't its to take off: nothing would come off, and the undo record would put it on.
+ * Is a status as asked already, the dnd5e way (toggleStatus's skip)? On: it shows. Off: it isn't on by its own effect.
+ * One that's only part of another's (Incapacitated with Stunned) isn't its to take off: nothing would come off, and the
+ * undo record would put it on.
  */
-async function setStatus(actor, id, active, undo, { overlay = false } = {}) {
-  if ( active ? actor.statuses?.has(id) : !ownStatus(actor, id) ) return;
-  await actor.toggleStatusEffect(id, { active, overlay });
-  undo.statuses.push({ id, active: !active, overlay });
-}
+const asAsked = (actor, id, active) => (active ? actor.statuses?.has(id) : !ownStatus(actor, id));
+
+/** A status put on (unless it shows already) or taken off, by its own effect (the core's toggleStatus). */
+const setStatus = (actor, id, active, undo, { overlay = false } = {}) => toggleStatus(actor, id, active, undo, { overlay, skip: asAsked });
 
 /**
  * The engine's conditions set and taken off this turn, on the sheet: each it carries as its own status (conditions.js),
@@ -106,12 +81,13 @@ async function writeConditions(actor, conditions, final, set, undo) {
  * A live battle: one turn's changes (the core's engine/changes.js) written onto a token, and only those, so writing
  * them twice changes nothing more. Hit points; death saves where the turn left them; slots, Inspiration, Legendary
  * Resistance, a feature's or an item's uses and consumables spent this turn; statuses set and lifted; a death, running,
- * surrendering, a change of side.
+ * surrendering. (A change of side the core shows on the token itself.)
  * @returns {Promise<object>} an undo record (its shape at the top of this file)
  */
 export async function commitDnd5eChanges(tokenDoc, spec, changes, final, options = {}) {
   const actor = tokenDoc.actor;
-  const undo = emptyRecord(tokenDoc, actor);
+  // (With the statuses it has now, so Undo also lifts what dnd5e adds by itself: Prone with Unconscious.)
+  const undo = undoRecord(tokenDoc, actor);
   const update = {};
   const set = (path, value) => {
     const before = foundry.utils.getProperty(actor, path);
@@ -193,11 +169,6 @@ export async function commitDnd5eChanges(tokenDoc, spec, changes, final, options
     }]);
     if ( effect ) undo.createdEffects.push(effect.id);
   }
-  const side = changes.side ? sideChange(final) : null;
-  if ( side ) {
-    undo.tokenUpdate = { ...(undo.tokenUpdate ?? {}), disposition: tokenDoc.disposition };
-    await tokenDoc.update({ disposition: CONST.TOKEN_DISPOSITIONS[DISPOSITIONS[side]] });
-  }
   if ( Object.keys(update).length ) await actor.update(update);
   return undo;
 }
@@ -265,83 +236,40 @@ async function liftEffect(actor, e, undo) {
 /*  Giving something up                         */
 /* -------------------------------------------- */
 
-const COINS = [["cp", 1], ["sp", 10], ["ep", 50], ["gp", 100], ["pp", 1000]];
-
-/** Pay `amount` copper from a purse: small coins first, breaking a bigger coin (and taking change) when needed. */
-export function payFrom(currency, amount) {
-  const purse = Object.fromEntries(COINS.map(([k]) => [k, Number(currency?.[k]) || 0]));
-  let owed = amount;
-  for ( const [k, v] of COINS ) {
-    const n = Math.min(purse[k], Math.floor(owed / v));
-    purse[k] -= n;
-    owed -= n * v;
-  }
-  // Still owed less than one of the coins left: break the smallest coin that covers it and take the change in copper.
-  if ( owed > 0 ) {
-    const coin = COINS.find(([k, v]) => purse[k] > 0 && v >= owed);
-    if ( !coin ) return null;
-    purse[coin[0]] -= 1;
-    let change = coin[1] - owed;
-    for ( const [k, v] of [...COINS].reverse() ) {
-      if ( v >= coin[1] ) continue;
-      const n = Math.floor(change / v);
-      purse[k] += n;
-      change -= n * v;
-    }
-    owed = 0;
-  }
-  return purse;
-}
+/** dnd5e's coins, each with its worth in copper, smallest first (the core's payFrom). */
+export const COINS = Object.freeze([["cp", 1], ["sp", 10], ["ep", 50], ["gp", 100], ["pp", 1000]]);
 
 /** Copper as coins a pocket would hold: gold, silver, copper. */
 function coinsFor(copper) {
   return { gp: Math.floor(copper / 100), sp: Math.floor((copper % 100) / 10), cp: copper % 10 };
 }
 
+/** An item handed over, the dnd5e way (the core's handOverItem): not equipped, and out of any container it was in. */
+function looseItem(data) {
+  data.system.equipped = false;
+  delete data.system.container;
+}
+
 /** Hand over what a creature was talked out of (or had stolen): coins, or one item. Returns undo records. */
 export async function commitDnd5eConcession(giverDoc, receiverDoc, concession) {
   const giver = giverDoc?.actor;
   if ( !giver ) return [];
+  if ( concession.kind !== "money" ) return handOverItem(giverDoc, receiverDoc, concession.item?.id, { prepare: looseItem });
   const receiver = receiverDoc?.actor ?? null;
   const records = [];
-  if ( concession.kind === "money" ) {
-    const before = { ...giver.system.currency };
-    const paid = payFrom(before, concession.amount);
-    if ( !paid ) return [];
-    const giverUndo = emptyRecord(giverDoc, giver);
-    giverUndo.actorUpdate["system.currency"] = before;
-    await giver.update({ "system.currency": paid });
-    records.push(giverUndo);
-    if ( receiver ) {
-      const got = { ...receiver.system.currency };
-      const add = coinsFor(concession.amount);
-      const receiverUndo = emptyRecord(receiverDoc, receiver);
-      receiverUndo.actorUpdate["system.currency"] = got;
-      await receiver.update({ "system.currency": { ...got, gp: (got.gp ?? 0) + add.gp, sp: (got.sp ?? 0) + add.sp, cp: (got.cp ?? 0) + add.cp } });
-      records.push(receiverUndo);
-    }
-    return records;
-  }
-  const item = giver.items.get(concession.item?.id);
-  if ( !item ) return [];
-  const giverUndo = emptyRecord(giverDoc, giver);
-  const data = item.toObject();
-  delete data._id;
-  data.system.quantity = 1;
-  data.system.equipped = false;
-  delete data.system.container;
-  if ( (item.system.quantity ?? 1) > 1 ) {
-    giverUndo.itemUpdates.push({ id: item.id, update: { "system.quantity": item.system.quantity } });
-    await item.update({ "system.quantity": item.system.quantity - 1 });
-  } else {
-    giverUndo.deletedItems.push(item.toObject());
-    await item.delete();
-  }
+  const before = { ...giver.system.currency };
+  const paid = payFrom(before, concession.amount, COINS);
+  if ( !paid ) return [];
+  const giverUndo = undoRecord(giverDoc, giver);
+  giverUndo.actorUpdate["system.currency"] = before;
+  await giver.update({ "system.currency": paid });
   records.push(giverUndo);
   if ( receiver ) {
-    const receiverUndo = emptyRecord(receiverDoc, receiver);
-    const [created] = await receiver.createEmbeddedDocuments("Item", [data]);
-    if ( created ) receiverUndo.createdItems.push(created.id);
+    const got = { ...receiver.system.currency };
+    const add = coinsFor(concession.amount);
+    const receiverUndo = undoRecord(receiverDoc, receiver);
+    receiverUndo.actorUpdate["system.currency"] = got;
+    await receiver.update({ "system.currency": { ...got, gp: (got.gp ?? 0) + add.gp, sp: (got.sp ?? 0) + add.sp, cp: (got.cp ?? 0) + add.cp } });
     records.push(receiverUndo);
   }
   return records;

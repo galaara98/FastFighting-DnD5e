@@ -11,7 +11,7 @@
  * Anyone else is read from what it is: its Intelligence, Wisdom save and creature type, then moved by its alignment
  * (more than a hero's), its kind's loyalty, its condition immunities, its features, healing others and a loyalty score.
  */
-import { clamp, listItems, listJoin, signedNumber, traitsFromParts, PC_BASELINE, TRAITS } from "./core.js";
+import { clamp, listItems, listJoin, signedNumber, traitsFromParts, partsOf, PC_BASELINE } from "./core.js";
 import { proficiency } from "./rules.js";
 import { t, abilityName, alignmentName, conditionName, creatureTypeName, skillName } from "./words.js";
 
@@ -110,9 +110,6 @@ const fearlessByItem = items => (items ?? []).some(i => (i.effects ?? []).some(e
 /** The usual player character's Wisdom save at a level: Wisdom +1, and proficient about half the time. */
 const usualWisSave = level => 1 + Math.floor(proficiency(level) / 2);
 
-/** Parts from a table's leaning ({trait: n}), with the reason they're shown with. */
-const partsOf = (lean, why, scale = 1) => Object.entries(lean ?? {}).map(([trait, n]) => ({ trait, n: n * scale, why }));
-
 /** An ability score's modifier. */
 const modOf = score => Math.floor(((Number(score) || 10) - 10) / 2);
 
@@ -194,9 +191,6 @@ export function pcParts(d) {
   if ( d.inParty === false ) add("loyal", -10, t("Reason.NoParty"));
   return parts;
 }
-
-/** A trait's reason with more after it (the parts that moved it). */
-const joinReasons = (first, more) => Object.fromEntries(TRAITS.map(k => [k, listItems([first[k], more[k]].filter(Boolean))]));
 
 /**
  * D&D 5e personality defaults from an actor's data.
@@ -301,6 +295,7 @@ export function deriveDnd5eTraits(d) {
     if ( kin ) parts.push({ trait: "loyal", n: LOYAL_BY_KIND[kin], why });
   }
   if ( Number.isFinite(d.loyalty) && !mindless ) parts.push({ trait: "loyal", n: clamp((d.loyalty - 10) * 1.2, -12, 12), why: t("Reason.Loyalty", { n: d.loyalty }) });
-  const built = traitsFromParts({ tactical, brave, selfish, loyal }, parts, { min: 0, max: 100 });
-  return { traits: built.traits, flags, reasons: joinReasons(reasons, built.reasons) };
+  // (Each trait's reason for where it starts, then the parts that moved it.)
+  const built = traitsFromParts({ tactical, brave, selfish, loyal }, parts, { lead: reasons, min: 0, max: 100 });
+  return { traits: built.traits, flags, reasons: built.reasons };
 }

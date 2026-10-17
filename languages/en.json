@@ -76,11 +76,8 @@
       "dec": "Deception",
       "ins": "Insight",
       "prc": "Perception",
-      "arc": "Arcana",
       "his": "History",
       "inv": "Investigation",
-      "nat": "Nature",
-      "rel": "Religion",
       "slt": "Sleight of Hand",
       "ste": "Stealth",
       "med": "Medicine"
@@ -103,7 +100,6 @@
     "Coin": {
       "pp": "pp",
       "gp": "gp",
-      "ep": "ep",
       "sp": "sp",
       "cp": "cp"
     },

@@ -5,7 +5,7 @@
  * and kind of creature); and its biography as plain text for the keywords (biographyOf: what's said of it, and its story). Pure:
  * plain values in (the system's names for things through words.js).
  */
-import { listJoin } from "./core.js";
+import { listJoin, plainText } from "./core.js";
 import { t, abilityName, alignmentName, creatureTypeName, conditionName, skillName, languageName, legendaryActionsName } from "./words.js";
 
 /** What each class leans toward (several classes add up). */
@@ -429,9 +429,4 @@ export function biographyOf(type, details, text = plainText) {
   const join = values => values.map(v => text(v ?? "")).filter(Boolean).join("\n");
   if ( type === "character" ) return { about: join([d.appearance, d.trait, d.ideal, d.flaw]), story: join([d.biography?.value, d.biography?.public]), against: "" };
   return { about: join([d.biography?.value, d.biography?.public, d.trait, d.ideal, d.flaw]), story: "", against: "" };
-}
-
-/** Text from the sheet's HTML. */
-export function plainText(html) {
-  return String(html ?? "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#39;|&rsquo;/g, "'").replace(/&quot;/g, "\"").replace(/\s+/g, " ").trim();
 }

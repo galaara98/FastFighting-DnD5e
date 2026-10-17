@@ -3,7 +3,8 @@
  * alignment, gear.
  */
 import { describe, expect, test } from "vitest";
-import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, plainText } from "../scripts/auto.js";
+import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf } from "../scripts/auto.js";
+import { plainText } from "../scripts/core.js";
 
 describe("the playstyles 5e says fit", () => {
   test("classes add up; a shield and heavy armor make a Tank likelier", () => {

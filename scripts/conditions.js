@@ -7,6 +7,7 @@
  * The statuses are dnd5e's ids, the same in every language. Only CONFIG.statusEffects is read here, to ask whether this
  * world's dnd5e has a status at all (an older one may have no Hiding or Sleeping).
  */
+import { statusEntry } from "./core.js";
 
 /**
  * A dnd5e sheet's statuses, read as the engine's conditions: first the condition the status shows (written back as that
@@ -46,13 +47,6 @@ export const statusKeys = status => (Object.hasOwn(READ, status) ? READ[status] 
  * shown as Charmed though the engine keeps who holds it (it's read back as charmed, not as control).
  */
 export const WRITES = Object.freeze({ ...SHEET_STATUSES, controlled: "charmed" });
-
-/** Foundry's entry for a status (dnd5e keeps them by id; Foundry itself, as a list), or null. */
-function statusEntry(id) {
-  const all = globalThis.CONFIG?.statusEffects;
-  if ( !all ) return null;
-  return (Array.isArray(all) ? all.find(e => e?.id === id) : all[id]) ?? null;
-}
 
 /** Does this world's dnd5e have the status? Without Foundry's list to ask (outside Foundry), yes. */
 export function hasStatus(id) {

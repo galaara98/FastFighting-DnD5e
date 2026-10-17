@@ -10,8 +10,8 @@ import { beginRun, beginRound, takeTurn, prepareBattle, endOfTurn } from "../../
 import { remediesOf, holdsOf, tryHold, release } from "../../FastFighting/scripts/engine/behavior/holds.js";
 import { Dnd5eAdapter, tallyFrom, tallied, plainText, setsAlight } from "../scripts/adapter.js";
 import { dnd5eRules } from "../scripts/rules.js";
-import { holderOf, spitUp } from "../scripts/inside.js";
-import { parseFormula, applyOutcome, cutOff } from "../scripts/core.js";
+import { spitUp } from "../scripts/inside.js";
+import { parseFormula, applyOutcome, cutOff, holderOf } from "../scripts/core.js";
 import { levelOf } from "../../FastFighting/scripts/engine/behavior/desire.js";
 
 /** Foundry's Roll.replaceFormulaData, as far as these tests need it. */

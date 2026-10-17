@@ -4,9 +4,9 @@ import { parseMultiattackOptions } from "../scripts/multiattack.js";
 
 /** The first (most likely) way to make a Multiattack. */
 const parseMultiattack = (description, strikes) => parseMultiattackOptions(description, strikes)[0] ?? null;
-import { payFrom, sideChange } from "../scripts/commit.js";
+import { COINS } from "../scripts/commit.js";
 import { deriveDnd5eTraits } from "../scripts/traits.js";
-import { degreeDistribution } from "../scripts/core.js";
+import { degreeDistribution, payFrom, sideAfter } from "../scripts/core.js";
 
 const unit = (extra = {}) => ({ spec: { diesAtZero: false, speeds: { walk: 30 } }, maxHp: 20, hp: 0, status: "standing", conds: {}, ...extra });
 
@@ -152,10 +152,10 @@ describe("Multiattack", () => {
 
 describe("paying out coins", () => {
   test("small coins first, breaking a bigger one for change", () => {
-    const left = payFrom({ cp: 5, sp: 2, gp: 3 }, 135);
+    const left = payFrom({ cp: 5, sp: 2, gp: 3 }, 135, COINS);
     const total = p => p.cp + p.sp * 10 + p.ep * 50 + p.gp * 100 + p.pp * 1000;
     expect(total(left)).toBe(5 + 20 + 300 - 135);
-    expect(payFrom({ gp: 1 }, 500)).toBeNull();
+    expect(payFrom({ gp: 1 }, 500, COINS)).toBeNull();
   });
 });
 
@@ -212,13 +212,13 @@ describe("features by identifier", () => {
 
 describe("whose side a token ends up on", () => {
   test("won over, talked out of the fight, or a neutral that turned on the party", () => {
-    expect(sideChange({ swayed: "switched", side: "friendly", status: "standing" })).toBe("friendly");
-    expect(sideChange({ swayed: "neutral", side: "neutralParty", status: "standing", against: [] })).toBe("neutral");
-    expect(sideChange({ swayed: null, side: "neutralParty", status: "standing", against: ["friendly"] })).toBe("hostile");
+    expect(sideAfter({ swayed: "switched", side: "friendly", status: "standing" })).toBe("friendly");
+    expect(sideAfter({ swayed: "neutral", side: "neutralParty", status: "standing", against: [] })).toBe("neutral");
+    expect(sideAfter({ swayed: null, side: "neutralParty", status: "standing", against: ["friendly"] })).toBe("hostile");
     // A neutral that only fought the enemy, or never took a side, stays as it was.
-    expect(sideChange({ swayed: null, side: "neutralParty", status: "standing", against: ["hostile"] })).toBeNull();
-    expect(sideChange({ swayed: "neutral", side: "neutralParty", status: "dead", against: [] })).toBeNull();
-    expect(sideChange({ swayed: null, side: "hostile", status: "down" })).toBeNull();
+    expect(sideAfter({ swayed: null, side: "neutralParty", status: "standing", against: ["hostile"] })).toBeNull();
+    expect(sideAfter({ swayed: "neutral", side: "neutralParty", status: "dead", against: [] })).toBeNull();
+    expect(sideAfter({ swayed: null, side: "hostile", status: "down" })).toBeNull();
   });
 });
 
