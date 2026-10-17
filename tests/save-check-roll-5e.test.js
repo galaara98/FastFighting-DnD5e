@@ -7,6 +7,7 @@
  */
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { Dnd5eAdapter, checkOf, rollDnd5eSave, rollDnd5eCheck } from "../scripts/adapter.js";
+import { skillName } from "../scripts/words.js";
 
 const was = { ChatMessage: globalThis.ChatMessage };
 afterEach(() => {
@@ -86,12 +87,13 @@ describe("a check, with what the engine says of it", () => {
   });
 
   test("the skill it names: a dnd5e key, or this client's name for it (a pitch's, a theft's), or an ability's key", () => {
-    expect(skillOf({ purpose: "talk", skill: "Persuasion", action: { id: null, name: "persuade" } })).toEqual({ skill: "per" });
+    // (This client's names, as the code reads them: skillName, in whatever words the language files give.)
+    expect(skillOf({ purpose: "talk", skill: skillName("per"), action: { id: null, name: "" } })).toEqual({ skill: "per" });
     expect(skillOf({ purpose: "theft", skill: "sleight of hand" })).toEqual({ skill: "slt" });
     expect(skillOf({ purpose: "control", skill: "ath" })).toEqual({ skill: "ath" });
     expect(skillOf({ purpose: "control", skill: "str" })).toEqual({ ability: "str" });
     // (A taunt, the core's: its pitch's skill, Intimidation or Deception.)
-    expect(skillOf({ purpose: "talk", skill: "Deception", action: { id: "tokA.goad", name: "" } })).toEqual({ skill: "dec" });
+    expect(skillOf({ purpose: "talk", skill: skillName("dec"), action: { id: "tokA.goad", name: "" } })).toEqual({ skill: "dec" });
   });
 
   test("a pitch by its kind where its skill's name is another language's; a theft, first aid, an escape by their purpose", () => {

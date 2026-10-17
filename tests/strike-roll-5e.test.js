@@ -112,6 +112,24 @@ describe("the attack the engine's strike came from, found by its id", () => {
     expect(attackActivityOf(actor, "orc.claw.legendary")).toBe(plain);
   });
 
+  test("a Multiattack's parts (their ids the Multiattack's): the attack each one's name names, rolled with that one", async () => {
+    const { token, actor, axe, stab } = orc();
+    const multi = weapon("multiattack", [], { type: "feat", modes: [] });
+    multi.system.description = { value: "<p>The orc makes two attacks: one with its greataxe and one with its dagger.</p>" };
+    actor.items.push(multi);
+    const spec = await new Dnd5eAdapter().toCombatantSpec({ id: "tokA", name: "Orc", actor });
+    const parts = spec.actions.find(a => a.id === "orc.multiattack").sequence;
+    expect(parts.map(p => [p.id, p.name])).toEqual([["multiattack.0.0", "greataxe"], ["multiattack.0.1", "dagger"]]);
+    expect(parts.map(p => attackActivityOf(actor, p.id, p.name))).toEqual([axe, stab]);
+    stab.next.attack = d20(14, 19);
+    await new Dnd5eAdapter().rollStrike(token, { action: { id: parts[1].id, name: parts[1].name }, target: goblin(), advantage: 1 });
+    expect(stab.rollAttack).toHaveBeenCalledWith({ target: 15, advantage: true, attackMode: "oneHanded" }, { configure: false }, { data: { system: { targets: [GOBLIN] } } });
+    expect(axe.rollAttack).not.toHaveBeenCalled();
+    // (Without its name, or one no attack goes by: the engine's own dice.)
+    expect(attackActivityOf(actor, parts[1].id)).toBeNull();
+    expect(attackActivityOf(actor, parts[1].id, "claw")).toBeNull();
+  });
+
   test("none: an activity that isn't an attack, an item or activity it doesn't have, no id", () => {
     const actor = actorOf([weapon("jaws", [attack("bite"), attack("breath", { type: "save" })], { type: "feat", modes: [] })]);
     expect(attackActivityOf(actor, "orc.jaws.breath")).toBeNull();

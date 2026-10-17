@@ -589,10 +589,11 @@ export function weaponLook(item) {
 /**
  * The attack activity an engine strike came from, by the strike's id: `<actor>.<item>.<activity>` (#fromActivity), with
  * whatever #actions adds after it (`.extra`, `.off-hand`, `.martial-arts`, `.0`, `@slots:2`). A legendary copy's
- * `<actor>.<item>.legendary` names no activity: the item's attack (not an "at Advantage" variant). Null when the id
- * names none of this actor's attacks.
+ * `<actor>.<item>.legendary` names no activity: the item's attack (not an "at Advantage" variant). A Multiattack's part,
+ * `<multiattack>.<k>.<i>`, names the Multiattack, which has no attack: the one the strike's `name` names
+ * (activityNamed). Null when the id names none of this actor's attacks.
  */
-export function attackActivityOf(actor, id) {
+export function attackActivityOf(actor, id, name = null) {
   const keys = String(id ?? "").split("@")[0].split(".");
   const attacks = activities => Array.from(activities ?? []).filter(a => a?.type === "attack" && typeof a.rollAttack === "function");
   for ( let i = 0; i < keys.length; i++ ) {
@@ -601,7 +602,10 @@ export function attackActivityOf(actor, id) {
     const named = activities.get?.(keys[i + 1]) ?? Array.from(activities).find(a => a?.id === keys[i + 1]);
     if ( named ) return attacks([named])[0] ?? null;
     const all = attacks(activities);
-    return all.find(a => !ADVANTAGE_VARIANT.test(a.name ?? "")) ?? all[0] ?? null;
+    const own = all.find(a => !ADVANTAGE_VARIANT.test(a.name ?? "")) ?? all[0];
+    if ( own ) return own;
+    const part = activityNamed(actor, name)?.activity;
+    return part ? attacks([part])[0] ?? null : null;
   }
   return null;
 }
@@ -651,7 +655,7 @@ function targetsOf(token) {
  */
 export async function rollDnd5eStrike(token, { action, target, advantage = 0, secret = false } = {}) {
   const actor = token?.actor;
-  const activity = actor ? attackActivityOf(actor, action?.id) : null;
+  const activity = actor ? attackActivityOf(actor, action?.id, action?.name) : null;
   if ( !activity || !target?.actor ) return null;
   const targets = targetsOf(target);
   const ac = Number(targets[0]?.ac ?? NaN);
