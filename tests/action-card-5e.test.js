@@ -1,7 +1,7 @@
 /**
- * A spell's or a feature's own card in a live battle (core API 19 useAction), and its damage rolled once for all it
- * catches (rollDamage): the activity the action came from, found by its id as the spec makes it (the slot it's cast
- * with; a Multiattack's part by its name); its usage card with nothing consumed, created, begun or rolled after it, at
+ * A spell's or a feature's own card in a live battle (core API 19 useAction; a buff's or a heal's too, Action Surge's),
+ * and its damage rolled once for all it catches (rollDamage): the activity the action came from, found by its id as the
+ * spec makes it (the slot it's cast with; a Multiattack's part by its name); its usage card with nothing consumed, created, begun or rolled after it, at
  * the action's targets, for the GMs only when secret, and none for an attack; its damage as its card's Damage button
  * rolls it (scaled as the card is, the card its origin, at the card's targets), by type, applied by no one; null for
  * darts dnd5e rolls one at a time, or what isn't damage. Each target's share is applied with applyDamageCard.
@@ -189,6 +189,46 @@ describe("its own card (useAction)", () => {
     expect(await useDnd5eAction(token, { action: { id: "mage.burning-hands.cast" } })).toBeNull();
     quiet.mockRestore();
     expect(await useDnd5eAction({}, { action: { id: "mage.burning-hands.cast" } })).toBeNull();
+  });
+});
+
+describe("a buff's or a heal's card, with no check of its own", () => {
+  /** False Life (temporary hit points: a buff), Cure Wounds, Second Wind (a feature's healing), Action Surge, Reckless Attack. */
+  const kit = () => mage([
+    item("false-life", "spell", [activity("life", "heal", { dice: [["1d4 + 4", "temphp"]], range: { units: "self" } })], { name: "False Life", level: 1, method: "spell" }),
+    cureWounds(),
+    item("second-wind", "feat", [activity("wind", "heal", { dice: [["1d10 + 5", "healing"]], activation: { type: "bonus" }, range: { units: "self" } })], { name: "Second Wind" }),
+    item("action-surge", "feat", [activity("surge", "utility")], { name: "Action Surge" }),
+    item("reckless", "feat", [activity("reckless", "utility")], { name: "Reckless Attack" })
+  ]);
+
+  test("the spec's own: a spell's, a feature's heal, and the helper's own that are a feature's (by identifier, or English name)", async () => {
+    const { actor } = kit();
+    const spec = await new Dnd5eAdapter().toCombatantSpec({ id: "tokA", name: "Mage", actor });
+    const of = id => activityOf(actor, spec.actions.find(a => a.id === id))?.activity;
+    expect(spec.actions.find(a => a.id === "mage.false-life.life@slots:2")?.kind).toBe("buff");
+    expect(of("mage.false-life.life@slots:2")).toBe(actor.items.get("false-life").system.activities[0]);
+    expect(of("mage.second-wind.wind")).toBe(actor.items.get("second-wind").system.activities[0]);
+    expect(of("mage.action-surge")).toBe(actor.items.get("action-surge").system.activities[0]);
+    expect(of("mage.reckless")).toBe(actor.items.get("reckless").system.activities[0]);
+  });
+
+  test("its card, nothing begun, spent or rolled: a buff spell at its slot, healing, a feature's", async () => {
+    const { token, actor } = kit();
+    for ( const id of ["mage.false-life.life@slots:2", "mage.cure-wounds.heal", "mage.second-wind.wind", "mage.action-surge", "mage.reckless"] ) {
+      expect([id, await useDnd5eAction(token, { action: { id } })]).toEqual([id, { card: "use-1" }]);
+    }
+    expect(actor.items.get("false-life").system.activities[0].use.mock.calls[0][0]).toEqual({ ...USE, spell: { slot: "spell2" } });
+    for ( const id of ["cure-wounds", "second-wind", "action-surge", "reckless"] ) {
+      const a = actor.items.get(id).system.activities[0];
+      expect([id, a.use.mock.calls[0][0]]).toEqual([id, USE]);
+      expect(a.rollDamage).not.toHaveBeenCalled();
+    }
+  });
+
+  test("none where it has no item (Dodge, Help) or its feature has no activity", async () => {
+    const { token } = mage([item("reckless-attack", "feat", [], { name: "Reckless Attack" })]);
+    for ( const id of ["mage.dodge", "mage.help", "mage.reckless", "mage.action-surge"] ) expect([id, await useDnd5eAction(token, { action: { id } })]).toEqual([id, null]);
   });
 });
 

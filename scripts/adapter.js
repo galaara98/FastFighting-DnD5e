@@ -822,17 +822,26 @@ function activityNamed(actor, name) {
   return null;
 }
 
+/** The helper's own actions that are a feature's (#actions: `<actor>.<key>`), and the feature: its identifier, its English name. */
+const OWN_FEATURES = Object.freeze({ reckless: ["reckless-attack", "reckless attack"], "action-surge": ["action-surge", "action surge"] });
+
 /**
  * The item and activity an action came from (core API 19 useAction and rollDamage), by its id: `<actor>.<item>.<activity>`
  * (#fromActivity), with whatever #actions adds after it (`.0`, `.extra`, `@slots:3`, `@pact`). A Multiattack's part
  * (`<multiattack>.<k>.<i>`) and a legendary copy (`<item>.legendary`) name an item but none of its activities: the one
- * their name names (activityNamed). {item, activity, slot}: `slot`, the spell slot it's cast with, as dnd5e keys it
- * (`spell3`, `pact`; null, the spell's own). Null when the id names none of this actor's items (the helper's own
- * actions: Dodge, a shove), or nothing fits.
+ * their name names (activityNamed). The helper's own that are a feature's (`<actor>.reckless`, OWN_FEATURES): that
+ * feature's. {item, activity, slot}: `slot`, the spell slot it's cast with, as dnd5e keys it (`spell3`, `pact`; null,
+ * the spell's own). Null when the id names none of this actor's items (the helper's own actions: Dodge, Help, a
+ * shove), or nothing fits.
  */
 export function activityOf(actor, { id, name } = {}) {
   const [path, at = ""] = String(id ?? "").split("@");
   const keys = path.split(".");
+  if ( keys.length === 2 && Object.hasOwn(OWN_FEATURES, keys[1]) ) {
+    const item = actor?.items ? featureItem(actor, ...OWN_FEATURES[keys[1]]) : null;
+    const activity = Array.from(item?.system?.activities ?? []).find(a => !ADVANTAGE_VARIANT.test(a?.name ?? ""));
+    return activity ? { item, activity, slot: null } : null;
+  }
   const level = /^slots:(\d+)/.exec(at)?.[1];
   const slot = level ? `spell${level}` : at.startsWith("pact") ? "pact" : null;
   for ( let i = 0; i < keys.length; i++ ) {
@@ -845,7 +854,10 @@ export function activityOf(actor, { id, name } = {}) {
   return null;
 }
 
-/** The activities whose card an action shows (useAction): what #fromActivity plays that isn't an attack or a summoning. */
+/**
+ * The activities whose card an action shows (useAction): what #fromActivity plays that isn't an attack or a summoning
+ * (a save, damage, a heal, a buff), and a feature's (Action Surge's utility).
+ */
 const SHOWN = new Set(["save", "damage", "heal", "utility", "enchant"]);
 
 /** The activities whose damage is rolled once for all it catches (rollDamage): a save's, and damage that simply lands. */
@@ -858,13 +870,14 @@ function cardWith(token, secret, system) {
 }
 
 /**
- * An action's own card, as its user would show it from the sheet (core API 19 useAction: a spell's, a breath's, in a
- * turn FastFighting plays): dnd5e's `activity.use` with no dialog, nothing consumed (no slot, use or recharge spent),
+ * An action's own card, as its user would show it from the sheet (core API 19 useAction: a spell's, a breath's, a buff's
+ * or a heal's with no check of its own, Action Surge's, in a turn FastFighting plays): dnd5e's `activity.use` with no dialog, nothing consumed (no slot, use or recharge spent),
  * nothing created (no template, no summons), no concentration begun, and none of what it does next (a damage
  * activity's damage, a heal's healing: its subsequent actions); cast with the slot the action is cast with, at its
  * targets (their TargetsField descriptors as the card's, the user's own targets untouched), the token its speaker, for
  * the GMs only when `secret`. FastFighting spends, lays and rolls it all itself. {card: the usage card's id}; null for an
- * attack (its rollStrike card shows it), what isn't an activity of the actor's, one dnd5e won't use, or no card made.
+ * attack (its rollStrike card shows it), what isn't an activity of the actor's (Dodge, Help), one dnd5e won't use, or
+ * no card made.
  */
 export async function useDnd5eAction(token, { action, targets = [], secret = false } = {}) {
   const found = token?.actor ? activityOf(token.actor, action ?? {}) : null;
