@@ -46,12 +46,12 @@ FastFighting reads each item by what it does (its activities and effects), then 
 - An attack activity is the core's attack. A save on the same item happens on a hit when the item says so: a wolf's bite (Strength or prone).
 - Multiattack: an NPC makes every strike it names, read from 2014 and 2024 wording ("one with its bite and two with its claws"). Each choice is an option the simulation picks per turn.
 - Extra Attack (and Thirsting Blade) gives several weapon attacks with the Attack action; from two classes, it doesn't add up. Two light weapons, Martial Arts and Flurry of Blows give bonus-action strikes.
-- Characters fight with equipped weapons and cast cantrips and prepared spells (and pact, innate and at-will ones). Magic Missile's darts, Scorching Ray's rays and Eldritch Blast's beams count, more for a higher slot.
+- Characters fight with equipped weapons and cast cantrips and prepared spells (and pact, innate and at-will ones). Magic Missile's darts, Scorching Ray's rays and Eldritch Blast's beams count, more for a higher slot or level.
 - Summons (Spiritual Weapon, Conjure Animals ...) are the core's summons: the creatures dnd5e would call, with the caster's attack and DC where the spell says, and only what its players could call themselves. A spiritual weapon or a flaming sphere can't be attacked, and acts only on the caster's bonus action.
 
 ### The turn
 
-A 5e turn is the core's turn with an action, a bonus action and movement, plus one spell slot, which plays 5e's rule on bonus-action spells: Healing Word and Guiding Bolt can't share a turn, Healing Word and a cantrip can. Dash spends the action on a second move; standing up costs half your movement. Slowed (the Slow spell): an action or a bonus action, not both, and no reaction.
+A 5e turn is the core's turn with an action, a bonus action and movement, plus one spell slot, which plays 5e's rule on bonus-action spells: Healing Word and Guiding Bolt can't share a turn, Healing Word and a cantrip can. Dash spends the action on a second move; standing up costs half your movement. Slowed (the Slow spell): an action but no bonus action, and no reaction.
 
 ### Rolls
 
@@ -114,7 +114,7 @@ Spell and feature effects are the core's buffs and debuffs, read from their chan
 - Concentration: one spell at a time. Damage calls for a Constitution save (DC 10 or half the damage); being incapacitated ends it.
 - 2024's Contagion is the core's tallied affliction: Poisoned until three saves made end it, or three failed keep it for the fight.
 
-One-roll edges are the core's, each spent by the roll it helps: Help (advantage on a friend's next attack at a foe beside the helper), Insight before talking (DC 15: advantage on its next words), Guidance, Bardic Inspiration, Guiding Bolt, Vicious Mockery, Steady Aim and 2014's True Strike. A Lore-Collector sizes a foe up with the Study action: its best of Arcana, History, Investigation, Nature and Religion.
+One-roll edges are the core's, each spent by the roll it helps: Help (advantage on a friend's next attack at a foe beside the helper), Insight before talking (DC 15: advantage on its next words), 2014's Guidance, Bardic Inspiration, Guiding Bolt, Vicious Mockery, Steady Aim and 2014's True Strike. A Lore-Collector sizes a foe up with the Study action: its best of Arcana, History, Investigation, Nature and Religion.
 
 ### Everyday actions
 
@@ -155,7 +155,7 @@ Every perk a playstyle or tactics answer switches on does something here. These 
 | Sparing the fallen (Moralist, Peacekeeper, a Diplomat now and then) | Knocks a foe out with the melee blow that would kill it. |
 | Locked doors | Athletics or thieves' tools. |
 
-The Shields answer says how readily a creature Dodges. Magic and specialties means spells, features (Second Wind, a breath weapon), Reckless Attack and Action Surge.
+The Shield or defending answer says how readily a creature Dodges. Magic and specialties means spells, features (Second Wind, a breath weapon), Reckless Attack and Action Surge.
 
 ### Set up by itself
 
@@ -165,7 +165,7 @@ When FastFighting first sets a character up by itself, 5e suggests playstyles fr
 
 ## Do it For Real Now
 
-In a live battle, each turn goes onto the dnd5e sheets as it's played: HP, death saves and death; conditions as dnd5e's own (read back each turn, the GM's changes too); slots, Inspiration, Legendary Resistance, uses and consumables spent; and a spell's buff or debuff as the spell's own effect, for its rounds. Fleeing NPCs are hidden (unless the fled-combatants setting leaves them), the surrendered get an effect, and coins or items change hands. Summons appear the way dnd5e summons them. A player's turn is read from its dnd5e cards (attacks, damage, healing, and talking checks), and the GM confirms what FastFighting isn't sure of.
+In a live battle, each turn goes onto the dnd5e sheets as it's played: HP, death saves and death; conditions as dnd5e's own (read back each turn, the GM's changes too); slots, Inspiration, Legendary Resistance, uses and consumables spent; and a spell's buff or debuff as the spell's own effect, for its rounds. Fleeing NPCs are hidden (unless the **Do it For Real Now: fled combatants** setting leaves them), the surrendered get an effect, and coins or items change hands. Summons appear the way dnd5e summons them. A player's turn is read from its dnd5e cards (attacks, damage, healing, and talking checks), and the GM confirms what FastFighting isn't sure of.
 
 ## Settings
 

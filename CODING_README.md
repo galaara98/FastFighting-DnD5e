@@ -108,7 +108,7 @@ dnd5e's `system.identifier` is the same in every book, edition of the SRD and la
 | Paladin | `radiant-strikes` (or a name with "improved divine smite"), `aura-of-protection`, `divine-smite` | `#actions`, `#saveFeatures`, `#hitCost` |
 | Saves | `magic-resistance`, `evasion` | `#saveFeatures` |
 | Getting back up | `regeneration`, `undead-fortitude`, `relentless-endurance` | `#mending` |
-| Creatures | `multiattack`, `pack-tactics`, `nimble-escape`, `halfling-nimbleness`, `ooze-cube` | `#actions`, `traits.js`, `#inside` |
+| Creatures | `multiattack`, `pack-tactics`, `nimble-escape`, `halfling-nimbleness`, `ooze-cube` | `#actions`, `toCombatantSpec`, `traits.js`, `#inside` |
 | Unarmed | `unarmed-strike` (or an attack classified `unarmed`) | `unarmedStrike` |
 | Swallowing | `swallow` → swallowed, `engulf` → engulfed (`INSIDE`); else an effect with `coverTotal` and Restrained is a swallow; 2014's bite by `bite` | `#inside` |
 | Reactions | `shield`, `counterspell`, `hellish-rebuke`, `uncanny-dodge`, `deflect-attacks`, `deflect-missiles`, `parry`, `riposte`, `death-burst`, `protection`, `fighting-style-protection` | `#reactions` |
@@ -190,7 +190,7 @@ Everything is read from the item's English (`englishDescription`: what Babele ke
 - `system.spells.pact.value`, `system.spells.spell<n>.value`, `system.attributes.inspiration`, `system.resources.legres.spent`, an item's `system.uses.spent`, a consumable's quantity (deleted at 0);
 - statuses with the core's `toggleStatus`, before HP (dnd5e adds Bloodied itself); Unconscious and Prone on falling; `dead` as an overlay, and the combatant defeated;
 - fled NPCs hidden unless `options.fledMode === "leave"`; the surrendered get an ActiveEffect (`FFDND5E.Surrendered`, `icons/svg/cancel.svg`, flag `surrendered`);
-- spell effects laid with `layEffect` from the action's `effectRef`, for the rounds left, flagged `fast-fighting-dnd5e.laid: {key, sourceId}` so `liftEffect` takes them off.
+- spell effects laid with `layEffect` from the action's `effectRef`, for the rounds left, flagged `fast-fighting.laid: {key, sourceId}` so `liftEffect` takes them off.
 
 `commitDnd5eConcession` pays coins with the core's `payFrom` (`COINS`; the receiver gets gp, sp and cp) and hands items over with `handOverItem`, unequipped and out of any container. `describeDnd5eOutcome` gives the planner's summary lines. `placeSummons` uses dnd5e's own `Actor5e.fetchExisting`, `activity.getChanges` and `getTokenData` (no rolled NPC HP), and falls back to the core's way. `readDnd5eTurn` reads dnd5e 6 cards (`system` data) and older ones (`flags.dnd5e`): attacks (hit against the target's AC, `sure` when the AC is known), damage onto the last hit, healing, and Persuasion, Intimidation or Deception checks (never `sure`). `reactionsOf` lists a reaction spell once, whatever its slot, and never a passive or free one.
 
