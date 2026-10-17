@@ -2293,9 +2293,19 @@ export class Dnd5eAdapter extends SystemAdapter {
     return readDnd5eTurn(messages, context);
   }
 
-  /** Its reactions, for its player to say always / ask / never: its own, and the Opportunity Attack everyone has. */
+  /**
+   * Its reactions, for its player to say always / ask / never: its own, and the Opportunity Attack everyone has. A
+   * reaction spell once, whatever slot it's cast with (one choice for them all: its id without the slot); not one that's
+   * no one's choice (passive, or free: a Death Burst, its nature).
+   */
   reactionsOf(spec) {
-    return [...(spec?.reactions ?? []).map(r => ({ id: r.id, label: r.label ?? r.id })), { id: "opportunity", label: t("OpportunityAttack") }];
+    const own = new Map();
+    for ( const r of spec?.reactions ?? [] ) {
+      if ( r.passive || r.free ) continue;
+      const id = String(r.id).split("@")[0];
+      if ( !own.has(id) ) own.set(id, { id, label: r.label ?? id });
+    }
+    return [...own.values(), { id: "opportunity", label: t("OpportunityAttack") }];
   }
 
   /** Heroic Inspiration (or, under the 2014 rules, Inspiration) buys a reroll. */

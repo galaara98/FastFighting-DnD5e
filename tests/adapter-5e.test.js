@@ -301,3 +301,15 @@ describe("healing that goes on (Regenerate), and a monster's Regeneration", () =
     expect(regenerationFrom(plainText(words), 10)).toEqual({ amount: 10, stoppedBy: [], needsHp: true });
   });
 });
+
+describe("the reactions a player chooses about", () => {
+  test("a reaction spell once, whatever its slot; nothing that's no one's choice; and the Opportunity Attack", () => {
+    const reactions = [
+      { id: "a.shield@spell1", label: "Shield" }, { id: "a.shield@spell2", label: "Shield" }, { id: "a.shield@pact", label: "Shield" },
+      { id: "a.burst", label: "Death Burst", free: true }, { id: "a.tough", label: "Toughness", passive: true }, { id: "a.dodge", label: "Uncanny Dodge" }
+    ];
+    const list = new Dnd5eAdapter().reactionsOf({ reactions });
+    expect(list.map(r => r.id)).toEqual(["a.shield", "a.dodge", "opportunity"]);
+    expect(list[0].label).toBe("Shield");
+  });
+});
