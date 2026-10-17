@@ -13,7 +13,7 @@
     "Settings": {
       "loreBoost": {
         "Name": "Lore-Collector advantage",
-        "Hint": "How much likelier a Lore-Collector's rolls against a foe are to succeed through its next turn, after a successful Study. Above about 1.75×, only long-shot rolls gain much."
+        "Hint": "How much likelier a Lore-Collector's rolls against a foe are after a successful Study. Default 2.5×."
       }
     },
     "Passive": "passive {skill}",

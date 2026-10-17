@@ -172,9 +172,9 @@ Everything is read from the item's English (`englishDescription`: what Babele ke
 | `initUnit`, `onDropped`, `adjustRoll`, `onHealed`, `recoveryCheck`, `firstAidDC`, `firstAid`, `knockOut`, `capture` | death saves; Relentless Endurance as a save that spends its pool; DC 10 Medicine |
 | `persistentFlatCheck` | even odds |
 | `typical` | AC 12 + prof, save prof + 1, skill prof + 2, DC 10 + prof |
-| `modifiers.{exposed, defense, attack, save, check, steal, actionsLost}` | advantage, disadvantage, cover, exhaustion (−2 a level), auto-failed Strength and Dexterity saves, Contagion's `weakSave` |
+| `modifiers.{exposed, defense, attack, save, check, steal, actionsLost}` | advantage, disadvantage (hidden: both ways), cover, exhaustion (−2 a level), auto-failed Strength and Dexterity saves, Contagion's `weakSave` |
 | `isImmune`, `conditionWishes`, `conditionWeight`, `conditionMods` | immune to every condition an action lays (aliases: incapacitated → unconscious, immobilized → restrained, controlled → charmed), and size limits; Frightened: `avoid` its source at 60; hidden and prone mods |
-| `usable`, `afterRoll`, `pullsBlow`, `storyDamageType` | no Hide beside a foe, `grappledOnly`; hidden ends on an attack; any melee blow can knock out; lightning → electricity, thunder → sonic, necrotic → void, psychic → mental |
+| `usable`, `afterRoll`, `pullsBlow`, `storyDamageType` | no Hide beside a foe, `grappledOnly`; hidden ends on an attack, after its roll; any melee blow can knock out; lightning → electricity, thunder → sonic, necrotic → void, psychic → mental |
 
 `holds.js`: a grapple is the better of Athletics and Acrobatics against the grappler's `escapeDC` (its words', else 2024's 8 + Strength + proficiency, or 2014's passive Athletics); with no known grabber, the hardest `escapeDC` among standing foes within their reach, else `typical.dc`. Webs and nets use the checks `escapeWords` read. Rope (`ROPE`): 2024 escape 15 or burst 20; 2014 burst 17; a friend unties with no roll.
 

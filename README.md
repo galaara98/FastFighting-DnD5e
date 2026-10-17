@@ -55,7 +55,7 @@ A 5e turn is the core's turn with an action, a bonus action and movement, plus o
 
 ### Rolls
 
-5e's d20 tests are the core's rolls with two results, since 5e has nothing beyond meeting the DC. Attacks crit on a natural 20 (dice doubled) and miss on a 1. A successful save halves the damage, or stops it where the spell says so. Advantage and disadvantage cancel out. They come from the conditions (a restrained target, a poisoned attacker), prone (up close or from afar), Pack Tactics, and ranged attacks in melee or at long range. Cover adds +2 (half) or +5 (three-quarters) to AC and Dexterity saves; exhaustion is −2 a level to d20 tests.
+5e's d20 tests are the core's rolls with two results, since 5e has nothing beyond meeting the DC. Attacks crit on a natural 20 (dice doubled) and miss on a 1. A successful save halves the damage, or stops it where the spell says so. Advantage and disadvantage cancel out. They come from the conditions (a restrained target, a poisoned attacker), prone (up close or from afar), hiding, Pack Tactics, and ranged attacks in melee or at long range. Cover adds +2 (half) or +5 (three-quarters) to AC and Dexterity saves; exhaustion is −2 a level to d20 tests.
 
 ### Conditions
 
@@ -182,6 +182,7 @@ In a language other than English, the settings recommend the system's translatio
 - A swallowed or engulfed creature takes its holder's damage at the start of its own turns (the SRD: the holder's).
 - Lore-Collectors use 2024's Study action under either rules version.
 - Hide never checks for cover; that's the GM's call.
+- Hiding ends on an attack roll, not on a spell with a save. Blindsight and truesight don't see through it, or through Invisible.
 - Pushes chosen instead of something else (Brutal Strike), moves that put a creature anywhere (Telekinesis), and every weapon mastery but Push.
 - A Death Burst that deals no damage (a dust mephit's blinding).
 - Summons that take longer than a bonus action (Find Familiar) or can't fight (Mage Hand), and more than 8 creatures from one casting.
@@ -194,4 +195,4 @@ MIT
 
 ---
 
-Developer notes: [CODING_README.md](CODING_README.md). FastFighting itself: [FastFighting Core](https://github.com/galaara98/FastFighting) and its [developer docs](https://github.com/galaara98/FastFighting/blob/main/CODING_README.md).
+Developer notes: [CODING_README.md](CODING_README.md). FastFighting itself: [FastFighting Core](https://github.com/galaara98/FastFighting) and its [developer docs](https://github.com/galaara98/FastFighting/blob/main/CODING_README.md). The numbers behind it all: [STATS_AND_FORMULAS_README](https://github.com/galaara98/FastFighting/blob/main/STATS_AND_FORMULAS_README.md).

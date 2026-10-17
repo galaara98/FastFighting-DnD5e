@@ -386,9 +386,13 @@ export const dnd5eRules = {
     defense({ cover } = {}) {
       return coverBonus(cover);
     },
+    /**
+     * Unseen (hidden: the Hide action, or dnd5e's Hiding; 2024's Invisible while hidden), the SRD 5.1's and 5.2's alike:
+     * its attacks have advantage, and attacks at it disadvantage. Its attack gives it away once rolled (afterRoll).
+     */
     attack({ attacker, target, action, distance, positioning, alliesAdjacent, attackerEngaged }) {
-      let adv = HELPLESS.some(k => has(target, k));
-      let dis = HAMPERED.some(k => has(attacker, k)) || !!attacker.prone;
+      let adv = HELPLESS.some(k => has(target, k)) || has(attacker, "hidden");
+      let dis = HAMPERED.some(k => has(attacker, k)) || !!attacker.prone || has(target, "hidden");
       if ( target.prone ) {
         if ( action?.melee && (distance ?? 5) <= 5 ) adv = true;
         else dis = true;
@@ -453,7 +457,8 @@ export const dnd5eRules = {
   },
   /**
    * Knocked prone, as numbers: its own attacks at disadvantage, and those against it (up close) at advantage. Hidden
-   * (Invisible, from the Hide action): its attacks at advantage, those against it at disadvantage.
+   * (Invisible, from the Hide action): its attacks at advantage, those against it at disadvantage. (For weighing
+   * them; the rolls are modifiers.attack's.)
    */
   conditionMods(key) {
     if ( key === "hidden" ) return { adv: 1, defAdv: -1 };
@@ -468,7 +473,7 @@ export const dnd5eRules = {
     if ( !action?.hide ) return true;
     return ![...(u.adjacent ?? [])].some(id => { const o = run.byId.get(id); return o && o.status === STATUS.STANDING && run.prep.sides[u.side]?.enemies.has(o.side); });
   },
-  /** Hidden ends when it attacks. */
+  /** Hidden ends when it attacks: after the roll, so only its first attack has advantage (modifiers.attack). */
   afterRoll(run, u, roll, ctx) {
     if ( ctx?.kind === "attack" && u?.conds?.hidden ) dropCondition(u, "hidden");
   },

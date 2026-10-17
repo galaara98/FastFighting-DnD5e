@@ -29,6 +29,43 @@ describe("Hide", () => {
     expect(u.conds.hidden).toBeFalsy();
   });
 
+  test("unseen, by the rolls (SRD 5.1 and 5.2 alike): its attacks with advantage, those at it with disadvantage", () => {
+    const attack = (attacker, target) => dnd5eRules.modifiers.attack({ attacker: { conds: {}, spec: { flags: {} }, ...attacker }, target: { conds: {}, ...target }, action: { melee: true }, distance: 5 }).advantage;
+    expect(attack({ conds: { hidden: 1 } }, {})).toBe(1);
+    expect(attack({}, { conds: { hidden: 1 } })).toBe(-1);
+    expect(attack({ conds: { hidden: 1 } }, { conds: { hidden: 1 } })).toBe(0); // neither sees the other
+    expect(attack({ conds: { hidden: 1, poisoned: 1 } }, {})).toBe(0); // advantage and disadvantage cancel
+  });
+
+  // A shade that Hid, with two strikes to its Multiattack, and an ogre that only stands and swings.
+  const twoStrikes = () => { const a = strike({ id: "a1" }); return { ...a, id: "multi", name: "Multiattack", sequence: [a, { ...a, id: "a2" }] }; };
+  const shade = (over = {}) => creature({ id: "shade", conditions: { hidden: 1 }, hp: { value: 300, max: 300, temp: 0 }, flags: { fearless: true }, ...over });
+  const ogre = (over = {}) => creature({ id: "ogre", side: "hostile", hp: { value: 300, max: 300, temp: 0 }, flags: { fearless: true }, ...over });
+  const attacks = (r, id) => r.log.filter(e => e.type === "attack" && e.actorId === id);
+
+  test("a hidden attacker's first attack has advantage; it's seen after it, the next strike and the blows at it plain", () => {
+    const r = replay(battle([shade({ initiative: { mod: 40 }, actions: [twoStrikes()] }), ogre({ initiative: { mod: -40 } })], { maxRounds: 2 }), dnd5eRules, 1);
+    const [first, second] = attacks(r, "shade");
+    expect(first.advantage).toBe(1);
+    expect(second.round).toBe(first.round);
+    expect(second.advantage).toBe(0);
+    expect(r.log.indexOf(attacks(r, "ogre")[0])).toBeGreaterThan(r.log.indexOf(first));
+    for ( const e of attacks(r, "ogre") ) expect(e.advantage).toBe(0);
+  });
+
+  test("an attack at a hidden creature has disadvantage, until it attacks and gives itself away", () => {
+    const r = replay(battle([shade({ initiative: { mod: -40 } }), ogre({ initiative: { mod: 40 } })], { maxRounds: 2 }), dnd5eRules, 1);
+    const shadeFirst = attacks(r, "shade")[0];
+    const ogres = attacks(r, "ogre");
+    const before = ogres.filter(e => r.log.indexOf(e) < r.log.indexOf(shadeFirst));
+    const after = ogres.filter(e => r.log.indexOf(e) > r.log.indexOf(shadeFirst));
+    expect(before.length).toBeGreaterThan(0);
+    expect(after.length).toBeGreaterThan(0);
+    for ( const e of before ) expect(e.advantage).toBe(-1);
+    expect(shadeFirst.advantage).toBe(1);
+    for ( const e of after ) expect(e.advantage).toBe(0);
+  });
+
   test("not with a foe beside it", () => {
     const foe = { id: "f", side: "hostile", status: STATUS.STANDING };
     const run = { byId: new Map([["f", foe]]), prep: { sides: { friendly: { enemies: new Set(["hostile"]) } } } };
