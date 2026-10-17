@@ -9,11 +9,10 @@
  *   - Healing: told as healing (the sheets say how much).
  * Each event says whether it's `sure`.
  */
+import { tokenIdIn as tokenIdOf } from "./core.js";
 
 /** A skill rolled at someone that is words, and which (dnd5e skill ids). */
 const TALK = { per: "persuade", itm: "intimidate", dec: "deceive" };
-
-const tokenIdOf = uuid => (typeof uuid === "string" && uuid.includes("Token.") ? uuid.split("Token.").pop().split(".")[0] : null);
 
 /** The natural d20 of a roll, where it shows. */
 function naturalOf(roll) {
