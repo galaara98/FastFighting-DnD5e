@@ -679,6 +679,123 @@ export async function rollDnd5eStrike(token, { action, target, advantage = 0, se
   return { attack, damage: Object.keys(byType).length ? { byType } : null };
 }
 
+/** A save's bonus, as dnd5e prepares it (a number in older versions, {value} in newer ones). */
+const saveBonus = (sys, a) => {
+  const s = sys?.abilities?.[a]?.save;
+  return typeof s === "number" ? s : (s?.value ?? sys?.abilities?.[a]?.mod ?? 0);
+};
+const skillBonus = (sys, key) => Number(sys?.skills?.[key]?.total ?? sys?.skills?.[key]?.mod) || 0;
+/** A DC as a number (NaN for none). */
+const dcOf = dc => (dc === null || dc === undefined || dc === "" ? NaN : Number(dc));
+
+/** The engine's talk, by the kind of pitch, as dnd5e's skills: Persuasion, Intimidation, Deception. */
+const TALK_SKILLS = Object.freeze({ persuade: "per", intimidate: "itm", deceive: "dec" });
+/** The helper's own actions that take a check (`<actor>.<key>`), and its skill: Hide, Stealth; Insight. */
+const OWN_CHECKS = Object.freeze({ hide: "ste", insight: "ins" });
+/** Checks whose purpose alone says the skill: a theft, Sleight of Hand; first aid, Medicine; an escape, Athletics or Acrobatics (its better). */
+const PURPOSE_SKILLS = Object.freeze({ theft: ["slt"], firstAid: ["med"], escape: ["ath", "acr"] });
+
+/**
+ * What a check the engine asks for is made with, as dnd5e keys it: {skill} or {ability}, or null where it can't tell.
+ * The helper's own actions by their key (OWN_CHECKS); the skill the engine names, a dnd5e key or this client's name for
+ * it (the spec names its pitches' and its theft's skills so: Persuasion, Sleight of Hand); a talk by its kind of pitch
+ * (the request's name for it); else what its purpose says (PURPOSE_SKILLS). Nothing that needs the other creature: a
+ * player's own client hears of none.
+ */
+export function checkOf(actor, { purpose = null, skill = null, action = null } = {}) {
+  const sys = actor?.system ?? {};
+  const own = String(action?.id ?? "").split(".");
+  if ( own.length === 2 && Object.hasOwn(OWN_CHECKS, own[1]) ) return { skill: OWN_CHECKS[own[1]] };
+  const said = String(skill ?? "").trim();
+  const lower = said.toLocaleLowerCase();
+  if ( said ) {
+    for ( const key of Object.keys(sys.skills ?? {}) ) {
+      if ( key === said || [skillName(key), sys.skills[key]?.label].some(n => typeof n === "string" && n.toLocaleLowerCase() === lower) ) return { skill: key };
+    }
+    if ( ABILITIES.includes(said) ) return { ability: said };
+  }
+  const talk = purpose === "talk" ? TALK_SKILLS[action?.name] ?? TALK_SKILLS[said] : null;
+  if ( talk ) return { skill: talk };
+  const skills = Object.hasOwn(PURPOSE_SKILLS, purpose) ? PURPOSE_SKILLS[purpose] : null;
+  return skills ? { skill: skills.reduce((a, b) => (skillBonus(sys, b) > skillBonus(sys, a) ? b : a)) } : null;
+}
+
+/**
+ * Is a Constitution save named for a spell (or feature) of its own that takes concentration its concentration save?
+ * The engine names that save for what it concentrates on, as the helper named the action (`<item>` or `<item>: <activity>`).
+ */
+function concentrationSave(actor, name) {
+  const said = String(name ?? "");
+  const takes = item => !!(item?.system?.properties?.has?.("concentration") || item?.system?.duration?.concentration);
+  return !!said && Array.from(actor?.items ?? []).some(i => takes(i) && i.name && (said === i.name || said.startsWith(`${i.name}: `)));
+}
+
+/** A save's or a check's card: the token as its speaker, for the GMs only when secret. */
+function cardFor(token, secret) {
+  const speaker = globalThis.ChatMessage?.implementation?.getSpeaker?.({ token });
+  return { ...(secret ? { rollMode: "gm" } : {}), ...(speaker ? { data: { speaker: { ...speaker } } } : {}) };
+}
+
+/** A save or a check as dnd5e rolled it (the kept d20, with advantage), graded by the rules: {degree, natural, total}, or null. */
+function graded(rolls, dc, kind) {
+  const roll = rolls?.[0];
+  const total = Number(roll?.total);
+  if ( !roll || !Number.isFinite(total) ) return null;
+  const d20 = Number(roll.d20?.total ?? roll.dice?.find?.(d => d.faces === 20)?.total ?? NaN);
+  const natural = Number.isFinite(d20) ? d20 : null;
+  return { degree: dnd5eRules.degreeOfSuccess(natural, total, dc, kind), natural, total };
+}
+
+/**
+ * A save rolled with dnd5e's own saving throw (core API 19 rollSave: every save in a turn FastFighting plays), its card
+ * in the chat, against `dc`: no dialog, for the GMs only when `secret`. `save`: the ability, as the spec keys saves
+ * ("dex"); of several (a shove's Strength or Dexterity), its better, as the engine takes it. A Constitution save named
+ * for what it concentrates on (concentrationSave) is dnd5e's concentration save, with what it adds (War Caster). The
+ * helper plays shoves and grapples the SRD 5.2's way in both rule sets (the target's save; 2014's contests aren't
+ * played), so nothing here needs a GM's say. {degree, natural, total} (degreeOfSuccess); null where it can't be rolled
+ * or read (the engine's own dice).
+ */
+export async function rollDnd5eSave(token, { save, dc, action = null, secret = false } = {}) {
+  const actor = token?.actor;
+  const keys = asArray(save).filter(k => ABILITIES.includes(k));
+  const target = dcOf(dc);
+  if ( !actor || !keys.length || !Number.isFinite(target) || typeof actor.rollSavingThrow !== "function" ) return null;
+  const ability = keys.reduce((a, b) => (saveBonus(actor.system, b) > saveBonus(actor.system, a) ? b : a));
+  const concentration = ability === "con" && !action?.id && typeof actor.rollConcentration === "function" && concentrationSave(actor, action?.name);
+  let rolls = null;
+  try {
+    rolls = concentration ? await actor.rollConcentration({ target }, { configure: false }, cardFor(token, secret))
+      : await actor.rollSavingThrow({ ability, target }, { configure: false }, cardFor(token, secret));
+  } catch ( err ) {
+    console.error(`fast-fighting-dnd5e | rolling a save`, err);
+    return null;
+  }
+  return graded(rolls, target, "save");
+}
+
+/**
+ * A check rolled with dnd5e's own skill or ability check (core API 19 rollCheck: every check in a turn FastFighting
+ * plays), its card in the chat, against `dc`: no dialog, for the GMs only when `secret`; made with what checkOf says
+ * (Hide's Stealth, Insight, a pitch's Persuasion, Intimidation or Deception, a theft's Sleight of Hand, first aid's
+ * Medicine, an escape's Athletics or Acrobatics). None it can't tell (null: the engine's own dice); none that needs a
+ * GM's say. {degree, natural, total} (degreeOfSuccess), or null.
+ */
+export async function rollDnd5eCheck(token, { purpose = null, skill = null, dc, action = null, secret = false } = {}) {
+  const actor = token?.actor;
+  const target = dcOf(dc);
+  const check = actor && Number.isFinite(target) ? checkOf(actor, { purpose, skill, action }) : null;
+  const roll = check?.skill ? "rollSkill" : "rollAbilityCheck";
+  if ( !check || typeof actor[roll] !== "function" ) return null;
+  let rolls = null;
+  try {
+    rolls = await actor[roll]({ ...check, target }, { configure: false }, cardFor(token, secret));
+  } catch ( err ) {
+    console.error(`fast-fighting-dnd5e | rolling a check`, err);
+    return null;
+  }
+  return graded(rolls, target, "check");
+}
+
 export class Dnd5eAdapter extends SystemAdapter {
   static systemId = "dnd5e";
 
@@ -716,10 +833,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     if ( !Object.keys(speeds).length ) speeds.walk = 30;
 
     const defenses = { ac: sys.attributes?.ac?.value ?? 10 };
-    for ( const a of ABILITIES ) {
-      const s = sys.abilities?.[a]?.save;
-      defenses[a] = typeof s === "number" ? s : (s?.value ?? sys.abilities?.[a]?.mod ?? 0);
-    }
+    for ( const a of ABILITIES ) defenses[a] = saveBonus(sys, a);
 
     const hits = { riders: [], pools: {}, names: {} };
     const actions = await this.#actions(actor, level, features, hits);
@@ -2469,6 +2583,16 @@ export class Dnd5eAdapter extends SystemAdapter {
   /** API 19: a strike rolled with dnd5e's own attack and damage rolls, at its target (rollDnd5eStrike). */
   async rollStrike(token, options = {}) {
     return rollDnd5eStrike(token, options);
+  }
+
+  /** API 19: a save rolled with dnd5e's own saving throw, or its concentration save (rollDnd5eSave). */
+  async rollSave(token, options = {}) {
+    return rollDnd5eSave(token, options);
+  }
+
+  /** API 19: a check rolled with dnd5e's own skill or ability check (rollDnd5eCheck). */
+  async rollCheck(token, options = {}) {
+    return rollDnd5eCheck(token, options);
   }
 
   /**
