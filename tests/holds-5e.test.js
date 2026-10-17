@@ -108,15 +108,15 @@ describe("the adapter's specs", () => {
 });
 
 describe("free hands", () => {
-  test("a weapon one (two-handed two); a bite none, claws one; an unarmed strike none; a spell one with S or M, else none", async () => {
+  test("a weapon one (two-handed two); a bite none, claws none (a creature's own body), a fist one; an unarmed strike none; a spell one with S or M, else none", async () => {
     const items = [
-      weapon("scimitar"), weapon("greataxe", { props: ["hvy", "two"] }), weapon("bite", { type: "natural" }), weapon("claws", { type: "natural" }),
+      weapon("scimitar"), weapon("greataxe", { props: ["hvy", "two"] }), weapon("bite", { type: "natural" }), weapon("claws", { type: "natural" }), weapon("fist", { type: "natural" }),
       weapon("unarmed-strike", { type: "simpleM" }),
       spell("vicious-mockery", ["vocal"]), spell("fire-bolt", ["vocal", "somatic"]), spell("produce-flame", ["vocal", "material"])
     ];
     const actions = (await specOf(actorOf({ items }))).actions;
     const hands = id => actions.find(a => a.itemId === id).hands;
-    expect(["scimitar", "greataxe", "bite", "claws", "unarmed-strike", "vicious-mockery", "fire-bolt", "produce-flame"].map(hands)).toEqual([1, 2, 0, 1, 0, 0, 1, 1]);
+    expect(["scimitar", "greataxe", "bite", "claws", "fist", "unarmed-strike", "vicious-mockery", "fire-bolt", "produce-flame"].map(hands)).toEqual([1, 2, 0, 0, 1, 0, 0, 1, 1]);
     // (What anyone can do needs none, but a grapple takes a free hand.)
     const named = id => actions.find(a => a.id === `actor.${id}`).hands;
     expect(["dodge", "shove", "grapple", "help"].map(named)).toEqual([0, 0, 1, 0]);
@@ -125,11 +125,11 @@ describe("free hands", () => {
   });
 
   test("a Multiattack needs what its most demanding strike does", async () => {
-    const multi = item("feat", "multiattack", "Multiattack", { description: { value: "<p>The bear makes two attacks: one with its bite and one with its claws.</p>" } });
+    const multi = item("feat", "multiattack", "Multiattack", { description: { value: "<p>The ogre makes two attacks: one with its bite and one with its fist.</p>" } });
     const bite = weapon("bite", { type: "natural" });
-    const claws = weapon("claws", { type: "natural" });
+    const claws = weapon("fist", { type: "natural" });
     Object.assign(bite, { name: "Bite" });
-    Object.assign(claws, { name: "Claws" });
+    Object.assign(claws, { name: "Fist" });
     const actions = (await specOf(actorOf({ creature: "beast", items: [bite, claws, multi] }))).actions;
     const ma = actions.find(a => a.id === "actor.multiattack");
     expect(ma.sequence.map(s => s.hands)).toEqual([0, 1]);

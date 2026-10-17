@@ -39,8 +39,24 @@ function modernRules() {
   }
 }
 
-/** A natural weapon that is a hand (claws, a fist, pincers), by identifier: it needs that hand free. */
-const HAND_LIKE = /(?:^|-)(?:claws?|fists?|pincers?|hands?)(?:-|$)/;
+/**
+ * A natural weapon that is a hand (a fist), by identifier: it needs that hand free. Claws, talons and pincers are a
+ * creature's own body, as a bite is (the SRD says nothing of hands for them): none.
+ */
+const HAND_LIKE = /(?:^|-)(?:fists?|hands?)(?:-|$)/;
+
+/**
+ * What nobody FastFighting plays ever uses, by the item's identifier and the activity's (its name where it has none):
+ * breaking a Staff of the Magi for its Retributive Strike, which destroys the staff.
+ */
+const NEVER = Object.freeze({ "staff-of-the-magi": ["retributive-strike", "retributive strike"] });
+const neverUsed = (item, activity) => {
+  const never = NEVER[String(item?.identifier ?? item?.system?.identifier ?? "")];
+  if ( !never ) return false;
+  const id = String(activity?.identifier ?? "").toLowerCase();
+  const name = String(activity?.name ?? "").toLowerCase().trim();
+  return never.includes(id) || never.includes(name);
+};
 
 /** What a legendary action costs from the pool: its activation's value, else "(Costs 2 Actions)" in its name. */
 export function legendaryCost(activity, item) {
@@ -829,6 +845,7 @@ export class Dnd5eAdapter extends SystemAdapter {
           atAdvantage.push(activity);
           continue;
         }
+        if ( neverUsed(item, activity) ) continue;
         const action = this.#fromActivity(actor, item, activity);
         if ( action?.riderFor ) riders.push(action.rider);
         else if ( action ) mine.push(action);
@@ -944,8 +961,8 @@ export class Dnd5eAdapter extends SystemAdapter {
 
   /**
    * How many free hands an action needs (one that's tied up can still use those that need none): a weapon one, two if
-   * it's two-handed; a natural weapon none (a bite, horns, a tail, a slam of its body) unless it's a hand itself (claws,
-   * a fist, pincers: HAND_LIKE); an unarmed strike none (a kick or a head-butt will do, as the SRD has it); a spell one
+   * it's two-handed; a natural weapon none (a bite, horns, a tail, claws, pincers, a slam of its body) unless it's a hand
+   * itself (a fist: HAND_LIKE); an unarmed strike none (a kick or a head-butt will do, as the SRD has it); a spell one
    * if it has a somatic or a material component (the hand that makes the gestures, or reaches the components or holds
    * the focus, may be the same), else none; anything else that's held and used (a potion, a net, a wand) one; a
    * feature, or what anyone can do (Dodge, Help, Hide, Shove), none.

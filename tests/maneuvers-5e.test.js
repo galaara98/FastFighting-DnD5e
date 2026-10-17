@@ -544,6 +544,16 @@ describe("a save beside an attack on the same item", () => {
     expect(actions.find(a => a.kind === "control").onSave[1]).toMatchObject({ conditions: { frightened: 1 } });
   });
 
+  test("what nobody FastFighting plays would ever do: break a Staff of the Magi for its Retributive Strike (the same on any other staff, played)", async () => {
+    const staff = id => attackAndSave({ identifier: id, attack: attackAct({ damage: "1d6", type: "bludgeoning", melee: true }),
+      save: { ...saveAct({ id: "retribution", ability: "dex", dc: 17, damage: "8d6", type: "force" }), name: "Retributive Strike", target: { template: { type: "radius", size: 30, units: "ft" } } },
+      words: "<p>You can use an action to break the staff over your knee or against a solid surface, performing a retributive strike.</p>" });
+    const magi = await actionsFrom([staff("staff-of-the-magi")], "staff-of-the-magi");
+    expect(magi.map(a => a.kind)).toEqual(["strike"]);
+    const other = await actionsFrom([staff("quarterstaff")], "quarterstaff");
+    expect(other.map(a => a.kind).sort()).toEqual(["save", "strike"]);
+  });
+
   test("an Unarmed Strike's Grapple or Shove (the SRD 5.2's, made instead of damage) is no rider on its hits: the core's grapple and shove stand for it", async () => {
     const unarmed = attackAndSave({ identifier: "unarmed-strike",
       attack: { ...attackAct({ damage: "1 + 3", type: "bludgeoning", melee: true }), attack: { type: { value: "melee", classification: "unarmed" } } },
