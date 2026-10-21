@@ -224,7 +224,7 @@ const KIND_NAMES = { reaction: "Reactions", saveVs: "Situational saves", aura: "
  */
 export async function scan(o) {
   const m = await helperModules(o.core);
-  const ClassicLevel = createRequire(join(o.foundry, "package.json"))("classic-level").ClassicLevel;
+  const ClassicLevel = createRequire(resolve(o.foundry, "package.json"))("classic-level").ClassicLevel;
   const sources = [];
   const systemPacks = packsOf(o.dnd5e, "system.json");
   sources.push({ source: "srd51", label: "SRD 5.1 (2014)", free: true, packs: systemPacks.filter(p => !/24$/.test(p.name)) });
