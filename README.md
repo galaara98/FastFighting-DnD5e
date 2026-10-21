@@ -10,7 +10,7 @@ The core offers a large but fixed set of options: conditions, maneuvers, holds, 
 
 - **Foundry:** v14
 - **System:** dnd5e 4.0 or later (written against 6.0)
-- **Needs:** FastFighting Core 0.4.0 or later
+- **Needs:** FastFighting Core 0.6.0 or later
 
 ## Installation
 

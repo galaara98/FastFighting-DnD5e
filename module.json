@@ -2,7 +2,7 @@
   "id": "fast-fighting-dnd5e",
   "title": "FastFighting D&D 5e",
   "description": "Dungeons & Dragons Fifth Edition support for FastFighting Core: reads dnd5e creatures, weapons, spells and features, plays the 2014 or 2024 rules, and writes live battles onto dnd5e sheets.",
-  "version": "0.4.0",
+  "version": "0.6.0",
   "authors": [
     {
       "name": "galaara98",
@@ -29,7 +29,7 @@
         "type": "module",
         "manifest": "https://github.com/galaara98/FastFighting/releases/latest/download/module.json",
         "compatibility": {
-          "minimum": "0.4.0"
+          "minimum": "0.6.0"
         }
       }
     ]
@@ -46,7 +46,7 @@
   ],
   "url": "https://github.com/galaara98/FastFighting-DnD5e",
   "manifest": "https://github.com/galaara98/FastFighting-DnD5e/releases/latest/download/module.json",
-  "download": "https://github.com/galaara98/FastFighting-DnD5e/releases/download/v0.4.0/module.zip",
+  "download": "https://github.com/galaara98/FastFighting-DnD5e/releases/download/v0.6.0/module.zip",
   "bugs": "https://github.com/galaara98/FastFighting-DnD5e/issues",
   "readme": "https://github.com/galaara98/FastFighting-DnD5e/blob/main/README.md",
   "license": "LICENSE"
