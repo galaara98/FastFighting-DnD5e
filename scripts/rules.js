@@ -324,6 +324,17 @@ export const dnd5eRules = {
     u.deathSuccesses = u.spec.deathSaves?.success ?? 0;
   },
 
+  /**
+   * Death saves as the sheet has them now, in a live battle (the core's syncUnit, API 24: the adapter's readLiveState's
+   * `deathSaves`): a player may roll one at the table between FastFighting's turns.
+   */
+  syncUnit(u, state) {
+    const saves = state?.deathSaves;
+    if ( !saves ) return;
+    if ( Number.isFinite(saves.success) ) u.deathSuccesses = saves.success;
+    if ( Number.isFinite(saves.failure) ) u.dying = u.deathFailures = saves.failure;
+  },
+
   /** At 0 HP: unconscious and making death saves; instant death if the overflow reaches the creature's max HP. */
   onDropped(c, { crit = false, model = DOWNED_MODELS.SIMULATE, overflow = 0 } = {}) {
     if ( model === DOWNED_MODELS.DEAD || c.spec.diesAtZero || overflow >= c.maxHp ) {

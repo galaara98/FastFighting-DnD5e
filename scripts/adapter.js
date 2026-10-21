@@ -2898,6 +2898,67 @@ export class Dnd5eAdapter extends SystemAdapter {
     return applyDnd5eDamageCard(message, token, options);
   }
 
+  /**
+   * A live battle's read of the sheet, between turns: its hit points, statuses and conditions, its death saves (the
+   * rules' syncUnit takes them up), and what's left of each of the pools its spec began with (#resourceNow), with no
+   * spec read again. One whose spec isn't at hand: the core's way (the spec read whole).
+   */
+  async readLiveState(tokenDoc, context = {}) {
+    const spec = context.unit?.spec;
+    const actor = tokenDoc?.actor;
+    if ( !spec || !actor?.system ) return super.readLiveState(tokenDoc, context);
+    const sys = actor.system;
+    const hp = sys.attributes?.hp ?? {};
+    const value = Number(hp.value) || 0;
+    const death = sys.attributes?.death ?? {};
+    const dead = !!actor.statuses?.has?.("dead") || (value <= 0 && !!spec.diesAtZero);
+    const resources = {};
+    for ( const key of Object.keys(spec.resources ?? {}) ) {
+      const now = this.#resourceNow(actor, key);
+      if ( Number.isFinite(now) ) resources[key] = now;
+    }
+    return {
+      hp: value, temp: Number(hp.temp) || 0, maxHp: Number(hp.max) || spec.hp?.max || 1, dying: Number(death.failure) || 0,
+      status: dead ? "dead" : value > 0 ? "standing" : "down", conditions: { ...this.#conditions(actor) }, resources,
+      // (At 0 HP, stable once it has three successes; its tallies for the rules.)
+      ...(value <= 0 ? { stable: (Number(death.success) || 0) >= 3 } : {}),
+      deathSaves: { success: Number(death.success) || 0, failure: Number(death.failure) || 0 }
+    };
+  }
+
+  /**
+   * What's left of one of its spec's pools, as its sheet has it now: a spell slot level's, its pact slots, its (Heroic)
+   * Inspiration, its Legendary Resistance, a feature's uses (its item by id, else by identifier), a consumable's (its
+   * quantity times its uses), its ammunition of a kind. Undefined for a pool the sheet doesn't say.
+   */
+  #resourceNow(actor, key) {
+    const sys = actor.system;
+    const left = uses => Math.max(0, (Number(uses?.max) || 0) - (Number(uses?.spent) || 0));
+    if ( key === "pact" ) return Number(sys.spells?.pact?.value) || 0;
+    if ( key === "fate" ) return sys.attributes?.inspiration ? 1 : 0;
+    if ( key === "legres" ) {
+      const legres = sys.resources?.legres ?? {};
+      return Math.max(0, Number(legres.value ?? ((Number(legres.max) || 0) - (Number(legres.spent) || 0))) || 0);
+    }
+    const [kind, rest] = [key.slice(0, key.indexOf(":")), key.slice(key.indexOf(":") + 1)];
+    if ( kind === "slots" ) return Number(sys.spells?.[`spell${rest}`]?.value) || 0;
+    if ( kind === "feature" ) {
+      const item = actor.items.get(rest) ?? actor.items.find(i => identOf(i) === rest);
+      return item?.system?.uses ? left(item.system.uses) : undefined;
+    }
+    if ( kind === "item" ) {
+      const item = actor.items.get(rest);
+      if ( !item ) return 0;
+      const max = Number(item.system.uses?.max) || 0;
+      return Math.max(0, Number(item.system.quantity ?? 1)) * Math.max(1, max ? left(item.system.uses) : 1);
+    }
+    if ( kind === "ammo" ) {
+      const stacks = actor.items.filter(i => i.type === "consumable" && i.system.type?.value === "ammo" && (rest === "any" || i.system.type?.subtype === rest));
+      return stacks.reduce((n, i) => n + Math.max(0, Number(i.system.quantity) || 0), 0);
+    }
+    return undefined;
+  }
+
   /** API 21: a card of FastFighting's the table settles itself after all: dnd5e's tray back on it (cards.js). */
   async leaveToTable(message) {
     return unmarkRolled(message);
