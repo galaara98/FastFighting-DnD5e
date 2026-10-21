@@ -47,6 +47,9 @@ FastFighting reads each item by what it does (its activities and effects), then 
 - Multiattack: an NPC makes every strike it names, read from 2014 and 2024 wording ("one with its bite and two with its claws"). Each choice is an option the simulation picks per turn.
 - Extra Attack (and Thirsting Blade) gives several weapon attacks with the Attack action; from two classes, it doesn't add up. Two light weapons, Martial Arts and Flurry of Blows give bonus-action strikes.
 - Characters fight with equipped weapons and cast cantrips and prepared spells (and pact, innate and at-will ones). Magic Missile's darts, Scorching Ray's rays and Eldritch Blast's beams count, more for a higher slot or level.
+- A feature's own words fill in what its data doesn't say: auras that make foes save (a ghast's Stench, a sea hag's Horrific Appearance: when they go off, the sense they need, immunity after a save), advantage on saves against some things (Magic Resistance, Fey Ancestry, Brave, Dwarven Resilience, Sure-Footed; and the sheet's own save roll modes), and reactions (below).
+- Resistances and immunities keep dnd5e's exceptions: a magical, adamantine or silvered blow gets through "nonmagical attacks that aren't ...", a spell's damage counts as magical. Adamantine armor turns a critical hit into a normal one.
+- A character's bows and crossbows shoot its arrows and bolts, counted by kind; a Loading weapon fires once an action, Extra Attack or not (unless a Crossbow Expert). A potion can be given to a friend beside it.
 - Summons (Spiritual Weapon, Conjure Animals ...) are the core's summons: the creatures dnd5e would call, with the caster's attack and DC where the spell says, and only what its players could call themselves. A spiritual weapon or a flaming sphere can't be attacked, and acts only on the caster's bonus action.
 
 ### The turn
@@ -89,7 +92,7 @@ Free extras ride on the attack itself: Sneak Attack (once a turn, with a finesse
 
 ### Reactions
 
-5e's reactions are the core's, one a round. Anyone with a melee weapon makes an opportunity attack on a foe leaving its reach; Disengage avoids it (a bonus action for Cunning Action and Nimble Escape). Shield, Uncanny Dodge, Hellish Rebuke, Counterspell, Parry, Riposte, Deflect Attacks, the Protection fighting style and any reaction spell that raises AC play too; a spell uses the cheapest slot that works.
+5e's reactions are the core's, one a round. Anyone with a melee weapon makes an opportunity attack on a foe leaving its reach; Disengage avoids it (a bonus action for Cunning Action and Nimble Escape). Shield, Uncanny Dodge, Hellish Rebuke, Counterspell, Parry, Riposte, Deflect Attacks, the Protection fighting style and any reaction spell that raises AC play too; a spell uses the cheapest slot that works. Any other feature's reaction is read from its words (2024's Trigger and Response, or "you can use your reaction to ..."): a bonus to AC (a creature's Parry), a strike back (Retaliation), a blow halved or reduced, damage dealt back.
 
 ### Resources
 
@@ -159,7 +162,7 @@ The Shield or defending answer says how readily a creature Dodges. Magic and spe
 
 ### Set up by itself
 
-When FastFighting first sets a character up by itself, 5e suggests playstyles from its class (a Rogue a Thief, a Paladin a Tank and a Martyr), species (an orc's Relentless Endurance), kind of creature (a fiend Cruel), alignment (neutral evil a Mercenary) and armor (a shield or heavy armor: a Tank). Keywords come from its appearance, personality traits, ideals and flaws, and a little from its biography, but not its bonds.
+When FastFighting first sets a character up by itself, 5e suggests playstyles from its class (a Rogue a Thief, a Paladin a Tank and a Martyr), species (an orc's Relentless Endurance), kind of creature (a fiend Cruel), alignment (neutral evil a Mercenary), armor (a shield or heavy armor: a Tank), features and ready spells (healing a Medic, Cunning Action a Kiter, Sneak Attack or Hex DPS, Bless or Bardic Inspiration an Enabler). Keywords come from its appearance, personality traits, ideals and flaws, and a little from its biography, but not its bonds.
 
 **Let this character decide** answers the tactics questions from 5e's data where it says something, and names what decided each: a Multiattack made only one way is the signature attack; a paladin protects its friends; a pack hunter runs when the pack is losing; a full caster saves its slots, while short-rest resources go freely; a true dragon wants tribute, ten gold for each challenge rating.
 
@@ -167,13 +170,15 @@ When FastFighting first sets a character up by itself, 5e suggests playstyles fr
 
 In a live battle, each turn goes onto the dnd5e sheets as it's played: HP, death saves and death; conditions as dnd5e's own (read back each turn, the GM's changes too); slots, Inspiration, Legendary Resistance, uses and consumables spent; and a spell's buff or debuff as the spell's own effect, for its rounds. Fleeing NPCs are hidden (unless the **Do it For Real Now: fled combatants** setting leaves them), the surrendered get an effect, and coins or items change hands. Summons appear the way dnd5e summons them. A player's turn is read from its dnd5e cards (attacks, damage, healing, and talking checks), and the GM confirms what FastFighting isn't sure of. A player's damage card at a creature FastFighting runs goes through dnd5e's own damage application (resistances, immunities, temporary hit points), applied at once or by the GM from the Battle Vantage. A reaction's strike, such as an opportunity attack, is rolled with dnd5e's own attack and damage rolls, a character's on its player's screen.
 
+The engine's own dice (a save it rolled, its damage, a death save) show as dnd5e's own cards. FastFighting's cards have no damage tray, Apply entries, Resist or Break Concentration: it applies and decides them itself, so nothing happens twice. A card naming who got a buff or debuff follows where no roll names the target. Death saves rolled at the table between FastFighting's turns are kept, and Rewind gives back the arrows dnd5e spent.
+
 ## Settings
 
 **Lore-Collector advantage** (1.25× to 3×, default 2.5×): how much likelier a Lore-Collector's rolls against a foe are to succeed through its next turn, after a successful Study. Study costs the turn and works a little over half the time, so the default is high. Above about 1.75×, only long-shot rolls gain much.
 
 ## Other languages
 
-In a language other than English, the settings recommend the system's translation module when it isn't on (Spanish: translate-dnd5e-sdr2-es). Babele-translated compendiums play as in English. Skills, conditions and coins go by the system's names, in English until the system is translated, to match the sheets. To translate this module, see **Translating** in the [core README](https://github.com/galaara98/FastFighting/blob/main/README.md).
+In a language other than English, the settings recommend the system's translation module when it isn't on (Spanish: translate-dnd5e-sdr2-es). Babele-translated compendiums play as in English; the few words read from translated names and sheets ("con ventaja", "no puede hablar") are in `reading/es.json`. Skills, conditions and coins go by the system's names, in English until the system is translated, to match the sheets. To translate this module, see **Translating** in the [core README](https://github.com/galaara98/FastFighting/blob/main/README.md).
 
 ## Not played, or played differently
 
@@ -187,6 +192,8 @@ In a language other than English, the settings recommend the system's translatio
 - A Death Burst that deals no damage (a dust mephit's blinding).
 - Summons that take longer than a bonus action (Find Familiar) or can't fight (Mage Hand), and more than 8 creatures from one casting.
 - An effect's changes beyond attack, damage, saves, AC, speed, temporary hit points, resistances, immunities and a weapon's magic bonus, unless its words say what they do.
+- A reaction whose words give a choice, a teleport, a reroll or a roll on a table; one only sometimes ("on a miss, ...").
+- An aura that goes off at the end of its bearer's turn, or only for some kinds of creature ("any humanoid").
 - Loot and corpses: this module leaves no loot piles and takes no corpses away, so the core's loot and corpse settings don't show in a D&D 5e world.
 
 ## License
