@@ -16,8 +16,8 @@ import { t } from "./words.js";
 /** This module's id: its flags' scope. */
 export const HELPER_ID = "fast-fighting-dnd5e";
 
-/** The mark, as a card's message data carries it (put on as the card is made). */
-export const ROLLED_FLAGS = Object.freeze({ [HELPER_ID]: Object.freeze({ rolled: Object.freeze({ times: 1 }) }) });
+/** The mark, as a card's message data carries it as the card is made: a fresh one each time (Foundry cleans it in place). */
+export const rolledFlags = () => ({ [HELPER_ID]: { rolled: { times: 1 } } });
 
 /** dnd5e's trays, which apply a card's damage or effects. */
 const TRAYS = "damage-application, effect-application";
@@ -40,15 +40,18 @@ export const rolledHere = message => !!message?.flags?.[HELPER_ID]?.rolled && !!
 export const handled = message => rolledHere(message) || damageApplied(message);
 
 /**
- * A card of FastFighting's, rendered (renderChatMessageHTML): its trays emptied, a line saying FastFighting does it; on
- * a save card of its own, no Resist or Break Concentration.
+ * A card of FastFighting's, rendered (renderChatMessageHTML, and dnd5e.renderChatMessage once dnd5e has added its
+ * trays): its trays gone, a line saying FastFighting does it in the first one's place (the trays themselves, not their
+ * insides: dnd5e's fill themselves in once they're on the page); on a save card of its own, no Resist or Break
+ * Concentration.
  */
 export function hideApply(message, html) {
   if ( !handled(message) ) return;
   const trays = [...(html?.querySelectorAll?.(TRAYS) ?? [])];
   trays.forEach((tray, i) => {
     const note = i === 0 && globalThis.document ? Object.assign(globalThis.document.createElement("span"), { textContent: t("DamageHandled") }) : null;
-    tray.replaceChildren(...(note ? [note] : []));
+    if ( note ) tray.replaceWith(note);
+    else tray.remove();
   });
   if ( rolledHere(message) ) for ( const button of html?.querySelectorAll?.(SAVE_BUTTONS) ?? [] ) button.remove();
 }

@@ -50,7 +50,9 @@ Hooks.once("fastFighting.init", api => {
   // The words dnd5e's own text is read by, where its data says nothing (reading.js).
   loadReading();
   // The cards FastFighting rolls and applies itself: no tray or Apply on them, which would apply them again (cards.js).
+  // (dnd5e adds its trays after renderChatMessageHTML, then says so: dnd5e.renderChatMessage.)
   Hooks.on("renderChatMessageHTML", hideApply);
+  Hooks.on("dnd5e.renderChatMessage", hideApply);
   Hooks.on("getChatMessageContextOptions", hideApplyMenu);
   api.adviseTranslation(MODULE_ID, game.system.title, KNOWN_TRANSLATIONS);
   // Words kept in English for now, while the system isn't translated (hardcoded-toEN.json).

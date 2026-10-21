@@ -13,7 +13,7 @@ import { rankLeaders } from "./leadership.js";
 import { commitDnd5eChanges, describeDnd5eOutcome, commitDnd5eConcession, applyDnd5eDamageCard } from "./commit.js";
 import { SHEET_STATUSES, sheetCarries, sheetConditions, sheetConditionChoices } from "./conditions.js";
 import { readDnd5eTurn, damageCardOf, damagesOf } from "./read-turn.js";
-import { ROLLED_FLAGS, unmarkRolled } from "./cards.js";
+import { rolledFlags, unmarkRolled } from "./cards.js";
 import { showDnd5eTableRoll } from "./table-cards.js";
 import { modsFromChanges, fromWords, effectLabel, durationRounds, helps, changeMode } from "./effects.js";
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
@@ -709,7 +709,7 @@ export async function rollDnd5eStrike(token, { action, target, advantage = 0, se
     // (FastFighting's own card: it applies it, so dnd5e's tray is gone from it. cards.js.)
     const own = message();
     rolled = await activity.rollDamage({ isCritical: degree === 3, ability, attackMode: attackMode ?? mode, ammunition: ammunition ? actor.items?.get?.(ammunition) : undefined },
-      { configure: false }, { ...own, data: { ...own.data, flags: { ...ROLLED_FLAGS } } });
+      { configure: false }, { ...own, data: { ...own.data, flags: rolledFlags() } });
   } catch ( err ) {
     console.error(`fast-fighting-dnd5e | rolling a reaction's damage`, err);
   }
@@ -785,7 +785,7 @@ const edgeOf = advantage => (Number(advantage) > 0 ? { advantage: true } : Numbe
 function cardFor(token, secret) {
   const speaker = globalThis.ChatMessage?.implementation?.getSpeaker?.({ token });
   // (FastFighting's own, marked: no tray or Resist on it, as it applies, lays and decides it all itself. cards.js.)
-  return { ...(secret ? { rollMode: "gm" } : {}), data: { ...(speaker ? { speaker: { ...speaker } } : {}), flags: { ...ROLLED_FLAGS } } };
+  return { ...(secret ? { rollMode: "gm" } : {}), data: { ...(speaker ? { speaker: { ...speaker } } : {}), flags: rolledFlags() } };
 }
 
 /** A save or a check as dnd5e rolled it (the kept d20, with advantage), graded by the rules: {degree, natural, total}, or null. */

@@ -6,17 +6,18 @@
  * battle applied itself (by the ids the core noted) loses its tray too. A card the table settles after all gets it back.
  */
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { hideApply, hideApplyMenu, unmarkRolled, rolledHere } from "../scripts/cards.js";
+import { hideApply, hideApplyMenu, unmarkRolled, rolledHere, rolledFlags } from "../scripts/cards.js";
 import { Dnd5eAdapter } from "../scripts/adapter.js";
 import { notedBy } from "../../FastFighting/scripts/foundry/applied-cards.js";
 
-/** An element as the DOM has one: its children, replaced; removed. */
+/** An element as the DOM has one: replaced by another, or removed. */
 const element = () => {
-  const el = { children: [{ button: "apply" }, { button: "half" }], removed: false };
-  el.replaceChildren = (...nodes) => { el.children = nodes; };
+  const el = { replacedBy: null, removed: false };
+  el.replaceWith = node => { el.replacedBy = node; };
   el.remove = () => { el.removed = true; };
   return el;
 };
+const untouched = el => !el.removed && el.replacedBy === null;
 
 /** A rendered card: its trays, and the buttons on it. */
 const rendered = ({ trays = [], buttons = [] } = {}) => ({
@@ -43,9 +44,9 @@ describe("a card FastFighting had dnd5e make", () => {
     const trays = [element(), element()];
     const buttons = [element(), element()];
     hideApply(mine(), rendered({ trays, buttons }));
-    expect(trays[0].children).toEqual([{ tag: "span", textContent: expect.any(String) }]);
-    expect(trays[0].children[0].textContent).not.toBe("");
-    expect(trays[1].children).toEqual([]);
+    expect(trays[0].replacedBy).toEqual({ tag: "span", textContent: expect.any(String) });
+    expect(trays[0].replacedBy.textContent).not.toBe("");
+    expect(trays[1].removed).toBe(true);
     expect(buttons.every(b => b.removed)).toBe(true);
   });
 
@@ -54,8 +55,8 @@ describe("a card FastFighting had dnd5e make", () => {
       const trays = [element()];
       const buttons = [element()];
       hideApply(card, rendered({ trays, buttons }));
-      expect(trays[0].children).toHaveLength(2);
-      expect(buttons[0].removed).toBe(false);
+      expect(untouched(trays[0])).toBe(true);
+      expect(untouched(buttons[0])).toBe(true);
     }
     expect(rolledHere(forged)).toBe(false);
   });
@@ -65,8 +66,8 @@ describe("a card FastFighting had dnd5e make", () => {
     const trays = [element()];
     const buttons = [element()];
     hideApply(theirs, rendered({ trays, buttons }));
-    expect(trays[0].children).toHaveLength(1);
-    expect(buttons[0].removed).toBe(false);
+    expect(trays[0].replacedBy).not.toBeNull();
+    expect(untouched(buttons[0])).toBe(true);
   });
 
   test("the chat's menu: dnd5e's Apply entries (damage, healing, double, half ...) not on FastFighting's cards; the rest as they were", () => {
@@ -78,6 +79,13 @@ describe("a card FastFighting had dnd5e make", () => {
     const li = id => ({ dataset: { messageId: id } });
     expect([apply.visible(li("m1")), half.visible(li("m1")), apply.visible(li("m2")), apply.visible(li("m3")), apply.visible(li("gone"))]).toEqual([false, false, true, true, true]);
     expect(select.visible).toBe(visible);
+  });
+
+  test("the mark a new card carries: a fresh object each time, nothing frozen (Foundry cleans a message's flags in place)", () => {
+    const [a, b] = [rolledFlags(), rolledFlags()];
+    expect(a).toEqual({ "fast-fighting-dnd5e": { rolled: { times: 1 } } });
+    expect(a["fast-fighting-dnd5e"]).not.toBe(b["fast-fighting-dnd5e"]);
+    expect(Object.isFrozen(a["fast-fighting-dnd5e"].rolled)).toBe(false);
   });
 
   test("left to the table after all (leaveToTable): its mark off, its tray back; a player's card untouched", async () => {

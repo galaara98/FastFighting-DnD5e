@@ -15,7 +15,7 @@
  * The pure parts (cardKind, damageRollData, d20RollData) need no Foundry.
  */
 import { rolledParts, rollJson } from "./core.js";
-import { ROLLED_FLAGS } from "./cards.js";
+import { rolledFlags } from "./cards.js";
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 
@@ -141,7 +141,7 @@ export async function showDnd5eTableRoll(roll, { token = null, target = null, au
     flavor, rolls, sound: globalThis.CONFIG?.sounds?.dice,
     whisper: gm ? gmIds() : [],
     system: { ...kind.system, ...(found?.activity?.uuid ? { activity: { uuid: found.activity.uuid } } : {}), ...(targets.length ? { targets } : {}) },
-    flags: { ...flags, ...ROLLED_FLAGS }
+    flags: { ...flags, ...rolledFlags() }
   });
   return message?.id ? [message.id] : null;
 }
