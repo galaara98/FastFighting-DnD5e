@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { replay, runBatchSync } from "../../FastFighting/scripts/engine/simulator.js";
 import { parseFormula } from "../scripts/core.js";
 import { dnd5eRules } from "../scripts/rules.js";
-import { bonusOf, modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "../scripts/effects.js";
+import { bonusOf, modsFromChanges, modeledChange, changeMode, fromWords, effectLabel, durationRounds, helps } from "../scripts/effects.js";
 import { text } from "./foundry-i18n.js";
 
 let n = 0;
@@ -39,7 +39,7 @@ describe("reading 5e effects", () => {
     expect(modsFromChanges([...attack("-1d4"), change("system.bonuses.abilities.save", "-1d4")]).mods).toEqual({ attackDie: -4, saveDie: -4 });
     expect(modsFromChanges([change("system.attributes.ac.bonus", "2")]).mods).toEqual({ ac: 2 });
     expect(modsFromChanges([change("system.attributes.ac.bonus", "-2"), change("system.attributes.movement.multiplier", "0.5", 1), change("system.abilities.dex.bonuses.save", "-2")]).mods)
-      .toEqual({ ac: -2, speed: -15 });
+      .toEqual({ ac: -2, speed: -15, bySave: { dex: -2 } });
     expect(modsFromChanges([change("system.attributes.movement.multiplier", "2", 1), change("system.attributes.ac.bonus", "2")]).mods).toEqual({ speed: 30, ac: 2 });
     expect(modsFromChanges([change("system.bonuses.mwak.damage", "1d4[radiant]")]).mods).toEqual({ damage: 3 });
     expect(modsFromChanges([change("system.attributes.hp.tempmax", "5")])).toEqual({ mods: {}, tempHp: 5, iwr: null });
@@ -53,6 +53,22 @@ describe("reading 5e effects", () => {
     expect(modsFromChanges([change("system.attributes.movement.bonus", "10")]).mods).toEqual({ speed: 10 }); // the 2014 SRD's Longstrider
     // What the engine doesn't play out is left out.
     expect(modsFromChanges([change("system.traits.ci.value", "frightened"), change("system.attributes.ac.calc", "mage", 5)]).mods).toEqual({});
+  });
+
+  test("one save's, one skill's, every check's (Slow's Dexterity saves; a bonus to Perception, the core's \"perception\"; Guidance-like dice)", () => {
+    expect(modsFromChanges([change("system.abilities.wis.bonuses.save", "2"), change("system.abilities.wis.bonuses.save", "1d4")]).mods).toEqual({ bySave: { wis: 5 } });
+    expect(modsFromChanges([change("system.skills.prc.bonuses.check", "5"), change("system.skills.ste.bonuses.check", "-2")]).mods).toEqual({ byCheck: { perception: 5, ste: -2 } });
+    expect(modsFromChanges([change("system.bonuses.abilities.check", "1d4")]).mods).toEqual({ checkDie: 4 });
+    expect(modeledChange(change("system.skills.prc.bonuses.check", "5"))).toBe(true);
+  });
+
+  test("v14's change types read as the older modes, without touching the deprecated mode", () => {
+    const v14 = { key: "system.attributes.ac.bonus", type: "add", value: "2", get mode() { throw new Error("deprecated"); } };
+    expect(changeMode(v14)).toBe(2);
+    expect(changeMode({ type: "multiply" })).toBe(1);
+    expect(changeMode({ mode: 5 })).toBe(5);
+    expect(modsFromChanges([v14]).mods).toEqual({ ac: 2 });
+    expect(modeledChange(v14)).toBe(true);
   });
 
   test("the words say what the changes don't", () => {

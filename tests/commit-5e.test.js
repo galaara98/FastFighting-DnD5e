@@ -70,6 +70,14 @@ describe("a spell's effects in a live turn", () => {
     expect(whole.statuses).toEqual(["dead", "frightened"]);
     expect(whole.changes).toHaveLength(3);
     expect(whole.flags.dae).toBeTruthy();
+    // (v14 keeps them in system.changes, each with a type: filtered there, and none added at the top.)
+    players.push("p1");
+    const v14 = effect.changes.map(({ mode, ...c }) => ({ ...c, type: { 0: "custom", 2: "add", 5: "override" }[mode] }));
+    Object.assign(effect, { changes: undefined, system: { changes: v14 } });
+    delete effect.changes;
+    const later = await lay();
+    expect(later.system.changes).toEqual([{ key: "system.bonuses.abilities.save", type: "add", value: "-1d4" }]);
+    expect(later.changes).toBeUndefined();
   });
 
   test("not an item, nothing laid; ended, the one laid for it comes off and the record can put it back", async () => {

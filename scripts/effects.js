@@ -19,6 +19,21 @@ const DAMAGE_BONUS = /^system\.(?:bonuses\.(?:mwak|rwak|msak|rsak)\.damage|rolls
 const SPEED_BONUS = /^system\.attributes\.movement\.(?:walk|all|bonus|speed)$/;
 const UPGRADE = 4;
 const OVERRIDE = 5;
+/** A bonus to one ability's saves; to one skill's checks; to every ability check (or skill check). */
+const SAVE_BONUS = /^system\.abilities\.(str|dex|con|int|wis|cha)\.bonuses\.save$/;
+const SKILL_BONUS = /^system\.skills\.([a-z]+)\.bonuses\.check$/;
+const CHECK_BONUS = /^system\.bonuses\.abilities\.(?:check|skill)$/;
+/** dnd5e's Perception is the core's "perception" (a check's skill, byCheck); any other skill, its own key. */
+const checkKey = skill => (skill === "prc" ? "perception" : skill);
+
+/** v14's change types, as the older numeric modes. */
+const TYPE_MODES = Object.freeze({ custom: 0, multiply: 1, add: 2, downgrade: 3, upgrade: 4, override: 5 });
+
+/** A change's mode: its type (v14: "add", "multiply" ...) as the numeric mode, else its mode (v13 and older). */
+export function changeMode(c) {
+  if ( typeof c?.type === "string" ) return TYPE_MODES[c.type] ?? NaN;
+  return Number(c?.mode);
+}
 
 /** "1d4", "-1d4", "+2", "- 1d8", "1d4[radiant]": a lone die ({die: 4}, {die: -4}) or a number (dice as their average). */
 export function bonusOf(raw) {
@@ -40,10 +55,11 @@ const average = b => (b?.flat ?? (b?.die ? (Math.sign(b.die) * (Math.abs(b.die) 
 /** Is it a change the engine reads (modsFromChanges)? Any other plays as nothing. */
 export function modeledChange(c) {
   const key = String(c?.key ?? "");
-  const mode = Number(c?.mode);
+  const mode = changeMode(c);
   if ( key === "system.magicalBonus" ) return [ADD, UPGRADE, OVERRIDE].includes(mode);
   if ( mode === MULTIPLY ) return key === "system.attributes.movement.multiplier";
   return mode === ADD && (ATTACK_BONUS.test(key) || DAMAGE_BONUS.test(key) || SPEED_BONUS.test(key) || /^system\.attributes\.hp\.(?:tempmax|temp)$/.test(key)
+    || SAVE_BONUS.test(key) || SKILL_BONUS.test(key) || CHECK_BONUS.test(key)
     || ["system.bonuses.abilities.save", "system.attributes.ac.bonus", "system.traits.dr.value", "system.traits.di.value"].includes(key));
 }
 
@@ -56,11 +72,19 @@ export function modsFromChanges(changes) {
     if ( b.die && dieKey ) mods[dieKey] = b.die;
     else if ( average(b) ) mods[flatKey] = Math.round(average(b));
   };
+  // (One save's or one check's: the core's bySave and byCheck, a die as its average.)
+  const one = (group, k, b) => {
+    const v = Math.round(average(b));
+    if ( v ) (mods[group] ??= {})[k] = (mods[group][k] ?? 0) + v;
+  };
   for ( const c of changes ?? [] ) {
     const key = String(c?.key ?? "");
-    const mode = Number(c?.mode);
+    const mode = changeMode(c);
     if ( mode === ADD && ATTACK_BONUS.test(key) ) put("attack", "attackDie", bonusOf(c.value));
     else if ( mode === ADD && key === "system.bonuses.abilities.save" ) put("saves", "saveDie", bonusOf(c.value));
+    else if ( mode === ADD && SAVE_BONUS.test(key) ) one("bySave", SAVE_BONUS.exec(key)[1], bonusOf(c.value));
+    else if ( mode === ADD && SKILL_BONUS.test(key) ) one("byCheck", checkKey(SKILL_BONUS.exec(key)[1]), bonusOf(c.value));
+    else if ( mode === ADD && CHECK_BONUS.test(key) ) put("checks", "checkDie", bonusOf(c.value));
     else if ( mode === ADD && DAMAGE_BONUS.test(key) ) put("damage", null, bonusOf(c.value));
     else if ( mode === ADD && key === "system.attributes.ac.bonus" ) put("ac", null, bonusOf(c.value));
     else if ( mode === ADD && SPEED_BONUS.test(key) ) put("speed", null, bonusOf(c.value));

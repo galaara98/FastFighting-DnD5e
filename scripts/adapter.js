@@ -13,7 +13,7 @@ import { rankLeaders } from "./leadership.js";
 import { commitDnd5eChanges, describeDnd5eOutcome, commitDnd5eConcession, applyDnd5eDamageCard } from "./commit.js";
 import { SHEET_STATUSES, sheetCarries, sheetConditions, sheetConditionChoices } from "./conditions.js";
 import { readDnd5eTurn, damageCardOf, damagesOf } from "./read-turn.js";
-import { modsFromChanges, fromWords, effectLabel, durationRounds, helps } from "./effects.js";
+import { modsFromChanges, fromWords, effectLabel, durationRounds, helps, changeMode } from "./effects.js";
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 import { edgeActions, studyCheck } from "./edges.js";
 import { loreBoost } from "./lore.js";
@@ -2204,7 +2204,7 @@ export class Dnd5eAdapter extends SystemAdapter {
         try {
           if ( /@/.test(String(value)) ) value = Roll.replaceFormulaData(String(value), data, { missing: "0" });
         } catch ( err ) { /* left as it is */ }
-        changes.push({ key: c.key, mode: c.mode, value });
+        changes.push({ key: c.key, mode: changeMode(c), value });
       }
       const d = effect.duration ?? {};
       const byUnits = finite(d.value) ? ({ rounds: 1, turns: 1, seconds: 1 / 6, minutes: 10, hours: 600 }[d.units] ?? 0) * finite(d.value) : 0;

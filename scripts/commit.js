@@ -187,7 +187,10 @@ const PLAYED_STATUSES = new Set(Object.values(WRITES));
  */
 function asPlayed(data) {
   data.statuses = (data.statuses ?? []).filter(s => PLAYED_STATUSES.has(s));
-  data.changes = (data.changes ?? []).filter(c => modeledChange(c) && !/^macro\./i.test(String(c?.key ?? "")));
+  // (Its changes where they are: v14's system.changes, an older one's changes.)
+  const played = list => list.filter(c => modeledChange(c) && !/^macro\./i.test(String(c?.key ?? "")));
+  if ( Array.isArray(data.system?.changes) ) data.system.changes = played(data.system.changes);
+  if ( Array.isArray(data.changes) || !Array.isArray(data.system?.changes) ) data.changes = played(data.changes ?? []);
   data.flags = Object.fromEntries(Object.entries(data.flags ?? {}).filter(([scope]) => ["core", "dnd5e"].includes(scope)));
   return data;
 }

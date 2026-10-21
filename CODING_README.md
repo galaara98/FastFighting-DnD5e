@@ -169,7 +169,7 @@ Everything is read from the item's English (`englishDescription`: what Babele ke
 
 ### Effects
 
-`modsFromChanges` reads only these changes (`modeledChange` says which): mode ADD (2) on `system.bonuses.{mwak,rwak,msak,rsak}.attack` and `.damage`, `system.rolls.damage.*.bonus`, `system.bonuses.abilities.save`, `system.attributes.ac.bonus`, movement (`walk`, `all`, `bonus`, `speed`), `system.attributes.hp.temp`/`tempmax`, `system.traits.dr.value`, `system.traits.di.value`; MULTIPLY (1) on `system.attributes.movement.multiplier`; ADD, UPGRADE (4) or OVERRIDE (5) on `system.magicalBonus`. A lone die stays a die (`attackDie`, `saveDie`); anything else is its average. Statuses map through `EFFECT_CONDITIONS` (Restrained adds `immobilized`, Unconscious adds `incapacitated`, Charmed is `controlled`, Grappled becomes the core's grab); `STATUS_MODS` gives Invisible `{adv: 1, defAdv: -1}`. `durationRounds`: round and turn 1, minute 10, hour 600, day 14400.
+`modsFromChanges` reads only these changes (`modeledChange` says which; a change's mode is `changeMode`: v14's `type`, `"add"` and the rest, as the older numbers, its deprecated `mode` read only where it has no type): mode ADD (2) on `system.abilities.<a>.bonuses.save` (`bySave`), `system.skills.<s>.bonuses.check` (`byCheck`, `prc` as `perception`), `system.bonuses.abilities.check` and `.skill` (`checks`, `checkDie`), `system.bonuses.{mwak,rwak,msak,rsak}.attack` and `.damage`, `system.rolls.damage.*.bonus`, `system.bonuses.abilities.save`, `system.attributes.ac.bonus`, movement (`walk`, `all`, `bonus`, `speed`), `system.attributes.hp.temp`/`tempmax`, `system.traits.dr.value`, `system.traits.di.value`; MULTIPLY (1) on `system.attributes.movement.multiplier`; ADD, UPGRADE (4) or OVERRIDE (5) on `system.magicalBonus`. A lone die stays a die (`attackDie`, `saveDie`); anything else is its average. Statuses map through `EFFECT_CONDITIONS` (Restrained adds `immobilized`, Unconscious adds `incapacitated`, Charmed is `controlled`, Grappled becomes the core's grab); `STATUS_MODS` gives Invisible `{adv: 1, defAdv: -1}`. `durationRounds`: round and turn 1, minute 10, hour 600, day 14400.
 
 ## Rules
 
@@ -241,7 +241,7 @@ Item data is a player's to write, and the GM's client acts on it:
 - Summon formulas are filled with `Roll.replaceFormulaData` and worked out as arithmetic (`formulaNumber`, `plainDice`), never evaluated; `summonDice` refuses anything but dice and numbers.
 - `mayCall`: a summoning calls only a creature each of its players could open (a compendium) or owns (a world actor). The creature is a temporary copy, never saved.
 - `embedded`: a biography's `@Embed` is followed only for Foundry UUIDs (none with `://`), the first 5000 characters, and only pages its players could read.
-- `asPlayed`: an effect from a player's item is copied onto another sheet with only the statuses the engine plays, the changes it reads (no `macro.*`), and `core` and `dnd5e` flags.
+- `asPlayed`: an effect from a player's item is copied onto another sheet with only the statuses the engine plays, the changes it reads (no `macro.*`; v14's `system.changes` and an older `changes` alike), and `core` and `dnd5e` flags.
 
 ## Words
 
