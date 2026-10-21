@@ -1,0 +1,4 @@
+{
+  "$comment": "The dnd5e release FastFighting D&D 5e was last checked against (tests, a live run, the coverage scan): the weekly system watch (.github/workflows/system-watch.yml) opens an issue for any newer one. Raise it once a release is checked.",
+  "checked": "6.0.6"
+}

@@ -1,0 +1,150 @@
+name: System watch
+
+# Weekly: is there a dnd5e release newer than the one review/checked.json says this helper was last checked against?
+# Then run the coverage scan (tools/coverage.mjs) on that release's own packs, compare it with docs/coverage.md, and
+# open one issue for that version, to check the helper against it. For the coders only: nothing here is in the module.
+
+on:
+  schedule:
+    - cron: "41 6 * * 1"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "A dnd5e version to check (6.0.6); empty for the latest release"
+        required: false
+        default: ""
+      dry_run:
+        description: "Report only, no issue"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: system-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    # (The token only where gh runs: never in the step that reads dnd5e's packs. Checkouts keep no credentials.)
+    steps:
+      # The scan imports the helper's scripts and FastFighting Core's from a checkout beside this one, as the tests do.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          path: FastFighting-DnD5e
+          persist-credentials: false
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: galaara98/FastFighting
+          path: FastFighting
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Which dnd5e release
+        id: which
+        working-directory: FastFighting-DnD5e
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WANTED: ${{ inputs.version }}
+        run: |
+          CHECKED=$(node -p 'require("./review/checked.json").checked ?? ""')
+          if [ -n "$WANTED" ]; then
+            VERSION="${WANTED#release-}"
+          else
+            VERSION=$(gh api "repos/foundryvtt/dnd5e/releases?per_page=100" --jq '.[] | select(.draft | not) | select(.prerelease | not) | .tag_name' \
+              | sed -n 's/^release-\([0-9][0-9.]*\)$/\1/p' | sort -V | tail -1)
+          fi
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+(\.[0-9]+)+$'; then
+            echo "No dnd5e version to check: '$VERSION'" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          NEWER=no
+          if [ "$VERSION" != "$CHECKED" ] && [ "$(printf '%s\n%s\n' "$CHECKED" "$VERSION" | sort -V | tail -1)" = "$VERSION" ]; then NEWER=yes; fi
+          RUN=no
+          if [ -n "$WANTED" ] || [ "$NEWER" = yes ]; then RUN=yes; fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "checked=$CHECKED" >> "$GITHUB_OUTPUT"
+          echo "run=$RUN" >> "$GITHUB_OUTPUT"
+          echo "dnd5e $VERSION; last checked against ${CHECKED:-nothing}; newer: $NEWER; checking: $RUN" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Fetch it
+        if: steps.which.outputs.run == 'yes'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.which.outputs.version }}
+        run: |
+          mkdir dnd5e-release
+          gh release download "release-$VERSION" -R foundryvtt/dnd5e -p "dnd5e-release-$VERSION.zip" -D dnd5e-release
+          unzip -q "dnd5e-release/dnd5e-release-$VERSION.zip" -d dnd5e-release/system
+          rm "dnd5e-release/dnd5e-release-$VERSION.zip"
+          SYSTEM=$(dirname "$(find dnd5e-release/system -maxdepth 2 -name system.json | head -n 1)")
+          echo "SYSTEM=$GITHUB_WORKSPACE/$SYSTEM" >> "$GITHUB_ENV"
+          ls "$SYSTEM" "$SYSTEM/packs" | head -40
+
+      # (Foundry's own LevelDB binding, as the scan reads the packs with it on a desktop.)
+      - name: The packs' reader
+        if: steps.which.outputs.run == 'yes'
+        run: |
+          mkdir level && cd level
+          npm init -y > /dev/null
+          npm install --no-audit --no-fund classic-level@3.0.0
+
+      - name: Scan it
+        if: steps.which.outputs.run == 'yes'
+        working-directory: FastFighting-DnD5e
+        run: |
+          node tools/coverage.mjs --dnd5e "$SYSTEM" --foundry ../level --core ../FastFighting/scripts --books "" --out ../review-out/coverage.md
+          cat ../review-out/coverage.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Write the issue
+        if: steps.which.outputs.run == 'yes'
+        env:
+          VERSION: ${{ steps.which.outputs.version }}
+          CHECKED: ${{ steps.which.outputs.checked }}
+        run: |
+          {
+            echo "# dnd5e $VERSION: check FastFighting D&D 5e"
+            echo
+            echo "dnd5e [$VERSION](https://github.com/foundryvtt/dnd5e/releases/tag/release-$VERSION) is out; this helper was last checked against ${CHECKED:-nothing} (review/checked.json)."
+            echo
+            echo "- [ ] Read its release notes for anything the helper reads or writes: actors' and items' data, activities, chat messages, rolls, effects, statuses, damage application."
+            echo "- [ ] Run the tests, and a live battle in the 5e test world on it."
+            echo "- [ ] Compare the scan below with docs/coverage.md, and regenerate it (npm run coverage)."
+            echo "- [ ] Raise review/checked.json to $VERSION."
+            echo
+            echo "## The coverage scan on its packs (the SRD's)"
+            echo
+            sed -n '/^| Source/,/^$/p' review-out/coverage.md
+            echo
+            echo "As committed (docs/coverage.md):"
+            echo
+            sed -n '/^| Source/,/^$/p' FastFighting-DnD5e/docs/coverage.md | grep -v "^| Dungeons"
+          } > review-out/issue.md
+          cat review-out/issue.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the reports
+        if: steps.which.outputs.run == 'yes'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: review-dnd5e-${{ steps.which.outputs.version }}
+          path: review-out/
+
+      # One issue a version: none if one of that title is there already, open or closed.
+      - name: Open the issue
+        if: steps.which.outputs.run == 'yes' && !inputs.dry_run
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE=$(head -n 1 review-out/issue.md | sed 's/^# //')
+          if gh issue list -R "$GITHUB_REPOSITORY" --state all --limit 200 --search "\"$TITLE\" in:title" --json title --jq '.[].title' | grep -Fxq "$TITLE"; then
+            echo "Already there: $TITLE" | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            gh issue create -R "$GITHUB_REPOSITORY" --title "$TITLE" --body-file review-out/issue.md | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
