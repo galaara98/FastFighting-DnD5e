@@ -7,7 +7,7 @@ import {
   SystemAdapter, parseFormula, part, meanPart, simpleAffliction, localize, listItems, plainText as sheetText, englishName, englishDescription, formulaNumber, plainDice } from "./core.js";
 import { dnd5eRules, proficiency } from "./rules.js";
 import { deriveDnd5eTraits, isMindless, isAnimalistic, aptitudesOf } from "./traits.js";
-import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, speaksAtAll } from "./auto.js";
+import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, speaksAtAll, talksWithAnyone } from "./auto.js";
 import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
 import { commitDnd5eChanges, describeDnd5eOutcome, commitDnd5eConcession, applyDnd5eDamageCard } from "./commit.js";
@@ -21,7 +21,7 @@ import { escapeWords, grabEscapeDC } from "./holds.js";
 import { auraOf, isAuraActivity, PASSIVE_ACTIVATIONS } from "./auras.js";
 import { sheetSaveVs, saveVsFromWords, damageTags } from "./save-vs.js";
 import { reactionsFromWords } from "./reactions-read.js";
-import { reading } from "./reading.js";
+import { reading, currentReading, wordPattern } from "./reading.js";
 import { t, skillName, conditionName, statusName, coin, languageNames, inSentence, playersOf } from "./words.js";
 
 /*
@@ -1150,6 +1150,8 @@ export class Dnd5eAdapter extends SystemAdapter {
       throughLarger: hasFeature(features, "halfling-nimbleness", "halfling nimbleness") || !!actor.flags?.dnd5e?.halflingNimbleness || undefined,
       // What kind of creature (the planner groups neutrals by it): its type, narrowed by a subtype (humanoid (goblinoid)).
       creatureKind: [creature, String(sys.details?.type?.subtype ?? "").trim().toLowerCase()].filter(Boolean).join(":") || null,
+      // A swarm (dnd5e's swarm size): it shares a space with another creature, and another with it (rules.endIn).
+      swarm: !!sys.details?.type?.swarm || undefined,
       size: sizeOf(sys.traits?.size),
       social: {
         pitches: {
@@ -1167,6 +1169,8 @@ export class Dnd5eAdapter extends SystemAdapter {
         resolve: (defenses.wis ?? 0) - (proficiency(level) + 1),
         // (Those it speaks: its sheet's, and those its custom languages name; none if it can't speak.)
         languages: spokenLanguages(sys.traits?.languages, languageNames()),
+        // (Every language, or telepathy: it talks with anyone who has a language.)
+        anyLanguage: talksWithAnyone(sys.traits?.languages) || undefined,
         mindless: isMindless(sys.abilities?.int?.value, creature)
       },
       valuables: this.#valuables(actor),
@@ -1231,6 +1235,8 @@ export class Dnd5eAdapter extends SystemAdapter {
       const feet = inFeet(ranges[type], units);
       if ( feet > 0 ) out[sense] = Math.max(out[sense] ?? 0, feet);
     }
+    // Blind beyond its blindsight (a 2014 ooze's, a grimlock's: its senses' special words): no sight at all.
+    if ( out.feel > 0 && wordPattern(currentReading().senses?.blindBeyond)?.test(String(s.special ?? "")) ) out.sight = 0;
     return out;
   }
 
@@ -2083,6 +2089,8 @@ export class Dnd5eAdapter extends SystemAdapter {
     const fx = this.#effects(item, activity);
     const effectRef = fx?.refs?.length ? { uuid: item.uuid, ids: fx.refs } : undefined;
     const grappledOnly = inside.grappled || undefined;
+    // (The core's requirement too, so a grab before it counts as setting it up: behavior/requires.js.)
+    const requires = grappledOnly ? { holding: true } : undefined;
     // (What it takes in is beside it, or in its grip.)
     const reach = { melee: true, reach: 5 };
     if ( activity.type === "save" ) {
@@ -2093,15 +2101,15 @@ export class Dnd5eAdapter extends SystemAdapter {
       }
       if ( !base ) return null;
       const clear = inside.clear > 0 ? { move: { kind: "push", feet: inside.clear } } : null;
-      return { ...base, kind: "control", ...reach, save, damage: damage.length ? damage : undefined, onSave: [outcome, outcome, clear, clear], grappledOnly, effectRef };
+      return { ...base, kind: "control", ...reach, save, damage: damage.length ? damage : undefined, onSave: [outcome, outcome, clear, clear], grappledOnly, requires, effectRef };
     }
     if ( !base ) return null;
     const attack = inside.bite ? [...(inside.bite.system?.activities ?? [])].find(a => a.type === "attack") : null;
     const strike = attack ? this.#fromActivity(actor, inside.bite, attack) : null;
     if ( strike?.kind === "strike" ) {
-      return { ...base, kind: "control", melee: true, reach: strike.reach ?? 5, bonus: strike.bonus, damage: strike.damage, onHit: [null, null, outcome, outcome], grappledOnly, effectRef };
+      return { ...base, kind: "control", melee: true, reach: strike.reach ?? 5, bonus: strike.bonus, damage: strike.damage, onHit: [null, null, outcome, outcome], grappledOnly, requires, effectRef };
     }
-    return { ...base, kind: "control", ...reach, auto: true, outcome, grappledOnly, effectRef };
+    return { ...base, kind: "control", ...reach, auto: true, outcome, grappledOnly, requires, effectRef };
   }
 
   /**

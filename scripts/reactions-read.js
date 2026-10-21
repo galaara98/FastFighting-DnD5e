@@ -17,20 +17,12 @@
  * Pure: plain text in, the core's reactions out.
  */
 import { part } from "./core.js";
-import { currentReading } from "./reading.js";
+import { currentReading, wordPattern } from "./reading.js";
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 
 /** A reading word's pattern, compiled (null for none, or one that won't compile). */
-function patternOf(entry, flags = "i") {
-  const p = entry?.pattern;
-  if ( typeof p !== "string" || !p ) return null;
-  try {
-    return new RegExp(p, flags);
-  } catch ( err ) {
-    return null;
-  }
-}
+const patternOf = wordPattern;
 
 /** The text's sentences. */
 const sentences = text => String(text ?? "").replace(/\s+/g, " ").trim().split(/(?<=[.!?])\s+/).filter(Boolean);

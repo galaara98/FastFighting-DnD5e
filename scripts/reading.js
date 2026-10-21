@@ -57,6 +57,26 @@ export function loadReading() {
   return loading;
 }
 
+const COMPILED = new WeakMap();
+
+/**
+ * A reading word ({pattern}) as a regular expression, compiled once (case-insensitive unless told; a "g" one only for
+ * matchAll), or null for none, or one that won't compile.
+ */
+export function wordPattern(entry, flags = "i") {
+  if ( !isWord(entry) || !entry.pattern ) return null;
+  let byFlags = COMPILED.get(entry);
+  if ( !byFlags ) COMPILED.set(entry, byFlags = new Map());
+  if ( !byFlags.has(flags) ) {
+    let re = null;
+    try {
+      re = new RegExp(entry.pattern, flags);
+    } catch ( err ) { /* none */ }
+    byFlags.set(flags, re);
+  }
+  return byFlags.get(flags);
+}
+
 /** The reading words, once they're read. */
 export const reading = () => loadReading();
 

@@ -14,20 +14,12 @@
  * Actions carry "damage:<type>" for the damage they deal (damageTags), which a save against poison goes by.
  * Pure: plain values in, the core's saveVs entries out.
  */
-import { currentReading } from "./reading.js";
+import { currentReading, wordPattern } from "./reading.js";
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 
 /** A reading word's pattern, compiled (null for none, or one that won't compile). */
-function patternOf(entry, flags = "i") {
-  const p = entry?.pattern;
-  if ( typeof p !== "string" || !p ) return null;
-  try {
-    return new RegExp(p, flags);
-  } catch ( err ) {
-    return null;
-  }
-}
+const patternOf = wordPattern;
 
 /** Advantage (or disadvantage) on every save of an ability, from the sheet's save roll modes ({dex: 1}). */
 export function sheetSaveVs(modes = {}) {

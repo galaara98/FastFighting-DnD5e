@@ -399,6 +399,16 @@ export function spokenLanguages(languages, names = {}) {
   return [...out];
 }
 
+/**
+ * Does it talk with anyone who has a language at all (the core's social.anyLanguage)? Every language (dnd5e's "ALL";
+ * every standard and every exotic one, as 2024's angels have it), or telepathy.
+ */
+export function talksWithAnyone(languages) {
+  const value = languages?.value;
+  const keys = new Set([...(value instanceof Set ? value : Array.isArray(value) ? value : [])].map(k => String(k).toLowerCase()));
+  return keys.has("all") || (keys.has("standard") && keys.has("exotic")) || Number(languages?.communication?.telepathy?.value) > 0;
+}
+
 /** Does it speak at all (a language, a custom one, telepathy)? */
 export function speaksAtAll(languages, names = {}) {
   if ( Number(languages?.communication?.telepathy?.value) > 0 ) return true;

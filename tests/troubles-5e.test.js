@@ -370,7 +370,7 @@ describe("swallowed and engulfed: what the adapter reads", () => {
     const bite = itemOf("weapon", "bite", "Bite", { activities: [biteAct("3d10 + 6")], system: { type: { value: "natural" }, equipped: true } });
     const spec = await specOf(actorOf({ creature: "monstrosity", size: "huge", items: [bite, swallow2014()] }));
     const [swallow] = spec.actions.filter(a => a.itemId === "swallow");
-    expect(swallow).toMatchObject({ kind: "control", melee: true, bonus: 14, grappledOnly: true });
+    expect(swallow).toMatchObject({ kind: "control", melee: true, bonus: 14, grappledOnly: true, requires: { holding: true } });
     expect(swallow.damage).toEqual([expect.objectContaining({ dice: [{ n: 3, faces: 10 }], flat: 6, type: "piercing" })]);
     expect(swallow.onHit.slice(0, 2)).toEqual([null, null]);
     expect(swallow.onHit[2]).toMatchObject({ conditions: { swallowed: 1 }, rounds: 100, maxSize: 2 });
@@ -405,6 +405,7 @@ describe("swallowed and engulfed: what the adapter reads", () => {
     expect(engulf.onSave[1]).toMatchObject({ conditions: { engulfed: 1 }, maxSize: 3, escape: { dc: 12, others: "check", checks: [{ ability: "str", skill: null }] } });
     expect(engulf.onSave[2]).toEqual({ move: { kind: "push", feet: 5 } });
     expect(engulf.grappledOnly).toBeUndefined();
+    expect(engulf.requires).toBeUndefined();
     expect(spec.inside).toMatchObject({ key: "engulfed", harm: [expect.objectContaining({ dice: [{ n: 6, faces: 6 }] })], escape: true });
     expect(spec.inside.spit).toBeUndefined();
   });

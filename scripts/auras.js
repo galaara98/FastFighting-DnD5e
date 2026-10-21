@@ -12,18 +12,10 @@
  * A creature immune to what it lays the core judges as for any save (rules.isImmune).
  * Pure: plain values in, the core's aura out.
  */
-import { currentReading } from "./reading.js";
+import { currentReading, wordPattern } from "./reading.js";
 
-/** A reading word's pattern, compiled (null for none, or one that won't compile). */
-function patternOf(words, key) {
-  const p = words?.[key]?.pattern;
-  if ( typeof p !== "string" || !p ) return null;
-  try {
-    return new RegExp(p, "i");
-  } catch ( err ) {
-    return null;
-  }
-}
+/** One of the reading words' patterns, compiled (null for none, or one that won't compile). */
+const patternOf = (words, key) => wordPattern(words?.[key]);
 
 /** Activations that are no use of the creature's own: an aura goes off by itself (and a passive feature just is). */
 export const PASSIVE_ACTIVATIONS = new Set(["", "special", "none"]);

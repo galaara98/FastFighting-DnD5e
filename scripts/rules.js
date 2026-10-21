@@ -180,14 +180,19 @@ export const dnd5eRules = {
   /**
    * Getting past another creature on the way (the core's behavior/space.js), the SRD 5.2's: through an ally's space, an
    * Incapacitated creature's (or one down), a Tiny creature's, or one two sizes larger or smaller, as Difficult Terrain;
-   * round any other. A halfling's Nimbleness (spec.throughLarger) takes it through any creature larger than it too. A
-   * move never ends in another's space (the core's, by default).
+   * round any other. A halfling's Nimbleness (spec.throughLarger) takes it through any creature larger than it too, and
+   * a swarm (spec.swarm) through anyone, and anyone through it. A move never ends in another's space but a swarm's (or a
+   * swarm's in another's: endIn).
    */
   passThrough(run, u, o) {
     const size = c => (Number.isFinite(c.spec.size) ? c.spec.size : 2);
     const through = o.side === u.side || o.status !== STATUS.STANDING || !!o.conds?.incapacitated || size(o) === 0 || Math.abs(size(u) - size(o)) >= 2
-      || (!!u.spec.throughLarger && size(o) > size(u));
+      || (!!u.spec.throughLarger && size(o) > size(u)) || !!u.spec.swarm || !!o.spec.swarm;
     return through ? "difficult" : "around";
+  },
+  /** A swarm may end its move in another creature's space, and another in its (the SRD's swarms). */
+  endIn(run, u, o) {
+    return !!u?.spec?.swarm || !!o?.spec?.swarm;
   },
   /** Prone from it only if it hurt (the SRD: a fall that does no damage, nor a resisted one to nothing, leaves it standing). */
   fallProne(t, dealt) {

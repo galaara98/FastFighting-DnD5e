@@ -23,6 +23,9 @@
     "slashing": { "pattern": "^slashing$" },
     "thunder": { "pattern": "^thunder$" }
   },
+  "senses": {
+    "blindBeyond": { "pattern": "\\bblind beyond\\b" }
+  },
   "auras": {
     "turnStart": { "pattern": "\\b(?:starts?|starting|begins?) (?:its|their|your) turn\\b" },
     "enter": { "pattern": "\\b(?:enters?|entering) (?:the|that|its|an?)\\b[^.]*\\b(?:area|emanation|aura|range)\\b|\\bfor the first time on a turn\\b" },
