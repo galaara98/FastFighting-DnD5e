@@ -4,7 +4,8 @@
  * works.
  */
 import {
-  SystemAdapter, parseFormula, part, meanPart, simpleAffliction, localize, listItems, plainText as sheetText, englishName, englishDescription, formulaNumber, plainDice } from "./core.js";
+  SystemAdapter, parseFormula, part, meanPart, simpleAffliction, localize, listItems, plainText as sheetText, englishName, englishDescription, formulaNumber, plainDice,
+  undoRecord } from "./core.js";
 import { dnd5eRules, proficiency } from "./rules.js";
 import { deriveDnd5eTraits, isMindless, isAnimalistic, aptitudesOf } from "./traits.js";
 import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, speaksAtAll, talksWithAnyone } from "./auto.js";
@@ -694,14 +695,19 @@ export async function rollDnd5eStrike(token, { action, target, advantage = 0, se
   const speaker = globalThis.ChatMessage?.implementation?.getSpeaker?.({ token });
   const message = () => ({ ...(secret ? { rollMode: "gm" } : {}), data: { ...(speaker ? { speaker: { ...speaker } } : {}), system: { targets: targets.map(t => ({ ...t })) } } });
   const mode = attackModeFor(activity, action ?? {});
+  // (What dnd5e's attack may spend on the sheet, as it was: its ammunition, the weapon thrown. Rewind puts it back.)
+  const spendable = i => i.id === activity.item?.id || (i.type === "consumable" && i.system?.type?.value === "ammo");
+  const had = new Map(Array.from(actor.items ?? []).filter(i => spendable(i) && Number.isFinite(Number(i.system?.quantity)))
+    .map(i => [i.id, { quantity: Number(i.system.quantity), data: i.toObject?.() ?? null }]));
   const rolls = await activity.rollAttack({ target: ac, ...edgeOf(advantage), ...(mode ? { attackMode: mode } : {}) }, { configure: false }, message());
+  const records = spent(token, actor, had);
   const roll = rolls?.[0];
-  if ( !roll ) return null;
+  if ( !roll ) return records.records ? records : null;
   const total = Number(roll.total);
   const natural = Number(roll.d20?.total ?? roll.dice?.find?.(d => d.faces === 20)?.total ?? NaN);
   const degree = roll.isFumble ? 0 : roll.isCritical ? 3 : total >= ac ? 2 : 1;
   const attack = { degree, natural: Number.isFinite(natural) ? natural : null, total };
-  if ( degree < 2 ) return { attack, damage: null };
+  if ( degree < 2 ) return { attack, damage: null, ...records };
   // (As dnd5e's own Damage button rolls it after that attack: its ability, mode and ammunition, critical or not.)
   const { ability, attackMode, ammunition } = roll.options ?? {};
   let rolled = null;
@@ -715,7 +721,23 @@ export async function rollDnd5eStrike(token, { action, target, advantage = 0, se
   }
   const byType = {};
   for ( const d of rolled?.length ? damagesOf({ rolls: rolled }) : [] ) byType[d.type || "untyped"] = (byType[d.type || "untyped"] ?? 0) + d.value;
-  return { attack, damage: Object.keys(byType).length ? { byType } : null };
+  return { attack, damage: Object.keys(byType).length ? { byType } : null, ...records };
+}
+
+/**
+ * What an attack dnd5e rolled spent on the striker's sheet (its ammunition, a thrown weapon: their quantities, one
+ * used up deleted), as the core's undo records (API 20 `records`), for Rewind: {records: [record]}, or {} for nothing.
+ * @param {Map<string, {quantity, data}>} had   the items with a quantity before it, as they were
+ */
+function spent(token, actor, had) {
+  const undo = undoRecord(token, actor, { statusesBefore: false });
+  for ( const [id, was] of had ) {
+    const now = actor.items?.get?.(id);
+    if ( !now ) {
+      if ( was.data ) undo.deletedItems.push(was.data);
+    } else if ( Number(now.system?.quantity) !== was.quantity ) undo.itemUpdates.push({ id, update: { "system.quantity": was.quantity } });
+  }
+  return undo.itemUpdates.length || undo.deletedItems.length ? { records: [undo] } : {};
 }
 
 /** A save's bonus, as dnd5e prepares it (a number in older versions, {value} in newer ones). */

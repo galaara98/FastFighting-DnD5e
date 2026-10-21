@@ -293,3 +293,35 @@ describe("null, for the engine's own dice", () => {
     expect(axe.rollDamage).not.toHaveBeenCalled();
   });
 });
+
+describe("what dnd5e's attack spent on the sheet, for Rewind (records)", () => {
+  /** An orc with arrows, whose attack spends one as dnd5e's does; or uses up its last dagger, thrown. */
+  function archer() {
+    const { token, actor, axe, stab } = orc();
+    const arrows = { id: "arrows", type: "consumable", name: "Arrows", system: { quantity: 20, type: { value: "ammo", subtype: "arrow" } }, toObject() { return { _id: "arrows", name: "Arrows" }; } };
+    const pouch = { id: "pouch", type: "loot", name: "Pouch", system: { quantity: 3 } };
+    actor.items.push(arrows, pouch);
+    const dagger = actor.items.get("dagger");
+    dagger.system.quantity = 1;
+    dagger.toObject = () => ({ _id: "dagger", name: "dagger" });
+    return { token, actor, axe, stab, arrows, dagger };
+  }
+
+  test("an arrow shot: its quantity as it was, as an undo record of the striker's own; nothing else touched", async () => {
+    const { token, actor, axe, arrows } = archer();
+    axe.rollAttack.mockImplementation(async () => { arrows.system.quantity -= 1; return [d20(5, 8)]; });
+    const out = await rollDnd5eStrike(token, { action: { id: "orc.greataxe.atk" }, target: goblin() });
+    expect(out.attack.degree).toBe(1);
+    expect(out.records).toEqual([expect.objectContaining({ tokenUuid: "Scene.s.Token.tokA", actorUuid: "Actor.orc", itemUpdates: [{ id: "arrows", update: { "system.quantity": 20 } }], deletedItems: [] })]);
+  });
+
+  test("its last dagger thrown and used up: the dagger as it was, to put back; nothing spent, no records", async () => {
+    const { token, actor, stab } = archer();
+    stab.rollAttack.mockImplementation(async () => { actor.items.splice(actor.items.findIndex(i => i.id === "dagger"), 1); return [d20(5, 8)]; });
+    const out = await rollDnd5eStrike(token, { action: { id: "orc.dagger.stab" }, target: goblin() });
+    expect(out.records[0].deletedItems).toEqual([{ _id: "dagger", name: "dagger" }]);
+    const again = archer();
+    again.axe.next.attack = d20(5, 8);
+    expect(await rollDnd5eStrike(again.token, { action: { id: "orc.greataxe.atk" }, target: goblin() })).not.toHaveProperty("records");
+  });
+});
