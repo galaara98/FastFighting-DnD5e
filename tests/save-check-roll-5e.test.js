@@ -9,6 +9,9 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { Dnd5eAdapter, checkOf, rollDnd5eSave, rollDnd5eCheck } from "../scripts/adapter.js";
 import { skillName } from "../scripts/words.js";
 
+/** FastFighting's mark on the cards it has dnd5e make (cards.js): no tray or Resist on them. */
+const MARK = { "fast-fighting-dnd5e": { rolled: { times: 1 } } };
+
 const was = { ChatMessage: globalThis.ChatMessage };
 afterEach(() => {
   for ( const [k, v] of Object.entries(was) ) {
@@ -45,13 +48,13 @@ describe("a save, dnd5e's own", () => {
   test("the spec's save key against the DC: no dialog, its card the token's, for the GMs only when secret", async () => {
     const { token, actor } = orc();
     expect(await rollDnd5eSave(token, { save: "dex", dc: 14, action: { id: "pc.fireball.cast", name: "Fireball" } })).toEqual({ degree: 2, natural: 12, total: 15 });
-    expect(actor.rollSavingThrow).toHaveBeenCalledWith({ ability: "dex", target: 14 }, NO_DIALOG, {});
+    expect(actor.rollSavingThrow).toHaveBeenCalledWith({ ability: "dex", target: 14 }, NO_DIALOG, { data: { flags: MARK } });
     const getSpeaker = vi.fn(({ token: t }) => ({ scene: "s", token: "tokA", actor: t.actor.id, alias: t.name }));
     globalThis.ChatMessage = { implementation: { getSpeaker } };
     await rollDnd5eSave(token, { save: "wis", dc: 13, action: { id: null, name: "Frightened" }, secret: true });
     expect(getSpeaker).toHaveBeenCalledWith({ token });
     expect(actor.rollSavingThrow).toHaveBeenLastCalledWith({ ability: "wis", target: 13 }, NO_DIALOG,
-      { rollMode: "gm", data: { speaker: { scene: "s", token: "tokA", actor: "orc", alias: "Orc" } } });
+      { rollMode: "gm", data: { speaker: { scene: "s", token: "tokA", actor: "orc", alias: "Orc" }, flags: MARK } });
   });
 
   test("of a shove's Strength or Dexterity, its better (as the engine takes it); never a GM's say", async () => {
@@ -65,7 +68,7 @@ describe("a save, dnd5e's own", () => {
     const { token, actor } = orc({ items: [spell("Bless", true), spell("Fire Bolt")] });
     // (By the action's id, as the engine sends it: its own, of a spell that takes concentration.)
     await rollDnd5eSave(token, { save: "con", dc: 12, action: { id: "orc.Bless.cast", name: "Bless" } });
-    expect(actor.rollConcentration).toHaveBeenCalledWith({ target: 12 }, NO_DIALOG, {});
+    expect(actor.rollConcentration).toHaveBeenCalledWith({ target: 12 }, NO_DIALOG, { data: { flags: MARK } });
     // (With no id, by its name, or one of its activities', "<item>: <activity>".)
     await rollDnd5eSave(token, { save: "con", dc: 10, action: { id: null, name: "Bless" } });
     await rollDnd5eSave(token, { save: "con", dc: 10, action: { id: null, name: "Bless: Cast" } });
@@ -113,9 +116,9 @@ describe("a check, with what the engine says of it", () => {
   test("rolled with dnd5e's skill or ability check against the DC: no dialog, for the GMs only when secret", async () => {
     const { token, actor } = orc();
     expect(await new Dnd5eAdapter().rollCheck(token, { purpose: "aid", dc: 15, action: { id: "orc.hide", name: "Hide" } })).toEqual({ degree: 2, natural: 12, total: 15 });
-    expect(actor.rollSkill).toHaveBeenCalledWith({ skill: "ste", target: 15 }, NO_DIALOG, {});
+    expect(actor.rollSkill).toHaveBeenCalledWith({ skill: "ste", target: 15 }, NO_DIALOG, { data: { flags: MARK } });
     await rollDnd5eCheck(token, { purpose: "control", skill: "str", dc: 12, action: { id: "orc.x", name: "" }, secret: true });
-    expect(actor.rollAbilityCheck).toHaveBeenCalledWith({ ability: "str", target: 12 }, NO_DIALOG, { rollMode: "gm" });
+    expect(actor.rollAbilityCheck).toHaveBeenCalledWith({ ability: "str", target: 12 }, NO_DIALOG, { rollMode: "gm", data: { flags: MARK } });
   });
 
   test("none it can't tell is rolled at all", async () => {

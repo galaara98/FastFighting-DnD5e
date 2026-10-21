@@ -61,7 +61,7 @@ export function spitUp(run, holder, amount, rng, by = null) {
   // (In a live battle dnd5e's own save, its card in the chat; else the engine's d20, shown there as a table roll.)
   const label = conditionName(INSIDE_KEYS[0]);
   const rolled = systemRolled(run, holder, "save", { dc: spit.save.dc, save: type, label, advantage: m.advantage ?? 0 });
-  const roll = rollCheck(rules, rng ?? run.rng, mod, spit.save.dc, { advantage: m.advantage ?? 0, kind: "save", by: holder, rolled, label });
+  const roll = rollCheck(rules, rng ?? run.rng, mod, spit.save.dc, { advantage: m.advantage ?? 0, kind: "save", by: holder, rolled, label, stat: type });
   const held = run.units.filter(o => o !== holder && holderOf(run, o) === holder);
   const data = { names: listJoin(held.map(o => o.spec.name)), total: roll.total, dc: spit.save.dc };
   if ( roll.degree >= 2 ) return { text: t("KeepsDown", data) };

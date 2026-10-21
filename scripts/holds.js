@@ -181,6 +181,6 @@ export function breakFree(run, who, hold, { freeing = false, held = null } = {})
   // (The system's roll taken as it came out, as the core's rollCheck takes `rolled`.)
   // (Else the engine's d20, shown in a live battle as the table roll it is: the core's rollCheck records it.)
   const rolled = systemRolled(run, who, "check", { dc: way.dc, target: held, purpose: "escape", skill: way.check ?? null, label: hold.key, advantage });
-  const roll = rollCheck(rules, run.rng, mod, way.dc, { advantage, kind: "check", by: who, target: held, rolled, label: hold.key });
+  const roll = rollCheck(rules, run.rng, mod, way.dc, { advantage, kind: "check", by: who, target: held, rolled, label: hold.key, stat: way.check ?? null });
   return { success: roll.degree >= 2, degree: roll.degree, natural: roll.natural, mod, total: roll.total, dc: way.dc };
 }

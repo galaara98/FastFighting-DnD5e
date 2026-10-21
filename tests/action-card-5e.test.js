@@ -10,6 +10,9 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { Dnd5eAdapter, activityOf, useDnd5eAction, rollDnd5eDamage } from "../scripts/adapter.js";
 import { applyDnd5eDamageCard } from "../scripts/commit.js";
 
+/** FastFighting's mark on the cards it has dnd5e make (cards.js): no tray or Resist on them. */
+const MARK = { "fast-fighting-dnd5e": { rolled: { times: 1 } } };
+
 const was = { dnd5e: globalThis.dnd5e, ChatMessage: globalThis.ChatMessage, Roll: globalThis.Roll };
 afterEach(() => {
   for ( const [k, v] of Object.entries(was) ) {
@@ -150,7 +153,7 @@ describe("its own card (useAction)", () => {
     const out = await useDnd5eAction(token, { action: { id: "mage.burning-hands.cast", name: "Burning Hands" }, targets: [goblin()] });
     expect(out).toEqual({ card: "use-1" });
     const cast = actor.items.get("burning-hands").system.activities[0];
-    expect(cast.use).toHaveBeenCalledWith(USE, NO_DIALOG, { data: { speaker: { scene: "s", token: "tokA", actor: "mage", alias: "Mage" }, system: { targets: [GOBLIN] } } });
+    expect(cast.use).toHaveBeenCalledWith(USE, NO_DIALOG, { data: { speaker: { scene: "s", token: "tokA", actor: "mage", alias: "Mage" }, flags: MARK, system: { targets: [GOBLIN] } } });
     expect(cast.rollDamage).not.toHaveBeenCalled();
     expect([...globalThis.game.user.targets]).toEqual(["someone else"]);
     // (With dnd5e loaded: its own descriptor of each target.)
@@ -170,7 +173,7 @@ describe("its own card (useAction)", () => {
   test("a feature's (a breath weapon), at no one; secret, for the GMs only", async () => {
     const { token, actor } = mage([breath()]);
     expect(await new Dnd5eAdapter().useAction(token, { action: { id: "mage.fire-breath.breath" }, secret: true })).toEqual({ card: "use-1" });
-    expect(actor.items.get("fire-breath").system.activities[0].use).toHaveBeenCalledWith(USE, NO_DIALOG, { rollMode: "gm", data: { system: { targets: [] } } });
+    expect(actor.items.get("fire-breath").system.activities[0].use).toHaveBeenCalledWith(USE, NO_DIALOG, { rollMode: "gm", data: { flags: MARK, system: { targets: [] } } });
   });
 
   test("none: an attack (its strike's card shows it), the helper's own, a summoning, one dnd5e won't use; no card made, or use failing", async () => {
@@ -242,7 +245,7 @@ describe("its damage, once for all it catches (rollDamage)", () => {
     expect(out).toEqual({ damage: { byType: { fire: 17, cold: 0 } }, card: "dmg-1" });
     expect(spell.scaledClone).toHaveBeenCalledWith(2);
     const scaled = spell.scaledClone.mock.results[0].value.system.activities[0];
-    expect(scaled.rollDamage).toHaveBeenCalledWith({}, NO_DIALOG, { data: { system: { targets: [GOBLIN], origin: "use-1" } } });
+    expect(scaled.rollDamage).toHaveBeenCalledWith({}, NO_DIALOG, { data: { flags: MARK, system: { targets: [GOBLIN], origin: "use-1" } } });
     expect(spell.system.activities[0].rollDamage).not.toHaveBeenCalled();
   });
 
@@ -258,7 +261,7 @@ describe("its damage, once for all it catches (rollDamage)", () => {
     await rollDnd5eDamage(token, { action: { id: "mage.shatter.cast" } });
     expect(spell.scaledClone.mock.calls).toEqual([[1], [2]]);
     expect(actor.items.get("shatter").scaledClone).toHaveBeenCalledWith(1);
-    expect(spell.scaledClone.mock.results[0].value.system.activities[0].rollDamage).toHaveBeenCalledWith({}, NO_DIALOG, { data: { system: { targets: [] } } });
+    expect(spell.scaledClone.mock.results[0].value.system.activities[0].rollDamage).toHaveBeenCalledWith({}, NO_DIALOG, { data: { flags: MARK, system: { targets: [] } } });
     expect(await rollDnd5eDamage(token, { action: { id: "mage.burning-hands.cast" } })).toEqual({ damage: { byType: { fire: 9 } }, card: "dmg-1" });
     expect(spell.system.activities[0].rollDamage).toHaveBeenCalledTimes(1);
     expect(spell.scaledClone).toHaveBeenCalledTimes(2);
@@ -269,7 +272,7 @@ describe("its damage, once for all it catches (rollDamage)", () => {
     const fire = actor.items.get("fire-breath").system.activities[0];
     fire.next.rolls = [damageRoll(28, "fire"), { total: 2, options: {}, parent: { id: "dmg-2" } }];
     expect(await new Dnd5eAdapter().rollDamage(token, { action: { id: "mage.fire-breath.breath" }, secret: true })).toEqual({ damage: { byType: { fire: 28, untyped: 2 } }, card: "dmg-1" });
-    expect(fire.rollDamage).toHaveBeenCalledWith({}, NO_DIALOG, { rollMode: "gm", data: { system: { targets: [] } } });
+    expect(fire.rollDamage).toHaveBeenCalledWith({}, NO_DIALOG, { rollMode: "gm", data: { flags: MARK, system: { targets: [] } } });
     expect(actor.items.get("fire-breath").scaledClone).not.toHaveBeenCalled();
   });
 

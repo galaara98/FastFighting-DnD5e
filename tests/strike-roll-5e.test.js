@@ -8,6 +8,9 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { Dnd5eAdapter, attackActivityOf, rollDnd5eStrike } from "../scripts/adapter.js";
 
+/** FastFighting's mark on the cards it has dnd5e make (cards.js): no tray or Resist on them. */
+const MARK = { "fast-fighting-dnd5e": { rolled: { times: 1 } } };
+
 const was = { dnd5e: globalThis.dnd5e, ChatMessage: globalThis.ChatMessage, Roll: globalThis.Roll };
 afterEach(() => {
   for ( const [k, v] of Object.entries(was) ) {
@@ -148,7 +151,7 @@ describe("rolled the dnd5e way, at the target", () => {
     await rollDnd5eStrike(token, { action: { id: "orc.greataxe.atk" }, target: goblin() });
     expect(axe.rollAttack).toHaveBeenCalledWith({ target: 15, attackMode: "twoHanded" }, { configure: false }, { data: { system: { targets: [GOBLIN] } } });
     expect(axe.rollDamage.mock.calls[0][1]).toEqual({ configure: false });
-    expect(axe.rollDamage.mock.calls[0][2]).toEqual({ data: { system: { targets: [GOBLIN] } } });
+    expect(axe.rollDamage.mock.calls[0][2]).toEqual({ data: { system: { targets: [GOBLIN] }, flags: MARK } });
     expect([...globalThis.game.user.targets]).toEqual(["someone else"]);
   });
 

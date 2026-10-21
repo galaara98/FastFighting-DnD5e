@@ -13,6 +13,8 @@ import { rankLeaders } from "./leadership.js";
 import { commitDnd5eChanges, describeDnd5eOutcome, commitDnd5eConcession, applyDnd5eDamageCard } from "./commit.js";
 import { SHEET_STATUSES, sheetCarries, sheetConditions, sheetConditionChoices } from "./conditions.js";
 import { readDnd5eTurn, damageCardOf, damagesOf } from "./read-turn.js";
+import { ROLLED_FLAGS, unmarkRolled } from "./cards.js";
+import { showDnd5eTableRoll } from "./table-cards.js";
 import { modsFromChanges, fromWords, effectLabel, durationRounds, helps, changeMode } from "./effects.js";
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 import { edgeActions, studyCheck } from "./edges.js";
@@ -704,8 +706,10 @@ export async function rollDnd5eStrike(token, { action, target, advantage = 0, se
   const { ability, attackMode, ammunition } = roll.options ?? {};
   let rolled = null;
   try {
+    // (FastFighting's own card: it applies it, so dnd5e's tray is gone from it. cards.js.)
+    const own = message();
     rolled = await activity.rollDamage({ isCritical: degree === 3, ability, attackMode: attackMode ?? mode, ammunition: ammunition ? actor.items?.get?.(ammunition) : undefined },
-      { configure: false }, message());
+      { configure: false }, { ...own, data: { ...own.data, flags: { ...ROLLED_FLAGS } } });
   } catch ( err ) {
     console.error(`fast-fighting-dnd5e | rolling a reaction's damage`, err);
   }
@@ -780,7 +784,8 @@ const edgeOf = advantage => (Number(advantage) > 0 ? { advantage: true } : Numbe
 /** A save's or a check's card: the token as its speaker, for the GMs only when secret. */
 function cardFor(token, secret) {
   const speaker = globalThis.ChatMessage?.implementation?.getSpeaker?.({ token });
-  return { ...(secret ? { rollMode: "gm" } : {}), ...(speaker ? { data: { speaker: { ...speaker } } } : {}) };
+  // (FastFighting's own, marked: no tray or Resist on it, as it applies, lays and decides it all itself. cards.js.)
+  return { ...(secret ? { rollMode: "gm" } : {}), data: { ...(speaker ? { speaker: { ...speaker } } : {}), flags: { ...ROLLED_FLAGS } } };
 }
 
 /** A save or a check as dnd5e rolled it (the kept d20, with advantage), graded by the rules: {degree, natural, total}, or null. */
@@ -2891,6 +2896,25 @@ export class Dnd5eAdapter extends SystemAdapter {
   /** API 19: a damage card applied to a token as dnd5e's own damage tray applies it (commit.js applyDnd5eDamageCard). */
   async applyDamageCard(message, token, options = {}) {
     return applyDnd5eDamageCard(message, token, options);
+  }
+
+  /** API 21: a card of FastFighting's the table settles itself after all: dnd5e's tray back on it (cards.js). */
+  async leaveToTable(message) {
+    return unmarkRolled(message);
+  }
+
+  /**
+   * API 20: the engine's own dice as dnd5e's own cards (table-cards.js): its action's activity by the adapter's ids (an
+   * attack's, else any activity's), the target's descriptor, and what a blow with its item is.
+   */
+  async showTableRoll(roll, options = {}) {
+    const activityFor = (actor, id) => {
+      const attack = attackActivityOf(actor, id);
+      if ( attack ) return { activity: attack, item: attack.item ?? null };
+      const found = activityOf(actor, { id });
+      return found?.activity ? found : null;
+    };
+    return showDnd5eTableRoll(roll, { ...options, activityOf: activityFor, targetsOf, properties: struckWith });
   }
 
   /**

@@ -55,7 +55,7 @@ function douse(run, u) {
     const { bonus = 0, advantage = 0 } = rules.modifiers?.check?.({ unit: u }) ?? {};
     const label = conditionName("burning");
     const rolled = systemRolled(run, u, "check", { dc: DOUSE_DC, purpose: "douse", skill: "dex", label, advantage });
-    const roll = rollCheck(rules, run.rng, (Number(u.spec.escapeWork?.dex) || 0) + bonus, DOUSE_DC, { advantage, kind: "check", by: u, rolled, label });
+    const roll = rollCheck(rules, run.rng, (Number(u.spec.escapeWork?.dex) || 0) + bonus, DOUSE_DC, { advantage, kind: "check", by: u, rolled, label, stat: "dex" });
     if ( roll.degree < 2 ) return { success: false };
   } else u.prone = true;
   dropCondition(u, "burning");
@@ -91,7 +91,7 @@ function surprise(run) {
     const dc = Math.max(0, ...run.units.filter(o => o !== h && areEnemies(run, h, o)).map(o => 11 + (Number(o.spec.perception) || 0)));
     const at = run.rng.mark?.();
     const natural = run.rng.die(20);
-    if ( at !== undefined ) run.rng.record(at, { by: h, kind: "check", what: "stealth", mod, total: natural + mod, natural, dc });
+    if ( at !== undefined ) run.rng.record(at, { by: h, kind: "check", what: "stealth", stat: "ste", mod, total: natural + mod, natural, dc });
     return [h, natural + mod];
   }));
   const caught = run.units.filter(o => {
