@@ -4,6 +4,7 @@
  */
 import { afterEach, describe, expect, test } from "vitest";
 import { commitDnd5eChanges } from "../scripts/commit.js";
+import { text } from "./foundry-i18n.js";
 
 const before = { fromUuid: globalThis.fromUuid, foundry: globalThis.foundry, game: globalThis.game };
 afterEach(() => Object.assign(globalThis, before));
@@ -93,5 +94,52 @@ describe("a spell's effects in a live turn", () => {
     expect(calls.created).toHaveLength(0);
     expect(calls.deleted).toEqual([{ type: "ActiveEffect", ids: ["e1"] }]);
     expect(undo.deletedEffects).toEqual([{ _id: "e1", name: "Bless" }]);
+  });
+});
+
+describe("who got what (core API 21)", () => {
+  /** A turn's changes written with the core's options, the cards it posted kept. */
+  async function told({ action, added = [], left = null, audience = () => "public", secret = false, spec = { id: "lem", actions: [] } }) {
+    const posted = [];
+    globalThis.CONFIG = { ChatMessage: { documentClass: { create: async data => { posted.push(data); return { id: `m${posted.length}` }; }, getSpeaker: ({ token }) => ({ alias: token.name }) } } };
+    globalThis.fromUuid = async () => null;
+    globalThis.foundry = { utils: { getProperty: () => undefined } };
+    globalThis.game = { ...before.game, users: [{ id: "gm", isGM: true }, { id: "p1", isGM: false }] };
+    const { actor } = actorWith();
+    actor.getFlag = (scope, key) => (scope === "fast-fighting" && key === "secretName" ? secret : undefined);
+    const tokens = { cleric: { name: "Kyra", actor: {} }, lem: { name: "Lem", actor } };
+    await commitDnd5eChanges({ uuid: "Token.t", name: "Lem", actor }, spec, { effects: { added, ended: [] }, ...(left ? { left } : {}) }, { status: "standing" },
+      { effectSource: () => ({ action }), tokenOf: id => tokens[id] ?? null, audience });
+    delete globalThis.CONFIG;
+    return posted;
+  }
+  const bless = { name: "Bless", kind: "buff" };
+
+  test("a buff laid on another: a card from its giver naming who got it and what", async () => {
+    const [card, more] = await told({ action: bless, added: [{ key: "bless", sourceId: "cleric", label: "blessed" }] });
+    expect(more).toBeUndefined();
+    expect(card.speaker).toEqual({ alias: "Kyra" });
+    expect(card.content).toContain("Bless");
+    expect(card.content).toContain("Lem");
+    expect(card.content).toContain("blessed");
+    expect(card.whisper).toBeUndefined();
+  });
+
+  test("the GMs' alone where one of them is hidden; a secret name the GMs' alone; one left to the table, waiting", async () => {
+    const [hidden] = await told({ action: bless, added: [{ key: "bless", sourceId: "cleric" }], audience: id => (id === "cleric" ? "gm" : "public") });
+    expect(hidden.whisper).toEqual(["gm"]);
+    const [secret] = await told({ action: bless, added: [{ key: "bless", sourceId: "cleric" }], secret: true });
+    expect(secret.content).toContain('data-visibility="gm"');
+    const [waits] = await told({ action: bless, left: { effects: [{ key: "bless", sourceId: "cleric" }], laid: [] } });
+    expect(waits.content).toContain(text("FFDND5E.GivenWaits", { action: "Bless", target: "Lem", effect: "Bless" }));
+  });
+
+  test("none where a roll of dnd5e's names it (a save, an attack), nor a potion its user drank, nor without the core's options", async () => {
+    expect(await told({ action: { name: "Hold Person", save: { type: "wis", dc: 14 } }, added: [{ key: "hold", sourceId: "cleric" }] })).toEqual([]);
+    expect(await told({ action: { name: "Guiding Bolt", kind: "spell-attack", bonus: 5 }, added: [{ key: "bolt", sourceId: "cleric" }] })).toEqual([]);
+    expect(await told({ action: { name: "Potion", selfOnly: true }, added: [{ key: "potion", sourceId: "lem" }] })).toEqual([]);
+    const { actor } = actorWith();
+    globalThis.foundry = { utils: { getProperty: () => undefined } };
+    await expect(commitDnd5eChanges({ uuid: "Token.t", actor }, { actions: [] }, { effects: { added: [], ended: [] } }, { status: "standing" }, {})).resolves.toBeTruthy();
   });
 });

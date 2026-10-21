@@ -11,6 +11,8 @@
     "HeroicInspiration": "Heroic Inspiration",
     "Inspiration": "Inspiration",
     "DamageHandled": "FastFighting handles this damage.",
+    "Given": "{action} → {target} ({effect})",
+    "GivenWaits": "{action} → {target} ({effect}), not applied: apply it from the card above.",
     "Settings": {
       "loreBoost": {
         "Name": "Lore-Collector advantage",

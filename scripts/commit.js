@@ -7,7 +7,7 @@
  *     createdEffects: [id], deletedEffects: [data], tokenUpdate, createdActors, createdTokens, deletedTokens,
  *     statuses: [{id, active}], combatant }
  */
-import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, toggleStatus, undoRecord, payFrom, handOverItem } from "./core.js";
+import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, toggleStatus, undoRecord, payFrom, handOverItem, escapeHtml, inertHtml } from "./core.js";
 import { t, conditionName, playersOf } from "./words.js";
 import { modeledChange } from "./effects.js";
 import { damagesOf } from "./read-turn.js";
@@ -151,6 +151,8 @@ export async function commitDnd5eChanges(tokenDoc, spec, changes, final, options
   // A spell's effects on it (Bless, Bane, Hold Person): its own, put on for the rounds it has; and off when it ends.
   if ( !dead ) for ( const e of changes.effects?.added ?? [] ) await layEffect(actor, e, options, undo);
   for ( const e of changes.effects?.ended ?? [] ) await liftEffect(actor, e, undo);
+  // Who got which effect, from whom, where no roll of dnd5e's names it (core API 21).
+  await tellGiven(tokenDoc, spec, changes, options);
   if ( changes.died ) {
     await setStatus(actor, "dead", true, undo, { overlay: true });
     const combatant = game.combat?.getCombatantsByToken?.(tokenDoc)?.[0];
@@ -223,6 +225,65 @@ async function layEffect(actor, e, options, undo) {
     const [made] = await actor.createEmbeddedDocuments("ActiveEffect", [data]);
     if ( made ) undo.createdEffects.push(made.id);
   }
+}
+
+/** Does a roll of dnd5e's own name whom an action's effect went to: a save's card, a check's, an attack's target? */
+const rollNames = a => !!(a?.save || a?.check || a?.afflict?.save || a?.harm?.save || Number.isFinite(a?.bonus) || a?.kind === "strike" || a?.kind === "spell-attack");
+
+/** An action that can go only to its user (Rage, a potion): its own card names whom it went to. */
+const ownOnly = a => a?.targets === "self" || !!a?.selfOnly;
+
+/**
+ * A card naming who got which effect, from whoever gave it, after the action's own card: "Bless → Lem (blessed)". For
+ * each effect laid this turn (the core's change set: `effects.added`, and `laid`, conditions an effect lays alone)
+ * where no roll of dnd5e's names whom it went to (a buff, a debuff with no save: the action's card is its user's and
+ * names only who it may go to), and for each the table settles itself (`left`, API 21: a player's character's at
+ * another, Apply players' damage off), waiting for its players to apply it from the action's card (its effects tray).
+ * Not one an action only its user can take laid on itself. Its effect linked, to drag onto the token, where the action
+ * has one. To whom the core says (options.audience: the GMs alone where the one who gave it or the one who got it is
+ * hidden from the players); a name the GM keeps secret, the GMs' alone. Nothing without the core's options (an older
+ * core): no card.
+ */
+async function tellGiven(tokenDoc, spec, changes, options) {
+  if ( typeof options?.tokenOf !== "function" || typeof options?.effectSource !== "function" ) return;
+  const given = [
+    ...[...(changes.effects?.added ?? []), ...(changes.laid ?? [])].map(e => ({ e, waits: false })),
+    ...[...(changes.left?.effects ?? []), ...(changes.left?.laid ?? [])].map(e => ({ e, waits: true }))
+  ];
+  const Message = globalThis.CONFIG?.ChatMessage?.documentClass ?? globalThis.ChatMessage;
+  for ( const { e, waits } of given ) {
+    const action = options.effectSource(e.key)?.action;
+    if ( !action || rollNames(action) || (ownOnly(action) && e.sourceId === spec.id) ) continue;
+    const by = options.tokenOf(e.sourceId) ?? tokenDoc;
+    const gm = [e.sourceId, spec.id].some(id => options.audience?.(id) === "gm");
+    const secret = !!tokenDoc.actor?.getFlag?.("fast-fighting", "secretName");
+    const name = escapeHtml(tokenDoc.name ?? "");
+    const target = gm || !secret ? name : `<span data-visibility="gm">${name}</span>`;
+    const words = t(waits ? "GivenWaits" : "Given", { action: escapeHtml(action.name ?? ""), target, effect: escapeHtml(e.label || action.name || "") });
+    const link = effectLink(action);
+    try {
+      await Message.create({
+        speaker: Message.getSpeaker({ token: by, actor: by.actor }),
+        content: inertHtml(`<p>${words}</p>${link ? `<p>${link}</p>` : ""}`),
+        ...(gm ? { whisper: (globalThis.game?.users ?? []).filter(u => u.isGM).map(u => u.id) } : {})
+      });
+    } catch ( err ) {
+      console.error(`fast-fighting-dnd5e | naming who got ${action.name}`, err);
+    }
+  }
+}
+
+/** The effect an action lays (its effectRef's first), as a link to drag (Foundry's own anchor), or "" (none found). */
+function effectLink(action) {
+  const ref = action?.effectRef;
+  for ( const id of ref?.ids ?? [] ) {
+    let effect = null;
+    try {
+      effect = globalThis.fromUuidSync?.(`${ref.uuid}.ActiveEffect.${id}`) ?? null;
+    } catch ( err ) { /* gone */ }
+    if ( effect?.documentName === "ActiveEffect" && typeof effect.toAnchor === "function" ) return effect.toAnchor({ attrs: { draggable: "true" } }).outerHTML;
+  }
+  return "";
 }
 
 /** A buff or debuff that ended this turn: the effects layEffect put on for it come off. */
