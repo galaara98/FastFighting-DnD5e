@@ -265,6 +265,8 @@ npm test
 npm run test:reworded
 ```
 
+`npm run coverage` (`tools/coverage.mjs`, a developer tool, not in the module) reads dnd5e's SRD packs, and the installed books (the Monster Manual, the Player's Handbook, the Dungeon Master's Guide), with Foundry's own classic-level, and runs the helper's pure readers over every feature: reactions, situational saves, auras, Multiattack, Regeneration. `docs/coverage.md` counts each source and names the SRD's features it doesn't read; a book's are named only in `private/coverage.md` (gitignored). Keep its `KNOWN_REACTIONS` in step with `#reactions`.
+
 `npm run test:watch` runs vitest in watch mode. The tests import FastFighting Core from a checkout beside this one (`../FastFighting`); set `FASTFIGHTING_CORE` to another core's `scripts/` folder to test against that. `vitest.config.js` aliases `../fast-fighting/scripts/` (and `../FastFighting/scripts/`) to it.
 
 `tests/setup.js` gives every test a `game.i18n` that reads this module's and the core's `languages/en.json` (`tests/foundry-i18n.js`), and the reading words of `reading/en.json`. `test:reworded` (`--mode reworded`) rewords every string (accented, in ⟦brackets⟧, placeholders and markup kept), so no test may depend on wording. `tests/load.test.js` imports every script in Node, as Foundry would load it.

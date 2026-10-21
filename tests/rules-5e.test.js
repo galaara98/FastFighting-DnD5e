@@ -122,6 +122,15 @@ describe("Multiattack", () => {
     expect(parseMultiattackOptions("The scout makes two melee attacks or two ranged attacks.", [{ name: "Shortsword", melee: true }, { name: "Longbow", melee: false }]))
       .toEqual([["Shortsword", "Shortsword"], ["Longbow", "Longbow"]]);
   });
+  test("what it uses besides its attacks (2024's), in the order the words give them", () => {
+    expect(parseMultiattackOptions("The monster makes one Bite attack and uses Constrict.", ["Bite", "Constrict", "Swallow"])).toEqual([["Bite", "Constrict"]]);
+    expect(parseMultiattackOptions("The carrion crawler uses Paralyzing Tentacles and makes one Bite attack.", ["Bite", "Paralyzing Tentacles"])).toEqual([["Paralyzing Tentacles", "Bite"]]);
+    expect(parseMultiattackOptions("The monster makes one Bite attack and uses Antennae twice.", ["Antennae", "Bite"])).toEqual([["Bite", "Antennae", "Antennae"]]);
+    expect(parseMultiattackOptions("The monster makes one Fiendish Touch attack and uses Charm or Draining Kiss.", ["Draining Kiss", "Fiendish Touch", "Charm"]))
+      .toEqual([["Fiendish Touch", "Charm"], ["Fiendish Touch", "Draining Kiss"]]);
+    // (A replacement is no part of it.)
+    expect(parseMultiattackOptions("The dragon makes three Rend attacks. It can replace one attack with a use of Spellcasting to cast Scorching Ray.", ["Rend", "Spellcasting"])).toEqual([["Rend", "Rend", "Rend"]]);
+  });
   test("each way of making it is an option", () => {
     const opts = parseMultiattackOptions("The monster makes two attacks, using Scimitar or Pistol in any combination.", ["Pistol", "Scimitar"]);
     expect(opts).toEqual([["Pistol", "Pistol"], ["Scimitar", "Scimitar"]]);

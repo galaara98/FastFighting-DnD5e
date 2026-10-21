@@ -99,9 +99,20 @@ function readOption(part, known) {
     return pool ?? known.map(k => k.name);
   };
 
-  // "one Bite attack and one Claw attack", "two Javelin or Morningstar attacks", "three other attacks", "two melee attacks"
+  // "one Bite attack and one Claw attack", "two Javelin or Morningstar attacks", "three other attacks", "two melee attacks";
+  // and, in the order the words give them, what it uses besides (2024's "and uses Constrict", "uses Antennae twice",
+  // "uses Charm or Draining Kiss")
   const slots = [];
-  for ( const m of part.matchAll(new RegExp(`\\b(${COUNT}) ([a-z][\\w' -]*?) attacks?\\b`, "g")) ) {
+  const found = [
+    ...[...part.matchAll(new RegExp(`\\b(${COUNT}) ([a-z][\\w' -]*?) attacks?\\b`, "g"))].map(m => ({ m, uses: false })),
+    ...[...part.matchAll(/\buses? (?:its )?([a-z][\w' -]*?)(?: (twice|thrice))?(?=[.,;]| and | then |$)/g)].map(m => ({ m, uses: true }))
+  ].sort((a, b) => a.m.index - b.m.index);
+  for ( const { m, uses } of found ) {
+    if ( uses ) {
+      const choices = m[1].split(/,? or |, /).map(p => matchName(p, known, true)).filter(Boolean);
+      if ( choices.length ) slots.push({ n: countOf(m[2] ?? "one"), choices });
+      continue;
+    }
     const phrase = m[2].trim();
     const n = countOf(m[1]);
     if ( GENERIC.test(phrase) ) {

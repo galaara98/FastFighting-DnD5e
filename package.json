@@ -6,7 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "test:reworded": "vitest run --mode reworded",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "coverage": "node tools/coverage.mjs --out docs/coverage.md --private private/coverage.md"
   },
   "devDependencies": {
     "vitest": "4.1.11"
