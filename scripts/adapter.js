@@ -530,8 +530,9 @@ export function filledLookups(html, item, activity = null, rollData = null) {
 /**
  * An attack's "at Advantage" version (the 2024 Monster Manual writes "plus 1d4 damage if the attack roll had Advantage"
  * as a second activity, "Attack at Advantage"): not an attack of its own, only the extra damage when it has advantage.
+ * By its name, in the reading words (a Spanish world's "con ventaja" too).
  */
-const ADVANTAGE_VARIANT = /\b(?:at|with) advantage\b|con ventaja/i;
+const advantageVariant = name => !!wordPattern(currentReading().names?.atAdvantage)?.test(String(name ?? ""));
 
 /** Consumables nobody spends in a fight (torches, rations, candles ...). */
 const IDLE_CONSUMABLES = new Set(["trinket", "food"]);
@@ -633,7 +634,7 @@ export function attackActivityOf(actor, id, name = null) {
     const named = activities.get?.(keys[i + 1]) ?? Array.from(activities).find(a => a?.id === keys[i + 1]);
     if ( named ) return attacks([named])[0] ?? null;
     const all = attacks(activities);
-    const own = all.find(a => !ADVANTAGE_VARIANT.test(a.name ?? "")) ?? all[0];
+    const own = all.find(a => !advantageVariant(a.name)) ?? all[0];
     if ( own ) return own;
     const part = activityNamed(actor, name)?.activity;
     return part ? attacks([part])[0] ?? null : null;
@@ -879,7 +880,7 @@ function activityNamed(actor, name) {
   if ( !said ) return null;
   for ( const item of actor?.items ?? [] ) {
     const all = Array.from(item?.system?.activities ?? []);
-    const plain = a => !ADVANTAGE_VARIANT.test(a?.name ?? "") && (all.length === 1 || a?.type === "attack" || !a?.name || a.name === item.name);
+    const plain = a => !advantageVariant(a?.name) && (all.length === 1 || a?.type === "attack" || !a?.name || a.name === item.name);
     const activity = all.find(a => a?.name && `${item.name}: ${a.name}` === said) ?? (item.name === said ? all.find(plain) : null);
     if ( activity ) return { item, activity };
   }
@@ -903,7 +904,7 @@ export function activityOf(actor, { id, name } = {}) {
   const keys = path.split(".");
   if ( keys.length === 2 && Object.hasOwn(OWN_FEATURES, keys[1]) ) {
     const item = actor?.items ? featureItem(actor, ...OWN_FEATURES[keys[1]]) : null;
-    const activity = Array.from(item?.system?.activities ?? []).find(a => !ADVANTAGE_VARIANT.test(a?.name ?? ""));
+    const activity = Array.from(item?.system?.activities ?? []).find(a => !advantageVariant(a?.name));
     return activity ? { item, activity, slot: null } : null;
   }
   const level = /^slots:(\d+)/.exec(at)?.[1];
@@ -1384,7 +1385,7 @@ export class Dnd5eAdapter extends SystemAdapter {
           if ( called ) mine.push(called);
           continue;
         }
-        if ( activity.type === "attack" && ADVANTAGE_VARIANT.test(activity.name ?? "") ) {
+        if ( activity.type === "attack" && advantageVariant(activity.name) ) {
           atAdvantage.push(activity);
           continue;
         }
@@ -1628,8 +1629,8 @@ export class Dnd5eAdapter extends SystemAdapter {
       const damage = style || !mod ? second.damage : second.damage.map((p, i) => (i === 0 ? { ...p, flat: p.flat - mod } : p));
       out.push({ ...second, id: `${second.id}.off-hand`, name: t("OffHand", { name: second.name }), economy: "bonus", damage });
     }
-    // (In a Spanish world: "Ataque sin armas", "desarmado".)
-    const unarmed = out.filter(a => a.kind === "strike" && a.melee && !a.sequence && a.economy !== "bonus" && /unarmed|sin armas|desarmad/i.test(a.name))
+    // (By its name, in the reading words: a Spanish world's "Ataque sin armas", "desarmado" too.)
+    const unarmed = out.filter(a => a.kind === "strike" && a.melee && !a.sequence && a.economy !== "bonus" && !!wordPattern(currentReading().names?.unarmed)?.test(a.name))
       .sort((x, y) => (y.bonus ?? 0) - (x.bonus ?? 0))[0];
     if ( !unarmed ) return;
     if ( hasFeature(features, "martial-arts", "martial arts") ) {

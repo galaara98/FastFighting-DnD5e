@@ -26,6 +26,13 @@
   "senses": {
     "blindBeyond": { "pattern": "\\bblind beyond\\b" }
   },
+  "names": {
+    "atAdvantage": { "pattern": "\\b(?:at|with) advantage\\b" },
+    "unarmed": { "pattern": "unarmed" }
+  },
+  "languages": {
+    "mute": { "pattern": "\\b(?:can['’]?t|cannot|doesn['’]t|does not) speak\\b(?! in\\b)" }
+  },
   "auras": {
     "turnStart": { "pattern": "\\b(?:starts?|starting|begins?) (?:its|their|your) turn\\b" },
     "enter": { "pattern": "\\b(?:enters?|entering) (?:the|that|its|an?)\\b[^.]*\\b(?:area|emanation|aura|range)\\b|\\bfor the first time on a turn\\b" },

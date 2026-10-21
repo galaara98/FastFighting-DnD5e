@@ -178,3 +178,18 @@ describe("read from a sheet (the adapter)", () => {
     expect(spec.auras).toBeUndefined();
   });
 });
+
+describe("the Spanish reading file (reading/es.json), as a Spanish client reads it", () => {
+  test("its words and the English ones both count: a mute creature's languages, an attack's name", async () => {
+    const fs = await import("node:fs");
+    const file = name => JSON.parse(fs.readFileSync(new URL(`../reading/${name}.json`, import.meta.url), "utf8"));
+    const { setReading, mergeReading: merge, currentReading, wordPattern } = await import("../scripts/reading.js");
+    const { spokenLanguages, speaksAtAll } = await import("../scripts/auto.js");
+    setReading(merge(file("en"), file("es")));
+    expect(spokenLanguages({ value: new Set(["common"]), custom: "Entiende común pero no puede hablar" })).toEqual([]);
+    expect(speaksAtAll({ value: new Set(), custom: "Understands Common but can't speak" })).toBe(false);
+    const variant = wordPattern(currentReading().names.atAdvantage);
+    expect(["Ataque con ventaja", "Attack at Advantage", "Ataque"].map(n => variant.test(n))).toEqual([true, true, false]);
+    expect(wordPattern(currentReading().names.unarmed).test("Ataque sin armas")).toBe(true);
+  });
+});

@@ -1,0 +1,10 @@
+{
+  "$comment": "The Spanish words FastFighting D&D 5e reads by where a translated item's or sheet's own words are Spanish (a Babele translation of the compendiums: an activity's or an attack's name, a sheet's languages). Read before reading/en.json, whose words still count. See CODING_README.md.",
+  "names": {
+    "atAdvantage": { "pattern": "\\bcon ventaja\\b" },
+    "unarmed": { "pattern": "sin armas|desarmad" }
+  },
+  "languages": {
+    "mute": { "pattern": "\\bno puede hablar\\b" }
+  }
+}

@@ -7,6 +7,7 @@
  */
 import { listJoin, plainText } from "./core.js";
 import { t, abilityName, alignmentName, creatureTypeName, conditionName, skillName, languageName, legendaryActionsName } from "./words.js";
+import { currentReading, wordPattern } from "./reading.js";
 
 /** What each class leans toward (several classes add up). */
 const CLASSES = Object.freeze({
@@ -408,8 +409,8 @@ export function dnd5eTactics(f = {}) {
   return out;
 }
 
-/** "Understands Common but can't speak" (not "can't speak in wolf form"). */
-const MUTE = /\b(?:can['’]?t|cannot|doesn['’]t|does not) speak\b(?! in\b)|\bno puede hablar\b/i;
+/** "Understands Common but can't speak" (not "can't speak in wolf form"), in the reading words ("no puede hablar" too). */
+const mute = text => !!wordPattern(currentReading().languages?.mute)?.test(String(text ?? ""));
 
 /**
  * The languages it speaks, by key: its sheet's, and those its custom languages name ("Common plus one other language"),
@@ -419,7 +420,7 @@ const MUTE = /\b(?:can['’]?t|cannot|doesn['’]t|does not) speak\b(?! in\b)|\b
  */
 export function spokenLanguages(languages, names = {}) {
   const custom = String(languages?.custom ?? "");
-  if ( MUTE.test(custom) ) return [];
+  if ( mute(custom) ) return [];
   const value = languages?.value;
   const out = new Set(value instanceof Set ? value : Array.isArray(value) ? value : []);
   const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -443,7 +444,7 @@ export function talksWithAnyone(languages) {
 export function speaksAtAll(languages, names = {}) {
   if ( Number(languages?.communication?.telepathy?.value) > 0 ) return true;
   const custom = String(languages?.custom ?? "").trim();
-  return spokenLanguages(languages, names).length > 0 || (!!custom && !MUTE.test(custom));
+  return spokenLanguages(languages, names).length > 0 || (!!custom && !mute(custom));
 }
 
 /** The alignment's key (lg ... ce) from what the sheet says, by the system's own names for them; null if none fits. */
