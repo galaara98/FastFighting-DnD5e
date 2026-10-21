@@ -99,7 +99,8 @@ export async function commitDnd5eChanges(tokenDoc, spec, changes, final, options
   if ( changes.hp ) set("system.attributes.hp.value", changes.hp.to);
   if ( changes.temp ) set("system.attributes.hp.temp", changes.temp.to ?? 0);
   // Death saves: where the turn left them (none for anyone standing or stable).
-  if ( actor.type === "character" && (changes.hp || changes.fell || changes.revived || changes.stable || changes.dying) ) {
+  // (A success changes nothing but the rules' own tallies: the change set's `system`, core API 24.)
+  if ( actor.type === "character" && (changes.hp || changes.fell || changes.revived || changes.stable || changes.dying || changes.system) ) {
     const s = final.system ?? {};
     const down = final.status === STATUS.DOWN && !final.stable;
     set("system.attributes.death.success", down ? (s.deathSuccesses ?? 0) : 0);

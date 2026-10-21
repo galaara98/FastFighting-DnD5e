@@ -143,3 +143,19 @@ describe("who got what (core API 21)", () => {
     await expect(commitDnd5eChanges({ uuid: "Token.t", actor }, { actions: [] }, { effects: { added: [], ended: [] } }, { status: "standing" }, {})).resolves.toBeTruthy();
   });
 });
+
+describe("death saves on the sheet", () => {
+  test("a success that changed nothing else (the change set's system, core API 24) is written", async () => {
+    const updates = [];
+    const actor = {
+      uuid: "Actor.pc", type: "character", statuses: new Set(["unconscious"]), items: { get: () => null }, effects: [],
+      system: { attributes: { hp: { value: 0 }, death: { success: 0, failure: 1 } } },
+      async update(data) { updates.push(data); }
+    };
+    globalThis.foundry = { utils: { getProperty: (o, path) => path.split(".").reduce((x, k) => x?.[k], o) } };
+    const tallies = { deathSuccesses: 1, deathFailures: 1 };
+    await commitDnd5eChanges({ uuid: "Token.pc", actor }, { actions: [] }, { system: { from: { deathSuccesses: 0, deathFailures: 1 }, to: tallies } },
+      { status: "down", stable: false, system: tallies }, {});
+    expect(updates).toEqual([{ "system.attributes.death.success": 1 }]);
+  });
+});
