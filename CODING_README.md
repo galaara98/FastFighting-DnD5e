@@ -132,6 +132,7 @@ dnd5e's `system.identifier` is the same in every book, edition of the SRD and la
 | Pushes | `FORCED_MOVES`: `thunderwave`, `gust-of-wind`, `thunderous-smite`, `repelling-blast` (lends to `eldritch-blast`), `whirlwind`, `repulsion-breath`, `cold-gale`, `hammer-throw`, `forceful-hand`, `deadly-leap` | `#forced` |
 | Not creatures | `NOT_CREATURES`: `spiritual-weapon`, `flaming-sphere`, `arcane-sword`, `mordenkainens-sword`, `bigbys-hand`, `arcane-hand` | `#summonFrom` |
 | Never used | `NEVER`: `staff-of-the-magi`'s `retributive-strike` | `neverUsed` |
+| Playstyles | `FEATURES` (`lay-on-hands`, `healer`, `cunning-action`, `mobile`, `sneak-attack`, `great-weapon-master`, `sharpshooter`, `bardic-inspiration` ...) and `SPELLS` it has ready (`cure-wounds`, `healing-word`, `hex`, `hunters-mark`, `bless`, `haste`, `expeditious-retreat` ...): Medic, Kiter, DPS, Enabler | `auto.js` `dnd5eHints` |
 | Story looks | `WEAPON_LOOKS`: firearms' base items → ballistic, `laserpistol`, `laserrifle` → laser; the `fir` property → ballistic | `weaponLook` |
 
 `FORCED_MOVES` leaves out pushes chosen instead of something else (Brutal Strike, Open Hand Technique), moves that put a creature anywhere (Telekinesis), and identifiers other creatures share without the push (`tail`, `charge`, `hooves`, `warhammer`, `breath-weapons`). Of weapon masteries, only `push` plays (`masteryOf`, `PUSH_MASTERY`: 10 feet, Large or smaller), and only the weapon's own.

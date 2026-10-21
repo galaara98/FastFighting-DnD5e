@@ -2628,7 +2628,10 @@ export class Dnd5eAdapter extends SystemAdapter {
       alignment: alignmentKey(sys.details?.alignment, alignmentNames()),
       shield: equipped("shield"),
       heavy: equipped("heavy"),
-      mindless: isMindless(sys.abilities?.int?.value, creature)
+      mindless: isMindless(sys.abilities?.int?.value, creature),
+      // (Its features, and the spells it has ready: what it does in a fight leans it toward a playstyle too.)
+      features: actor.items.filter(i => i.type === "feat").map(identOf).filter(Boolean),
+      spells: actor.items.filter(i => i.type === "spell" && this.#spellReady(actor, i)).map(identOf).filter(Boolean)
     };
   }
 

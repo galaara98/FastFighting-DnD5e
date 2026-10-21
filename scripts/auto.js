@@ -58,11 +58,41 @@ const ALIGNMENTS = Object.freeze({
   le: { cruel: 0.2 }, ne: { mercenary: 0.3, cruel: 0.1 }, ce: { cruel: 0.4, wildcard: 0.1 }
 });
 
-/** The playstyles that fit: {id: -1 to 1}. */
-export function dnd5eHints({ classes = [], species = null, creature = "", alignment = null, shield = false, heavy = false } = {}) {
+/**
+ * Features, by identifier (the SRD's, and a few other books' by identifier only), and the playstyles they lean toward:
+ * healing others (a Medic), slipping away (a Kiter), dealing the most damage (DPS), lifting friends (an Enabler).
+ */
+const FEATURES = Object.freeze({
+  "lay-on-hands": { medic: 0.3 }, healer: { medic: 0.4 }, "disciple-of-life": { medic: 0.3 }, "preserve-life": { medic: 0.3 },
+  "channel-divinity-preserve-life": { medic: 0.3 }, "healing-hands": { medic: 0.2 }, "blessed-healer": { medic: 0.2 },
+  "cunning-action": { kiter: 0.3 }, mobile: { kiter: 0.4 }, "nimble-escape": { kiter: 0.3 }, "unarmored-movement": { kiter: 0.2 },
+  "step-of-the-wind": { kiter: 0.2 },
+  "sneak-attack": { dps: 0.3 }, "great-weapon-master": { dps: 0.4 }, sharpshooter: { dps: 0.4 }, "divine-smite": { dps: 0.2 },
+  "paladins-smite": { dps: 0.2 }, "brutal-strike": { dps: 0.2 }, "brutal-critical": { dps: 0.1 }, "agonizing-blast": { dps: 0.2 },
+  "improved-critical": { dps: 0.2 }, "savage-attacker": { dps: 0.2 },
+  "bardic-inspiration": { enabler: 0.3 }, "flash-of-genius": { enabler: 0.3 }
+});
+
+/**
+ * Spells, by identifier, a little each: healing (a Medic), a mark for more damage (DPS), a friend's buff (an Enabler),
+ * a way out (a Kiter).
+ */
+const SPELLS = Object.freeze({
+  "cure-wounds": { medic: 0.15 }, "healing-word": { medic: 0.2 }, "mass-healing-word": { medic: 0.2 }, "prayer-of-healing": { medic: 0.15 },
+  "mass-cure-wounds": { medic: 0.15 }, heal: { medic: 0.15 }, revivify: { medic: 0.1 }, "spare-the-dying": { medic: 0.1 }, aid: { medic: 0.1, enabler: 0.1 },
+  hex: { dps: 0.2 }, "hunters-mark": { dps: 0.2 },
+  bless: { enabler: 0.2 }, haste: { enabler: 0.2 }, heroism: { enabler: 0.15 }, "faerie-fire": { enabler: 0.15 }, guidance: { enabler: 0.1 },
+  "enhance-ability": { enabler: 0.1 }, "shield-of-faith": { enabler: 0.1 },
+  "expeditious-retreat": { kiter: 0.2 }, "misty-step": { kiter: 0.1 }, longstrider: { kiter: 0.1 }
+});
+
+/** The playstyles that fit: {id: -1 to 1}. `features` and `spells`: their identifiers (spells it has ready). */
+export function dnd5eHints({ classes = [], species = null, creature = "", alignment = null, shield = false, heavy = false, features = [], spells = [] } = {}) {
   const out = {};
   const add = map => { for ( const [k, v] of Object.entries(map ?? {}) ) out[k] = (out[k] ?? 0) + v; };
   for ( const c of classes ) add(CLASSES[c]);
+  for ( const f of new Set(features) ) if ( Object.hasOwn(FEATURES, f) ) add(FEATURES[f]);
+  for ( const s of new Set(spells) ) if ( Object.hasOwn(SPELLS, s) ) add(SPELLS[s]);
   add(SPECIES[species]);
   add(CREATURES[creature]);
   add(ALIGNMENTS[alignment]);

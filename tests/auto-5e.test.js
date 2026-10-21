@@ -20,6 +20,16 @@ describe("the playstyles 5e says fit", () => {
     expect(dnd5eHints({ species: "orc" })).toEqual({ relentless: 0.2 });
     expect(dnd5eHints({ species: "human", creature: "humanoid" })).toEqual({});
   });
+
+  test("its features and ready spells: a Medic's healing, a Kiter's slipping away, DPS, an Enabler's buffs; each once", () => {
+    const cleric = dnd5eHints({ classes: ["cleric"], features: ["disciple-of-life"], spells: ["cure-wounds", "healing-word", "bless", "bless"] });
+    expect(cleric.medic).toBeCloseTo(0.3 + 0.15 + 0.2);
+    expect(cleric.enabler).toBeCloseTo(0.5 + 0.2);
+    const rogue = dnd5eHints({ classes: ["rogue"], features: ["sneak-attack", "cunning-action"] });
+    expect(rogue).toMatchObject({ dps: 0.3, kiter: 0.3 });
+    expect(dnd5eHints({ classes: ["warlock"], spells: ["hex"], features: ["agonizing-blast"] }).dps).toBeCloseTo(0.4);
+    expect(dnd5eHints({ features: ["unknown-feature", "toString"], spells: ["constructor"] })).toEqual({});
+  });
 });
 
 describe("5e's answers to the tactics questions", () => {
