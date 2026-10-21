@@ -29,6 +29,33 @@ export function isAnimalistic(int, creature, speaks) {
   return creature === "beast" || (int ?? 10) <= 11;
 }
 
+/**
+ * An ability modifier on the core's aptitude scale (0 to 4, 2 average): -3 or lower 0, -2 to -1 1, +0 to +2 2, +3 to +4
+ * 3, +5 or higher 4. By the modifier as it is, not for the creature's level or challenge rating: an adult dragon is
+ * stronger than a goblin.
+ */
+export function aptitudeBand(mod) {
+  const m = Number(mod) || 0;
+  return m <= -3 ? 0 : m <= -1 ? 1 : m <= 2 ? 2 : m <= 4 ? 3 : 4;
+}
+
+/** The core's aptitudes, by the ability each is read from. */
+const APTITUDE_ABILITIES = Object.freeze({ smart: "int", strong: "str", fast: "dex", wise: "wis", charismatic: "cha" });
+
+/**
+ * A quick, hidden judgment of what it's like, for the core's Statistics Engine (spec.aptitudes, core API 23: smart,
+ * strong, fast, wise, charismatic): its Intelligence, Strength, Dexterity, Wisdom and Charisma modifiers, each banded
+ * (aptitudeBand). A mindless one (isMindless) is as dumb as it gets.
+ * @param {{abilities?: Record<string, number>, int?: number, creature?: string}} d  abilities: {str, dex, int, wis, cha}
+ *   modifiers; int: its Intelligence score
+ */
+export function aptitudesOf({ abilities = {}, int = 10, creature = "" } = {}) {
+  const out = {};
+  for ( const [k, a] of Object.entries(APTITUDE_ABILITIES) ) out[k] = aptitudeBand(abilities[a]);
+  if ( isMindless(int, creature) ) out.smart = 0;
+  return out;
+}
+
 /** What a class leans toward (the SRD's twelve, and the artificer), by identifier. Several classes count by their share of levels. */
 const CLASS_LEANS = Object.freeze({
   barbarian: { brave: 5, tactical: -4 }, bard: { loyal: 2 }, cleric: { selfish: -4, loyal: 2 }, fighter: { brave: 2 },

@@ -6,7 +6,7 @@
 import {
   SystemAdapter, parseFormula, part, meanPart, simpleAffliction, localize, listItems, plainText as sheetText, englishName, englishDescription, formulaNumber, plainDice } from "./core.js";
 import { dnd5eRules, proficiency } from "./rules.js";
-import { deriveDnd5eTraits, isMindless, isAnimalistic } from "./traits.js";
+import { deriveDnd5eTraits, isMindless, isAnimalistic, aptitudesOf } from "./traits.js";
 import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, speaksAtAll } from "./auto.js";
 import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
@@ -664,8 +664,7 @@ export async function rollDnd5eStrike(token, { action, target, advantage = 0, se
   const speaker = globalThis.ChatMessage?.implementation?.getSpeaker?.({ token });
   const message = () => ({ ...(secret ? { rollMode: "gm" } : {}), data: { ...(speaker ? { speaker: { ...speaker } } : {}), system: { targets: targets.map(t => ({ ...t })) } } });
   const mode = attackModeFor(activity, action ?? {});
-  const edge = Number(advantage) > 0 ? { advantage: true } : Number(advantage) < 0 ? { disadvantage: true } : {};
-  const rolls = await activity.rollAttack({ target: ac, ...edge, ...(mode ? { attackMode: mode } : {}) }, { configure: false }, message());
+  const rolls = await activity.rollAttack({ target: ac, ...edgeOf(advantage), ...(mode ? { attackMode: mode } : {}) }, { configure: false }, message());
   const roll = rolls?.[0];
   if ( !roll ) return null;
   const total = Number(roll.total);
@@ -700,8 +699,11 @@ const dcOf = dc => (dc === null || dc === undefined || dc === "" ? NaN : Number(
 const TALK_SKILLS = Object.freeze({ persuade: "per", intimidate: "itm", deceive: "dec" });
 /** The helper's own actions that take a check (`<actor>.<key>`), and its skill: Hide, Stealth; Insight. */
 const OWN_CHECKS = Object.freeze({ hide: "ste", insight: "ins" });
-/** Checks whose purpose alone says the skill: a theft, Sleight of Hand; first aid, Medicine; an escape, Athletics or Acrobatics (its better). */
-const PURPOSE_SKILLS = Object.freeze({ theft: ["slt"], firstAid: ["med"], escape: ["ath", "acr"] });
+/**
+ * Checks whose purpose alone says the skill: a theft, Sleight of Hand; first aid, Medicine; an escape, Athletics or
+ * Acrobatics (its better); a Search for one hidden (the core's seek), Perception.
+ */
+const PURPOSE_SKILLS = Object.freeze({ theft: ["slt"], firstAid: ["med"], escape: ["ath", "acr"], seek: ["prc"] });
 
 /**
  * What a check the engine asks for is made with, as dnd5e keys it: {skill} or {ability}, or null where it can't tell.
@@ -744,6 +746,9 @@ function concentrationSave(actor, action) {
   return !!said && items.some(i => takes(i) && i.name && (said === i.name || said.startsWith(`${i.name}: `)));
 }
 
+/** dnd5e's roll settings for the engine's net advantage (the core's API 24: above 0 advantage, below disadvantage). */
+const edgeOf = advantage => (Number(advantage) > 0 ? { advantage: true } : Number(advantage) < 0 ? { disadvantage: true } : {});
+
 /** A save's or a check's card: the token as its speaker, for the GMs only when secret. */
 function cardFor(token, secret) {
   const speaker = globalThis.ChatMessage?.implementation?.getSpeaker?.({ token });
@@ -769,7 +774,7 @@ function graded(rolls, dc, kind) {
  * played), so nothing here needs a GM's say. {degree, natural, total} (degreeOfSuccess); null where it can't be rolled
  * or read (the engine's own dice).
  */
-export async function rollDnd5eSave(token, { save, dc, action = null, secret = false } = {}) {
+export async function rollDnd5eSave(token, { save, dc, action = null, advantage = 0, secret = false } = {}) {
   const actor = token?.actor;
   const keys = asArray(save).filter(k => ABILITIES.includes(k));
   const target = dcOf(dc);
@@ -778,8 +783,8 @@ export async function rollDnd5eSave(token, { save, dc, action = null, secret = f
   const concentration = ability === "con" && typeof actor.rollConcentration === "function" && concentrationSave(actor, action);
   let rolls = null;
   try {
-    rolls = concentration ? await actor.rollConcentration({ target }, { configure: false }, cardFor(token, secret))
-      : await actor.rollSavingThrow({ ability, target }, { configure: false }, cardFor(token, secret));
+    rolls = concentration ? await actor.rollConcentration({ target, ...edgeOf(advantage) }, { configure: false }, cardFor(token, secret))
+      : await actor.rollSavingThrow({ ability, target, ...edgeOf(advantage) }, { configure: false }, cardFor(token, secret));
   } catch ( err ) {
     console.error(`fast-fighting-dnd5e | rolling a save`, err);
     return null;
@@ -794,7 +799,7 @@ export async function rollDnd5eSave(token, { save, dc, action = null, secret = f
  * Medicine, an escape's Athletics or Acrobatics). None it can't tell (null: the engine's own dice); none that needs a
  * GM's say. {degree, natural, total} (degreeOfSuccess), or null.
  */
-export async function rollDnd5eCheck(token, { purpose = null, skill = null, dc, action = null, secret = false } = {}) {
+export async function rollDnd5eCheck(token, { purpose = null, skill = null, dc, action = null, advantage = 0, secret = false } = {}) {
   const actor = token?.actor;
   const target = dcOf(dc);
   const check = actor && Number.isFinite(target) ? checkOf(actor, { purpose, skill, action }) : null;
@@ -802,7 +807,7 @@ export async function rollDnd5eCheck(token, { purpose = null, skill = null, dc, 
   if ( !check || typeof actor[roll] !== "function" ) return null;
   let rolls = null;
   try {
-    rolls = await actor[roll]({ ...check, target }, { configure: false }, cardFor(token, secret));
+    rolls = await actor[roll]({ ...check, target, ...edgeOf(advantage) }, { configure: false }, cardFor(token, secret));
   } catch ( err ) {
     console.error(`fast-fighting-dnd5e | rolling a check`, err);
     return null;
@@ -970,6 +975,15 @@ export class Dnd5eAdapter extends SystemAdapter {
     return dnd5eRules;
   }
 
+  /**
+   * The same rules for the planner's background workers (the core's API 22): rules.js and what it imports (holds.js,
+   * inside.js, words.js) touch nothing of Foundry's, and read no setting as they play (which rules the world plays
+   * travels on each spec: rulesVersion), so there's no data to give them.
+   */
+  workerRules() {
+    return { url: new URL("./rules.js", import.meta.url).href, exportName: "dnd5eRules" };
+  }
+
   canHandle(actor) {
     return !!actor && ["character", "npc"].includes(actor.type);
   }
@@ -1081,6 +1095,8 @@ export class Dnd5eAdapter extends SystemAdapter {
       creatureTraits: [creature],
       // (Whether it fights as an animal does: the core's behavior/animal.js. Never a character.)
       animalistic: actor.type !== "character" && isAnimalistic(sys.abilities?.int?.value, creature, speaksAtAll(sys.traits?.languages, languageNames())),
+      // (What it's like, on the core's hidden scale: traits.js aptitudesOf, from its ability modifiers. Core API 23.)
+      aptitudes: aptitudesOf({ abilities: Object.fromEntries(ABILITIES.map(a => [a, sys.abilities?.[a]?.mod ?? 0])), int: sys.abilities?.int?.value, creature }),
       // A halfling's Nimbleness: through the space of any creature larger than it (rules.passThrough), by identifier or
       // the flag its effect sets.
       throughLarger: hasFeature(features, "halfling-nimbleness", "halfling nimbleness") || !!actor.flags?.dnd5e?.halflingNimbleness || undefined,
@@ -2716,9 +2732,14 @@ export class Dnd5eAdapter extends SystemAdapter {
     return [...sheetConditionChoices(), ...super.conditionChoices()];
   }
 
-  /** A player's turn in a live battle, read from the cards dnd5e made for it (read-turn.js). */
+  /**
+   * A player's turn in a live battle, read from the cards dnd5e made for it (read-turn.js), with the death save tally
+   * its sheet has now, for a death save's words.
+   */
   readTurn(messages, context) {
-    return readDnd5eTurn(messages, context);
+    const id = context?.tokenId;
+    const token = id ? globalThis.canvas?.scene?.tokens?.get(id) ?? globalThis.game?.scenes?.find(s => s.tokens.has(id))?.tokens.get(id) : null;
+    return readDnd5eTurn(messages, { ...context, death: token?.actor?.system?.attributes?.death ?? null });
   }
 
   /** API 19: a player's damage or healing card, as it's made (read-turn.js damageCardOf). */

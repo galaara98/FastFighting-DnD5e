@@ -6,8 +6,8 @@
  * disadvantage, which cancel each other out. A creature at 0 HP makes death saves; three successes stabilize it,
  * three failures kill it, and taking damage while down counts as a failure (two on a critical).
  */
-import { DOWNED_MODELS, STATUS, rollD20, bestReactionStrike, dropCondition, part, areEnemies } from "./core.js";
-import { t } from "./words.js";
+import { DOWNED_MODELS, STATUS, rollD20, rollCheck, systemRolled, hiddenFrom, bestReactionStrike, dropCondition, part, areEnemies } from "./core.js";
+import { t, conditionName } from "./words.js";
 import { escapeFrom, bondsDC, breakFree, HOLD_COST } from "./holds.js";
 import { insideHolds, spitUp, outOfCorpse } from "./inside.js";
 
@@ -44,12 +44,18 @@ const BURNING_BOTHERS = 60;
 /** The DC to put out a fire on oneself, under the 2014 rules (the SRD 5.1's alchemist's fire). */
 const DOUSE_DC = 10;
 
-/** One try at putting out the fire on itself (rules.remedies): out, and Prone (2024); or a DC 10 Dexterity check (2014). */
+/**
+ * One try at putting out the fire on itself (rules.remedies): out, and Prone (2024); or a DC 10 Dexterity check (2014),
+ * in a live battle dnd5e's own (systemRolled, purpose "douse": a Dexterity check), else the engine's d20, shown in the
+ * chat as a table roll (the core's rollCheck).
+ */
 function douse(run, u) {
   if ( u.spec?.rulesVersion === "legacy" ) {
     const rules = run.prep.rules;
     const { bonus = 0, advantage = 0 } = rules.modifiers?.check?.({ unit: u }) ?? {};
-    const roll = rollD20(rules, run.rng, (Number(u.spec.escapeWork?.dex) || 0) + bonus, DOUSE_DC, { advantage, kind: "check" });
+    const label = conditionName("burning");
+    const rolled = systemRolled(run, u, "check", { dc: DOUSE_DC, purpose: "douse", skill: "dex", label, advantage });
+    const roll = rollCheck(rules, run.rng, (Number(u.spec.escapeWork?.dex) || 0) + bonus, DOUSE_DC, { advantage, kind: "check", by: u, rolled, label });
     if ( roll.degree < 2 ) return { success: false };
   } else u.prone = true;
   dropCondition(u, "burning");
@@ -75,7 +81,16 @@ const STORY_TYPES = { lightning: "electricity", thunder: "sonic", necrotic: "voi
 function surprise(run) {
   const hiders = run.units.filter(u => u.spec.hidden);
   if ( !hiders.length ) return null;
-  const stealth = new Map(hiders.map(h => [h, run.rng.die(20) + (Number(h.spec.initiative?.stealth) || 0)]));
+  // (Each one's Stealth: in a live battle a roll the table sees, the GMs' while it's unseen; against the best passive
+  // Perception it must beat.)
+  const stealth = new Map(hiders.map(h => {
+    const mod = Number(h.spec.initiative?.stealth) || 0;
+    const dc = Math.max(0, ...run.units.filter(o => o !== h && areEnemies(run, h, o)).map(o => 11 + (Number(o.spec.perception) || 0)));
+    const at = run.rng.mark?.();
+    const natural = run.rng.die(20);
+    if ( at !== undefined ) run.rng.record(at, { by: h, kind: "check", what: "stealth", mod, total: natural + mod, natural, dc });
+    return [h, natural + mod];
+  }));
   const caught = run.units.filter(o => {
     const against = hiders.filter(h => h !== o && areEnemies(run, h, o));
     return against.length && against.every(h => 10 + (Number(o.spec.perception) || 0) < stealth.get(h));
@@ -339,10 +354,15 @@ export const dnd5eRules = {
     }
   },
 
-  /** A death saving throw at the start of the turn: DC 10; a 20 brings you back with 1 HP, a 1 counts twice. */
+  /**
+   * A death saving throw at the start of the turn: DC 10; a 20 brings you back with 1 HP, a 1 counts twice. In a live
+   * battle a save the table sees (the core's table rolls).
+   */
   recoveryCheck(c, rng) {
     if ( c.status !== STATUS.DOWN || c.stable ) return null;
+    const at = rng.mark?.();
     const natural = rng.d20();
+    if ( at !== undefined ) rng.record(at, { by: c, kind: "save", what: "recovery", total: natural, natural, dc: 10, degree: natural === 20 ? 3 : natural >= 10 ? 2 : natural === 1 ? 0 : 1 });
     if ( natural === 20 ) {
       c.hp = 1;
       c.status = STATUS.STANDING;
@@ -368,6 +388,15 @@ export const dnd5eRules = {
     return { text: t(natural >= 10 ? "Death.Success" : "Death.Failure", { s: c.deathSuccesses ?? 0, f: c.deathFailures ?? 0 }), better: natural >= 10 };
   },
 
+  /**
+   * A player's death save, rolled at the table (the core's API 23): told from its card, which says how it went
+   * (read-turn.js deathSaveOf), never from the sheet alone. The tally the sheet keeps is successes and failures apart,
+   * so a success changes nothing the core reads (its dying value is the failures).
+   */
+  recoveryRead() {
+    return null;
+  },
+
   /** Stabilizing a dying creature: a DC 10 Wisdom (Medicine) check. */
   firstAidDC() {
     return 10;
@@ -381,9 +410,12 @@ export const dnd5eRules = {
     }
   },
 
-  /** Ongoing damage ends on a save in 5e; without one, give it even odds each turn. */
-  persistentFlatCheck(rng) {
-    return rng.d20() >= 11;
+  /** Ongoing damage ends on a save in 5e; without one, give it even odds each turn (in a live battle, a roll the table sees). */
+  persistentFlatCheck(rng, { unit = null } = {}) {
+    const at = rng.mark?.();
+    const natural = rng.d20();
+    if ( at !== undefined ) rng.record(at, { by: unit, kind: "flat", what: "persistentEnd", total: natural, natural, dc: 11, degree: natural >= 11 ? 2 : 1 });
+    return natural >= 11;
   },
 
   /* What's typical, by level or challenge rating --------------------------- */
@@ -410,8 +442,9 @@ export const dnd5eRules = {
      * its attacks have advantage, and attacks at it disadvantage. Its attack gives it away once rolled (afterRoll).
      */
     attack({ attacker, target, action, distance, positioning, alliesAdjacent, attackerEngaged }) {
-      let adv = HELPLESS.some(k => has(target, k)) || has(attacker, "hidden");
-      let dis = HAMPERED.some(k => has(attacker, k)) || !!attacker.prone || has(target, "hidden");
+      // (Hidden from the one it's at: unseen by it, unless that one found it with a Search since: the core's hiddenFrom.)
+      let adv = HELPLESS.some(k => has(target, k)) || hiddenFrom(target, attacker);
+      let dis = HAMPERED.some(k => has(attacker, k)) || !!attacker.prone || hiddenFrom(attacker, target);
       if ( target.prone ) {
         if ( action?.melee && (distance ?? 5) <= 5 ) adv = true;
         else dis = true;

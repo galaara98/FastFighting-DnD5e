@@ -222,7 +222,7 @@ describe("in a turn FastFighting plays: the system's roll", () => {
     // (The engine's own die would have failed it.)
     run.rng = dice(1);
     expect(breakFree(run, u, { key: "grabbed", dc: 13 }, { held: u })).toEqual({ success: true, degree: 2, natural: 4, mod: 6, total: 13, dc: 13 });
-    expect(asked(run)).toEqual([{ kind: "check", unitId: "a", targetId: "a", purpose: "escape", skill: "acr", against: null, dc: 13, action: { id: null, name: "grabbed" } }]);
+    expect(asked(run)).toEqual([{ kind: "check", unitId: "a", targetId: "a", purpose: "escape", skill: "acr", against: null, dc: 13, action: { id: null, name: "grabbed" }, advantage: 0 }]);
     const failed = live([u], { degree: 1, natural: 18, total: 12 }, dice(20));
     expect(breakFree(failed, u, { key: "grabbed", dc: 13 })).toMatchObject({ success: false, natural: 18, total: 12 });
   });

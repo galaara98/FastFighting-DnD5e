@@ -15,7 +15,7 @@ const CLASSES = Object.freeze({
   cleric: { enabler: 0.5, moralist: 0.2 },
   druid: { unmundane: 0.3, loreCollector: 0.2, enabler: 0.1 },
   fighter: { brawler: 0.3, tank: 0.2 },
-  monk: { speedRunner: 0.4 },
+  monk: { dps: 0.3, kiter: 0.2 },
   paladin: { tank: 0.4, martyr: 0.3, moralist: 0.2 },
   ranger: { wallflower: 0.4, relentless: 0.2 },
   rogue: { thief: 0.5, wallflower: 0.2 },

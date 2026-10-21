@@ -11,6 +11,7 @@
  * to apply at once or put before a GM.
  */
 import { tokenIdIn as tokenIdOf } from "./core.js";
+import { t } from "./words.js";
 
 /** A skill rolled at someone that is words, and which (dnd5e skill ids). */
 const TALK = { per: "persuade", itm: "intimidate", dec: "deceive" };
@@ -111,14 +112,42 @@ export function damageCardOf(m) {
 }
 
 /**
+ * A death saving throw's card (dnd5e 6: a save message of type "death", its outcome written on it once dnd5e has
+ * applied it: "revive" a natural 20, "stable" a third success, "death" a third failure): {success, outcome}, or null.
+ */
+export function deathSaveOf(m) {
+  if ( m?.type !== "save" || m.system?.type !== "death" ) return null;
+  const roll = m.rolls?.[0];
+  if ( !roll || !Number.isFinite(Number(roll.total)) ) return null;
+  return { success: Number(roll.total) >= Number(roll.options?.target ?? 10), outcome: m.system.outcome ?? null };
+}
+
+/** What a death save came to, as the core's recovery event has it (API 23), its words the engine's own. */
+function recoveryFrom(save, tally) {
+  const outcome = save.outcome;
+  const words = outcome === "revive" ? t("Death.Twenty") : outcome === "stable" ? t("Death.Stable") : outcome === "death" ? t("Death.Dies")
+    : t(save.success ? "Death.Success" : "Death.Failure", { s: tally?.success ?? 0, f: tally?.failure ?? 0 });
+  return {
+    type: "recovery", better: outcome !== "death" && (save.success || outcome === "revive"), text: words, sure: true,
+    ...(outcome === "revive" ? { revived: true } : {}), ...(outcome === "stable" ? { stable: true } : {})
+  };
+}
+
+/**
  * @param {ChatMessage[]} messages  the cards made during the turn, oldest first
  * @param {object} context          {tokenId, ids: {tokenId: battle id}}
  * @returns {object[]} engine log events, each with `sure`
  */
-export function readDnd5eTurn(messages, { tokenId, ids = {} } = {}) {
+export function readDnd5eTurn(messages, { tokenId, ids = {}, death = null } = {}) {
   const events = [];
   for ( const m of messages ) {
     if ( m.speaker?.token !== tokenId ) continue;
+    // (Its own death save: what it came to, for the story; the tally the sheet has now, `death`, for the GMs' words.)
+    const saved = deathSaveOf(m);
+    if ( saved ) {
+      events.push(recoveryFrom(saved, death));
+      continue;
+    }
     const card = cardOf(m);
     if ( !card ) continue;
     const roll = m.rolls?.[0] ?? null;

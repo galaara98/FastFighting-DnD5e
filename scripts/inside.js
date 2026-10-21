@@ -14,8 +14,8 @@
  *    carries: the core's holds.js, and holds.js here).
  * Pure: no Foundry globals.
  */
-import { rollD20, dropCondition, listJoin, holderOf } from "./core.js";
-import { t } from "./words.js";
+import { rollCheck, systemRolled, dropCondition, listJoin, holderOf } from "./core.js";
+import { t, conditionName } from "./words.js";
 
 /** The core's conditions for being inside another creature. */
 export const INSIDE_KEYS = Object.freeze(["swallowed", "engulfed"]);
@@ -58,7 +58,10 @@ export function spitUp(run, holder, amount, rng, by = null) {
   const type = [].concat(spit.save.type)[0] ?? "con";
   const m = rules.modifiers?.save?.({ unit: holder, type }) ?? {};
   const mod = (Number(holder.spec.defenses?.[type]) || 0) + (m.bonus ?? 0);
-  const roll = rollD20(rules, rng ?? run.rng, mod, spit.save.dc, { advantage: m.advantage ?? 0, kind: "save" });
+  // (In a live battle dnd5e's own save, its card in the chat; else the engine's d20, shown there as a table roll.)
+  const label = conditionName(INSIDE_KEYS[0]);
+  const rolled = systemRolled(run, holder, "save", { dc: spit.save.dc, save: type, label, advantage: m.advantage ?? 0 });
+  const roll = rollCheck(rules, rng ?? run.rng, mod, spit.save.dc, { advantage: m.advantage ?? 0, kind: "save", by: holder, rolled, label });
   const held = run.units.filter(o => o !== holder && holderOf(run, o) === holder);
   const data = { names: listJoin(held.map(o => o.spec.name)), total: roll.total, dc: spit.save.dc };
   if ( roll.degree >= 2 ) return { text: t("KeepsDown", data) };

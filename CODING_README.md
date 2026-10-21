@@ -15,7 +15,12 @@ How this helper teaches FastFighting Core the dnd5e system. For what it does at 
 
 ### The core's API version
 
-The core's API version is `major.bug`: `api.version` is `"19.0"`, `api.major` 19, `api.bug` 0. The helper decides whether it works with a core; the core never refuses it. `KNOWN_API` in `main.js` lists the API majors this helper is known to work with, now `[19]`.
+The core's API version is `major.bug`: `api.version` is `"24.0"`, `api.major` 24, `api.bug` 0. The helper decides whether it works with a core; the core never refuses it. `KNOWN_API` in `main.js` lists the API majors this helper is known to work with, now `[24]`. What it takes up of the APIs since 19:
+
+- **22:** `workerRules()` gives the planner's background workers `rules.js` and its `dnd5eRules`, no data: the rules and what they import (`holds.js`, `inside.js`, `words.js`) touch nothing of Foundry's, and which rules the world plays travels on each spec (`rulesVersion`). `tests/workers-5e.test.js` plays batches on real threads (`tests/fixtures/batch-thread.js`).
+- **23:** `spec.aptitudes` from the ability modifiers (`traits.js` `aptitudesOf`: −3 or lower 0, −2 to −1 1, +0 to +2 2, +3 to +4 3, +5 or higher 4; the mindless smart 0). A player's death save is told from its card (`read-turn.js` `deathSaveOf`: a `save` message of type `death`, its `outcome` revive, stable or death; a `recovery` event with the tally the sheet has now for its words), never from the sheet alone (`rules.recoveryRead` null: the sheet keeps successes and failures apart, and the core's dying value is the failures).
+- **24:** the engine's advantage on dnd5e's own saves and checks (`rollDnd5eSave`, `rollDnd5eCheck`: `advantage: true` or `disadvantage: true`, `edgeOf`), as `rollDnd5eStrike` already took it.
+- **20:** hidden from one creature at a time (core-api `hiddenFrom`: one that found it with a Search sees it, `modifiers.attack`); a Search is a Perception check (`PURPOSE_SKILLS.seek`). The dice the rules roll themselves are table rolls a live battle shows (the core's recording rng, `rng.mark` and `rng.record`, or its `rollCheck`): a death save (a save against 10), persistent damage's end (DC 11), a hider's Stealth (against the best passive Perception + 1), putting out a fire under the 2014 rules (a Dexterity check, dnd5e's own where it makes checks: purpose `douse`), an escape, the holder's save to keep down what it swallowed (dnd5e's own where it makes saves).
 
 - Below the oldest major listed, it doesn't register, and tells the GM the core is too old (`FFDND5E.CoreTooOld`).
 - On any other major it isn't known to work with, it registers, and warns the GM once that it hasn't been tried with that core (`FFDND5E.CoreUntested`).
@@ -171,10 +176,10 @@ Everything is read from the item's English (`englishDescription`: what Babele ke
 | `conditionHarm`, `conditionProfile`, `remedies` | burning 1d4 fire (or `spec.burns`) at turn start; corroding from `spec.lingering`, no remedy; swallowed or engulfed: `spec.inside.harm` at turn start, no core mods; dousing (`dnd5e:burning`) |
 | `holds`, `afterHarm`, `letGo` | `inside.js`: no way out of a gullet; brought up after `spit.after` damage and a failed save; out of a corpse Prone |
 | `degreeOfSuccess`, `roll`, `attackPenalty`, `saveMultiplier`, `critical`, `applyIwr` | 20 crits and 1 misses (attacks only), else meet the DC; half on a save unless `basic: false`; dice doubled; immunity, resistance halves (down), vulnerability doubles |
-| `initUnit`, `onDropped`, `adjustRoll`, `onHealed`, `recoveryCheck`, `firstAidDC`, `firstAid`, `knockOut`, `capture` | death saves; Relentless Endurance as a save that spends its pool; DC 10 Medicine |
-| `persistentFlatCheck` | even odds |
+| `initUnit`, `onDropped`, `adjustRoll`, `onHealed`, `recoveryCheck`, `recoveryRead`, `firstAidDC`, `firstAid`, `knockOut`, `capture` | death saves (a player's told from its card: `recoveryRead` null); Relentless Endurance as a save that spends its pool; DC 10 Medicine |
+| `persistentFlatCheck` | even odds (a d20 against 11, shown in a live battle) |
 | `typical` | AC 12 + prof, save prof + 1, skill prof + 2, DC 10 + prof |
-| `modifiers.{exposed, defense, attack, save, check, steal, actionsLost}` | advantage, disadvantage (hidden: both ways), cover, exhaustion (−2 a level), auto-failed Strength and Dexterity saves, Contagion's `weakSave` |
+| `modifiers.{exposed, defense, attack, save, check, steal, actionsLost}` | advantage, disadvantage (hidden from the one it's at, the core's `hiddenFrom`: both ways), cover, exhaustion (−2 a level), auto-failed Strength and Dexterity saves, Contagion's `weakSave` |
 | `isImmune`, `conditionWishes`, `conditionWeight`, `conditionMods` | immune to every condition an action lays (aliases: incapacitated → unconscious, immobilized → restrained, controlled → charmed), and size limits; Frightened: `avoid` its source at 60; hidden and prone mods |
 | `usable`, `afterRoll`, `pullsBlow`, `storyDamageType` | no Hide beside a foe, `grappledOnly`; hidden ends on an attack, after its roll; any melee blow can knock out; lightning → electricity, thunder → sonic, necrotic → void, psychic → mental |
 

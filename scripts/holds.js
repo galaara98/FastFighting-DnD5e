@@ -14,7 +14,7 @@
  *    unties them with no roll.
  * Each try is an action, and so is freeing a friend (2024: the Utilize action).
  */
-import { STATUS, rollD20, edgeDistance, systemRolled } from "./core.js";
+import { STATUS, rollCheck, edgeDistance, systemRolled } from "./core.js";
 
 /** Rope, the SRD's: what it takes to get out of it (2024), or to burst it. */
 export const ROPE = Object.freeze({ modern: Object.freeze({ escape: 15, burst: 20 }), legacy: Object.freeze({ burst: 17 }) });
@@ -179,7 +179,8 @@ export function breakFree(run, who, hold, { freeing = false, held = null } = {})
   const { bonus = 0, advantage = 0 } = rules.modifiers?.check?.({ unit: who }) ?? {};
   const mod = way.mod + bonus;
   // (The system's roll taken as it came out, as the core's rollCheck takes `rolled`.)
-  const rolled = systemRolled(run, who, "check", { dc: way.dc, target: held, purpose: "escape", skill: way.check ?? null, label: hold.key });
-  const roll = rolled ? { natural: rolled.natural ?? null, total: rolled.total ?? null, degree: rolled.degree } : rollD20(rules, run.rng, mod, way.dc, { advantage, kind: "check" });
+  // (Else the engine's d20, shown in a live battle as the table roll it is: the core's rollCheck records it.)
+  const rolled = systemRolled(run, who, "check", { dc: way.dc, target: held, purpose: "escape", skill: way.check ?? null, label: hold.key, advantage });
+  const roll = rollCheck(rules, run.rng, mod, way.dc, { advantage, kind: "check", by: who, target: held, rolled, label: hold.key });
   return { success: roll.degree >= 2, degree: roll.degree, natural: roll.natural, mod, total: roll.total, dc: way.dc };
 }
