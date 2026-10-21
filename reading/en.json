@@ -1,5 +1,28 @@
 {
   "$comment": "How FastFighting D&D 5e reads dnd5e's own English text where an item's data says nothing, in both the 2014 (SRD 5.1) and 2024 (SRD 5.2) wordings. Patterns are regular expressions over the text, lower case. A translation is a copy of this file named for its language (es.json), read before this one. See CODING_README.md.",
+  "abilities": {
+    "str": { "pattern": "\\bstrength\\b" },
+    "dex": { "pattern": "\\bdexterity\\b" },
+    "con": { "pattern": "\\bconstitution\\b" },
+    "int": { "pattern": "\\bintelligence\\b" },
+    "wis": { "pattern": "\\bwisdom\\b" },
+    "cha": { "pattern": "\\bcharisma\\b" }
+  },
+  "damageTypes": {
+    "acid": { "pattern": "^acid$" },
+    "bludgeoning": { "pattern": "^bludgeoning$" },
+    "cold": { "pattern": "^cold$" },
+    "fire": { "pattern": "^fire$" },
+    "force": { "pattern": "^force$" },
+    "lightning": { "pattern": "^lightning$" },
+    "necrotic": { "pattern": "^necrotic$" },
+    "piercing": { "pattern": "^piercing$" },
+    "poison": { "pattern": "^poison$" },
+    "psychic": { "pattern": "^psychic$" },
+    "radiant": { "pattern": "^radiant$" },
+    "slashing": { "pattern": "^slashing$" },
+    "thunder": { "pattern": "^thunder$" }
+  },
   "auras": {
     "turnStart": { "pattern": "\\b(?:starts?|starting|begins?) (?:its|their|your) turn\\b" },
     "enter": { "pattern": "\\b(?:enters?|entering) (?:the|that|its|an?)\\b[^.]*\\b(?:area|emanation|aura|range)\\b|\\bfor the first time on a turn\\b" },
@@ -19,14 +42,6 @@
     "skip": { "pattern": "\\bdeath saving throws?\\b|\\bconcentration\\b|\\b(?:cast|created|made) by\\b|\\bturns? undead\\b" },
     "saves": { "pattern": "\\bsaving throws?\\b" },
     "notSave": { "pattern": "\\b(?:checks?|rolls?)\\b" },
-    "abilities": {
-      "str": { "pattern": "\\bstrength\\b" },
-      "dex": { "pattern": "\\bdexterity\\b" },
-      "con": { "pattern": "\\bconstitution\\b" },
-      "int": { "pattern": "\\bintelligence\\b" },
-      "wis": { "pattern": "\\bwisdom\\b" },
-      "cha": { "pattern": "\\bcharisma\\b" }
-    },
     "examples": { "pattern": "\\b(?:such as|like|including|for example)\\b" },
     "any": { "pattern": "\\beffects? (?:that )?(?:you|it|they) can see\\b" },
     "tags": {
@@ -43,6 +58,35 @@
       "inflicts:unconscious": { "pattern": "\\bunconscious\\b" },
       "inflicts:restrained": { "pattern": "\\brestrained\\b" },
       "inflicts:petrified": { "pattern": "\\bpetrified\\b" }
+    }
+  },
+  "reactions": {
+    "trigger": { "pattern": "\\btrigger\\s*:" },
+    "response": { "pattern": "\\bresponse\\s*(?::|—|-)" },
+    "useReaction": { "pattern": "\\b(?:can )?(?:use|take)s? (?:your|its|their|a) reaction(?: to)?\\b" },
+    "opportunity": { "pattern": "\\bprovokes? an opportunity attack from (?:you|it) when (?:they|it)\\b" },
+    "near": { "pattern": "\\bwithin (?<feet>\\d+) (?:feet|ft\\.?)" },
+    "moments": [
+      { "on": "allyHit", "pattern": "\\bhits (?:another creature|an ally|a (?:target|creature),? other than (?:you|it|itself))\\b" },
+      { "on": "allyTargeted", "pattern": "\\b(?:attacks|makes an attack(?: roll)? against|targets) (?:a target|a creature|an ally|someone) other than (?:you|it|itself)\\b" },
+      { "on": "attacked", "pattern": "\\bhits or misses (?:you|it)\\b|\\bmakes an attack(?: roll)? against (?:you|it|itself)\\b|\\btargets (?:you|it) with an attack\\b" },
+      { "on": "hit", "pattern": "\\bhit by an? (?:(?<melee>melee) |(?<ranged>ranged) )?(?:weapon )?attack\\b|\\ban attack(?: roll)? hits\\b|\\bhits (?:you|it) with an? (?:(?<melee2>melee) |(?<ranged2>ranged) )?(?:weapon )?attack\\b" },
+      { "on": "missed", "pattern": "\\bmisses (?:you|it) with an? (?:(?<melee>melee) |(?<ranged>ranged) )?(?:weapon )?attack\\b" },
+      { "on": "foeCasts", "pattern": "\\bcasts a spell\\b" },
+      { "on": "foeApproaches", "pattern": "\\b(?:enters?|moves? into|comes? within) (?:your|its|the) reach\\b" },
+      { "on": "damaged", "pattern": "\\btakes? damage\\b|\\bdamages (?:you|it)\\b|\\bdeals damage to (?:you|it)\\b" },
+      { "on": ["attacked", "allyTargeted"], "pattern": "\\bmakes an attack roll\\b(?! against)" }
+    ],
+    "effects": {
+      "only": { "pattern": "^(?:if|when|whenever|unless|until|after|on a (?:hit|miss|failure|success|failed save|successful save))\\b" },
+      "unclear": { "pattern": "\\b(?:choos(?:e|es|ing)|chose|choice|instead|rather than|random(?:ly)?|redirects?|swaps?|teleports?|rerolls?|repeat|illusion|summons?|cast)\\b" },
+      "ac": { "pattern": "\\badds? (?:(?<ac>\\d+) |(?<prof>(?:your|its|their) proficiency bonus) )?to (?:its|your|their) (?:ac|armor class)\\b" },
+      "disadvantage": { "pattern": "\\bimpose disadvantage on (?:the|that) attack roll\\b" },
+      "strike": { "pattern": "\\bmakes? (?:a|one) (?:[a-z]+ )?(?:weapon )?attack(?: roll)? against (?:that|the triggering|the attacking) (?:creature|attacker|target)\\b|\\bmakes? (?:a|one) (?:[a-z]+ )?(?:weapon )?attack(?: roll)? against (?:it|them|a creature that)\\b|\\battack that creature\\b" },
+      "halve": { "pattern": "\\bhalves? (?:the|that) (?:attack.s )?damage\\b" },
+      "harm": { "pattern": "\\bdeals? (?<n>\\d*)d(?<faces>\\d+)(?: ?\\+ ?(?<flat>\\d+))? (?<type>[a-z]+) damage to (?:that|the triggering|the attacking) (?:creature|attacker)\\b" },
+      "reduce": { "pattern": "\\breduces? (?:the|that|its) (?:total )?damage (?:(?:it|you|the target|the creature) takes?|dealt to (?:it|you|the target|the creature))(?: from (?:the|that) attack)? by (?<n>\\d*)d(?<faces>\\d+)(?: ?(?:\\+|plus) ?(?:your|its) (?<add>[a-z]+(?: [a-z]+)?))?" },
+      "proficiency": { "pattern": "\\bproficiency\\b" }
     }
   }
 }

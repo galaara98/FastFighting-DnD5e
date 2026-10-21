@@ -6,11 +6,11 @@
  *   - A passive feature's words, where no effect of its own says so (the 2014 features, a monster's traits): "has
  *     advantage on saving throws against spells and other magical effects" (Magic Resistance), "against being charmed"
  *     (Fey Ancestry), "Strength and Dexterity saving throws made against effects that would knock it prone"
- *     (Sure-Footed). Which saves, and against what, by the reading words' "saveVs" section (reading/<lang>.json): an
- *     ability's name before "saving throws" picks its saves, and what follows names the effects (the engine's tags:
- *     "magical", "inflicts:<condition>", "damage:<type>"). One said only while something holds ("while raging",
- *     "unless incapacitated"), one for others (allies in an aura), and one against something the engine doesn't tell
- *     apart (Concentration, death saves, turning undead) are left to the table.
+ *     (Sure-Footed). Which saves, and against what, by the reading words' "saveVs" and "abilities" sections
+ *     (reading/<lang>.json): an ability's name before "saving throws" picks its saves, and what follows names the
+ *     effects (the engine's tags: "magical", "inflicts:<condition>", "damage:<type>"). One said only while something
+ *     holds ("while raging", "unless incapacitated"), one for others (allies in an aura), and one against something the
+ *     engine doesn't tell apart (Concentration, death saves, turning undead) are left to the table.
  * Actions carry "damage:<type>" for the damage they deal (damageTags), which a save against poison goes by.
  * Pure: plain values in, the core's saveVs entries out.
  */
@@ -43,8 +43,9 @@ export function sheetSaveVs(modes = {}) {
  * The saves one sentence's "advantage on ... saving throws ..." gives (an entry of spec.saveVs), or null.
  * @param {string} sentence
  * @param {object} words      the reading words' "saveVs" section
+ * @param {object} names      the reading words' "abilities" (each ability's name)
  */
-function fromSentence(sentence, words) {
+function fromSentence(sentence, words, names) {
   const advantage = patternOf(words.advantage);
   const m = advantage ? advantage.exec(sentence) : null;
   if ( !m ) return null;
@@ -60,7 +61,7 @@ function fromSentence(sentence, words) {
   let named = clause.slice(0, saves.index);
   const notSave = patternOf(words.notSave, "gi");
   if ( notSave ) for ( const n of named.matchAll(notSave) ) named = clause.slice(n.index + n[0].length, saves.index);
-  const abilities = ABILITIES.filter(a => patternOf(words.abilities?.[a])?.test(named));
+  const abilities = ABILITIES.filter(a => patternOf(names?.[a])?.test(named));
   // Against what: the engine's tags its words name (not its examples: "such as traps and spells").
   let against = clause.slice(saves.index + saves[0].length);
   const example = patternOf(words.examples)?.exec(against);
@@ -74,12 +75,12 @@ function fromSentence(sentence, words) {
 /**
  * What a passive feature's words give its saves: spec.saveVs entries (none where they say nothing the engine plays).
  * @param {string} text        its words, as plain text
- * @param {object} [words]     the reading words' "saveVs" section (reading.js, by default)
+ * @param {object} [words]     the reading words (reading.js, by default): their "saveVs" and "abilities"
  */
-export function saveVsFromWords(text, words = currentReading().saveVs ?? {}) {
+export function saveVsFromWords(text, words = currentReading()) {
   const out = [];
   for ( const sentence of String(text ?? "").replace(/\s+/g, " ").split(/(?<=[.!?])\s+/) ) {
-    const entry = fromSentence(sentence, words);
+    const entry = fromSentence(sentence, words.saveVs ?? {}, words.abilities ?? {});
     if ( entry ) out.push(entry);
   }
   return out;

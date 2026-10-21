@@ -47,6 +47,7 @@ When new functionality can't be played "close enough" with what the core already
 | `auras.js` | A passive save activity whose words say when it goes off (a ghast's Stench) into the core's `spec.auras`. Pure. |
 | `save-vs.js` | The sheet's save roll modes and a passive feature's "advantage on ... saving throws against ..." into the core's `spec.saveVs`; `damageTags`. Pure. |
 | `reading.js` | The reading files (`reading/<lang>.json`): loaded at startup, merged, `currentReading()`. |
+| `reactions-read.js` | A feature's reaction from its words (2024's Trigger and Response, "you can use your reaction to", an activity's condition) into the core's reactions: its moment and filters, a bonus to AC, a strike back, a halved or reduced blow, damage dealt back. Pure. |
 | `multiattack.js` | A Multiattack description into strike sequences. Pure. |
 | `traits.js` | Personality traits and flags; `isMindless`, and `isAnimalistic` (the core's `spec.animalistic`: a beast that doesn't speak, else Intelligence 11 or less with no language; never a mindless one or a character). Pure. |
 | `auto.js` | Playstyle hints, "Let this character decide" answers, biography, languages. Pure. |
@@ -124,7 +125,7 @@ dnd5e's `system.identifier` is the same in every book, edition of the SRD and la
 | Creatures | `multiattack`, `pack-tactics`, `nimble-escape`, `halfling-nimbleness`, `ooze-cube` | `#actions`, `toCombatantSpec`, `traits.js`, `#inside` |
 | Unarmed | `unarmed-strike` (or an attack classified `unarmed`) | `unarmedStrike` |
 | Swallowing | `swallow` → swallowed, `engulf` → engulfed (`INSIDE`); else an effect with `coverTotal` and Restrained is a swallow; 2014's bite by `bite` | `#inside` |
-| Reactions | `shield`, `counterspell`, `hellish-rebuke`, `uncanny-dodge`, `deflect-attacks`, `deflect-missiles`, `parry`, `riposte`, `death-burst`, `protection`, `fighting-style-protection` | `#reactions` |
+| Reactions | `shield`, `counterspell`, `hellish-rebuke`, `uncanny-dodge`, `deflect-attacks`, `deflect-missiles`, `parry` and `riposte` (with superiority dice), `death-burst`, `protection`, `fighting-style-protection`; any other feature's from its words (`reactionsFromWords`: a creature's Parry, Retaliation ...) | `#reactions` |
 | Riders on a hit | `ON_HIT`: the smites, `eldritch-smite`, `stunning-strike`, the Battle Master maneuvers (`precision-attack`: a die on a miss); their pool `combat-superiority`, `superiority-dice` | `riders.js`, `#onHit` |
 | Pushes | `FORCED_MOVES`: `thunderwave`, `gust-of-wind`, `thunderous-smite`, `repelling-blast` (lends to `eldritch-blast`), `whirlwind`, `repulsion-breath`, `cold-gale`, `hammer-throw`, `forceful-hand`, `deadly-leap` | `#forced` |
 | Not creatures | `NOT_CREATURES`: `spiritual-weapon`, `flaming-sphere`, `arcane-sword`, `mordenkainens-sword`, `bigbys-hand`, `arcane-hand` | `#summonFrom` |
@@ -164,7 +165,7 @@ Everything is read from the item's English (`englishDescription`: what Babele ke
 
 ### The reading files
 
-`reading/en.json` holds the English words `auras.js` and `save-vs.js` read by, as regular expressions (case-insensitive), in sections: `auras` (when it goes off, immunity, the sense it takes, a failure lasting to the next turn) and `saveVs` (the advantage, its saves, what's skipped, `abilities`, and `tags`: a pattern per engine tag, `magical`, `inflicts:<condition>`, `damage:<type>`). A translation is a copy named for its language (`es.json`); `mergeReading` merges it in all the way down, a word in both becoming either pattern. `toCombatantSpec` waits for them (`reading()`); tests get `reading/en.json` (`tests/setup.js`).
+`reading/en.json` holds the English words `auras.js` and `save-vs.js` read by, as regular expressions (case-insensitive), in sections: `abilities` (each ability's name), `damageTypes` (each damage type's word), `auras` (when it goes off, immunity, the sense it takes, a failure lasting to the next turn), `saveVs` (the advantage, its saves, what's skipped, and `tags`: a pattern per engine tag, `magical`, `inflicts:<condition>`, `damage:<type>`) and `reactions` (the Trigger and Response labels, "use its reaction", `moments`: a pattern per core moment, with `melee`/`ranged` groups, and `effects`: `only` and `unclear` sentences, `ac`, `strike`, `halve`, `reduce`, `harm`). `filledLookups` fills dnd5e's `[[lookup @path]]` from the activity (or the item, or the actor's roll data) before a reader sees the words. A translation is a copy named for its language (`es.json`); `mergeReading` merges it in all the way down, a word in both becoming either pattern. `toCombatantSpec` waits for them (`reading()`); tests get `reading/en.json` (`tests/setup.js`).
 
 ### Effects
 

@@ -20,6 +20,7 @@ import { loreBoost } from "./lore.js";
 import { escapeWords, grabEscapeDC } from "./holds.js";
 import { auraOf, isAuraActivity, PASSIVE_ACTIVATIONS } from "./auras.js";
 import { sheetSaveVs, saveVsFromWords, damageTags } from "./save-vs.js";
+import { reactionsFromWords } from "./reactions-read.js";
 import { reading } from "./reading.js";
 import { t, skillName, conditionName, statusName, coin, languageNames, inSentence, playersOf } from "./words.js";
 
@@ -506,6 +507,21 @@ export function plainText(html, actor = null, english = false) {
     .replace(/\[\[[^\]]*\]\](?:\{([^}]*)\})?/g, (m, label) => label ?? "")
     .replace(/@\w+\[[^\]]*\](?:\{([^}]*)\})?/g, (m, label) => label ?? "")
     .replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * dnd5e's [[lookup @path]] enrichers in an item's words, filled in from the activity they name (or the one given, or
+ * the item for @item.*): its condition, its roll's formula, its DC, its area's size; else from the creature's roll data
+ * (@prof). The creature's own name (@name) is plainText's to put.
+ */
+export function filledLookups(html, item, activity = null, rollData = null) {
+  const at = (from, path) => path.split(".").reduce((o, k) => (o === null || o === undefined ? undefined : o[k]), from);
+  return String(html ?? "").replace(/\[\[lookup @([\w.]+)([^\]]*)\]\](?:\{[^}]*\})?/gi, (m, path, rest) => {
+    if ( path === "name" ) return m;
+    const id = /\bactivity=([\w-]+)/.exec(rest)?.[1];
+    const value = path.startsWith("item.") ? at(item, path.slice(5)) : at((id && item?.system?.activities?.get?.(id)) || activity, path) ?? at(rollData, path);
+    return typeof value === "string" || typeof value === "number" ? String(value) : m;
+  });
 }
 
 /**
@@ -1518,7 +1534,7 @@ export class Dnd5eAdapter extends SystemAdapter {
         const save = { type: saveAbility(activity, "con"), dc: Number(activity.save?.dc?.value) };
         const aura = auraOf({
           id: `${item.id}.${activity.id}`, key: identOf(item) || item.id, name: item.name, activity, dc: save.dc,
-          text: plainText(`${activity.activation?.condition ?? ""} ${englishDescription(item)}`, actor, true),
+          text: plainText(filledLookups(`${activity.activation?.condition ?? ""} ${englishDescription(item)}`, item, activity), actor, true),
           failure: this.#outcome(this.#effects(item, activity, { words: true }), save), damage: this.#parts(activity)
         });
         if ( aura ) out.push({ ...aura, ...(item.system.properties?.has?.("mgc") ? { magical: true } : {}) });
@@ -1715,9 +1731,9 @@ export class Dnd5eAdapter extends SystemAdapter {
       if ( id === "uncanny-dodge" ) out.push({ id: `${actor.id}.${item.id}`, label: item.name, on: "hit", halve: true, applies: "halve" });
       else if ( id === "deflect-attacks" || id === "deflect-missiles" ) {
         out.push({ id: `${actor.id}.${item.id}`, label: item.name, on: "hit", reduce: part([{ n: 1, faces: 10 }], dex + level, "untyped"), physical: true, ranged: id === "deflect-missiles" || undefined });
-      } else if ( id === "parry" || id === "riposte" ) {
+      } else if ( (id === "parry" || id === "riposte") && this.#usesItem(actor, item, null, "trip-attack") ) {
+        // (A Battle Master's: a superiority die. A creature's own Parry is read from its words, below.)
         const sup = this.#usesItem(actor, item, null, "trip-attack");
-        if ( !sup ) continue;
         const key = `feature:${sup.id}`;
         resources[key] ??= Math.max(0, (Number(sup.system.uses?.max) || 0) - (Number(sup.system.uses?.spent) || 0));
         const die = this.#superiorityDie(actor);
@@ -1735,6 +1751,22 @@ export class Dnd5eAdapter extends SystemAdapter {
         // off the roll, as a bonus to the friend's AC against it).
         if ( !actor.items.some(i => i.system?.type?.value === "shield" && i.system?.equipped) ) continue;
         out.push({ id: `${actor.id}.${item.id}`, label: item.name, on: "allyTargeted", range: 5, ac: 5 });
+      } else {
+        // Any other: from its words (reactions-read.js), a creature's Parry, a Retaliation and the like; with its
+        // uses, where it has any.
+        const act = activities.find(a => a.activation?.type === "reaction") ?? null;
+        const max = Number(item.system.uses?.max) || 0;
+        const uses = max ? { uses: Math.max(0, max - (Number(item.system.uses?.spent) || 0)) } : {};
+        const data = actor.getRollData?.() ?? {};
+        const read = reactionsFromWords({
+          id: `${actor.id}.${item.id}`, label: item.name,
+          text: plainText(filledLookups(englishDescription(item), item, act, data), actor, true),
+          condition: act ? plainText(filledLookups(act.activation?.condition, item, act, data), actor, true) : "",
+          // (Its roll's formula, with the creature's numbers: 2024's "@prof" to its AC.)
+          formula: act?.roll?.formula ? summonNumber(act.roll.formula, data, 0) : null, prof: Number(actor.system.attributes?.prof) || proficiency(level),
+          mods: Object.fromEntries(ABILITIES.map(a => [a, Number(actor.system.abilities?.[a]?.mod) || 0]))
+        });
+        for ( const r of read ) out.push({ ...r, ...uses });
       }
     }
     return out.length ? out : null;
