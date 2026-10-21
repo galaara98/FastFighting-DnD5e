@@ -35,6 +35,15 @@ const MODES = ["walk", "fly", "swim", "climb", "burrow"];
 const PHYSICAL = new Set(["weapon", "equipment", "consumable", "tool", "loot"]);
 /** The item properties that say what a thing is made of (adamantine, silvered). */
 const MATERIALS = ["ada", "sil"];
+/** What a blow from an item is, for what its target's traits let through (rules.applyIwr): magical, adamantine, silvered. */
+const STRUCK = ["ada", "mgc", "sil"];
+export const struckWith = item => {
+  const own = STRUCK.filter(p => item?.system?.properties?.has?.(p));
+  if ( Number(item?.system?.magicalBonus) > 0 && !own.includes("mgc") ) own.push("mgc");
+  return own;
+};
+/** The kinds of armor (an equipment's type), not a shield, clothing or a trinket. */
+const ARMOR = new Set(["light", "medium", "heavy", "natural"]);
 
 /** Creature sizes, smallest first (dnd5e and PF2e use the same keys). */
 const SIZES = ["tiny", "sm", "med", "lg", "huge", "grg"];
@@ -1020,6 +1029,16 @@ export class Dnd5eAdapter extends SystemAdapter {
     const resources = { ...hits.pools };
     for ( const a of actions ) if ( a.resource && a.pool !== undefined ) resources[a.resource] = a.pool;
     for ( const a of actions ) delete a.pool;
+    // (Its arrows and bolts, each kind a pool its bows or crossbows shoot from.)
+    const ammoNames = {};
+    for ( const a of actions ) {
+      if ( a.ammoPool ) {
+        resources[a.ammo] = a.ammoPool.count;
+        ammoNames[a.ammo] = a.ammoPool.name;
+      }
+      delete a.ammoPool;
+      for ( const s of a.sequence ?? [] ) delete s.ammoPool;
+    }
     // (The damage it deals, as a tag a save against it goes by: Dwarven Resilience's against poison.)
     for ( const a of actions ) {
       const tags = damageTags(a).filter(tag => !(a.traits ?? []).includes(tag));
@@ -1053,9 +1072,11 @@ export class Dnd5eAdapter extends SystemAdapter {
       initiative: { mod: sys.attributes?.init?.total ?? sys.attributes?.init?.mod ?? 0, stealth: skillMod("ste") ?? 0 },
       speeds,
       actions,
-      iwr: this.#iwr(sys),
+      iwr: this.#iwr(actor),
+      // (Adamantine armor: a critical hit on it is a normal hit, rules.critImmune.)
+      critImmune: actor.items.some(i => i.type === "equipment" && ARMOR.has(i.system.type?.value) && (actor.type !== "character" || i.system.equipped) && i.system.properties?.has?.("ada")) || undefined,
       resources,
-      resourceNames: Object.keys(hits.names).length ? hits.names : undefined,
+      resourceNames: Object.keys(hits.names).length || Object.keys(ammoNames).length ? { ...hits.names, ...ammoNames } : undefined,
       riders: hits.riders.length ? hits.riders : undefined,
       reactions: this.#reactions(actor, level, resources) ?? undefined,
       legendary: legendaryPool && actions.some(a => a.legendary) ? { pool: legendaryPool } : undefined,
@@ -1231,11 +1252,25 @@ export class Dnd5eAdapter extends SystemAdapter {
     return modern ? 8 + (Number(actor.system.abilities?.str?.mod) || 0) + proficiency(level) : passive("ath");
   }
 
-  #iwr(sys) {
-    const t = sys.traits ?? {};
+  #iwr(actor) {
+    const t = actor.system.traits ?? {};
     const iwr = { immune: [...asArray(t.di?.value), ...asArray(t.ci?.value)], weak: {}, resist: {} };
     for ( const type of asArray(t.dv?.value) ) iwr.weak[type] = 1;
     for ( const type of asArray(t.dr?.value) ) iwr.resist[type] = 1;
+    // So much off each blow of a type (dnd5e's damage modification: Heavy Armor Master's -3), with the actor's numbers.
+    const reduce = {};
+    for ( const [type, formula] of Object.entries(t.dm?.amount ?? {}) ) {
+      let filled = String(formula ?? "");
+      try {
+        if ( /@/.test(filled) ) filled = Roll.replaceFormulaData(filled, actor.getRollData?.() ?? {}, { missing: "0" });
+      } catch ( err ) { /* left as it is */ }
+      const n = formulaNumber(filled, 0);
+      if ( n ) reduce[type] = n;
+    }
+    if ( Object.keys(reduce).length ) iwr.reduce = reduce;
+    // What physical damage gets through each (rules.applyIwr): "mgc", "ada", "sil", as the sheet's bypasses say.
+    const bypass = { immune: asArray(t.di?.bypasses), resist: asArray(t.dr?.bypasses), weak: asArray(t.dv?.bypasses), reduce: asArray(t.dm?.bypasses) };
+    if ( Object.values(bypass).some(b => b.length) ) iwr.bypass = bypass;
     return iwr;
   }
 
@@ -1384,8 +1419,10 @@ export class Dnd5eAdapter extends SystemAdapter {
         : hasFeature(features, "two-extra-attacks", "two extra attacks") || features.some(f => f.includes("extra attack (2)")) ? 3
           // (A warlock's Thirsting Blade: the same, with its pact weapon. Extra Attack from two classes doesn't add up.)
           : hasFeature(features, "extra-attack", "extra attack") || hasFeature(features, "thirsting-blade", "thirsting blade") ? 2 : 1;
+      // (A Loading weapon fires once an action, however many attacks it has, unless it's a Crossbow Expert's.)
+      const loading = a => !hasFeature(features, "crossbow-expert", "crossbow expert") && !!actor.items.get(a.itemId)?.system?.properties?.has?.("lod");
       if ( extra > 1 ) {
-        for ( const a of out.filter(x => x.kind === "strike" && x.weapon && x.economy !== "bonus") ) {
+        for ( const a of out.filter(x => x.kind === "strike" && x.weapon && x.economy !== "bonus" && !loading(x)) ) {
           out.push({ ...a, id: `${a.id}.extra`, name: `${a.name} ×${extra}`, sequence: Array.from({ length: extra }, (_, i) => ({ ...a, id: `${a.id}.${i}` })) });
         }
       }
@@ -2237,6 +2274,20 @@ export class Dnd5eAdapter extends SystemAdapter {
     return out;
   }
 
+  /**
+   * The ammunition a character's bow or crossbow shoots (a weapon with the Ammunition property), where it carries
+   * some: {ammo: its key ("ammo:arrow"), ammoPool: {count, name}}, its stacks of that kind (dnd5e's ammo consumables of
+   * the weapon's ammunition type) added up. A creature's own, or a character's with none on its sheet: none counted.
+   */
+  #ammoOf(actor, item) {
+    if ( actor.type !== "character" || !item.system.properties?.has?.("amm") ) return {};
+    const kind = String(item.system.ammunition?.type ?? "");
+    const stacks = actor.items.filter(i => i.type === "consumable" && i.system.type?.value === "ammo" && (!kind || i.system.type?.subtype === kind));
+    if ( !stacks.length ) return {};
+    const count = stacks.reduce((n, i) => n + Math.max(0, Number(i.system.quantity) || 0), 0);
+    return { ammo: `ammo:${kind || "any"}`, ammoPool: { count, name: stacks[0].name } };
+  }
+
   /** What one use of an item costs from the creature's pools. */
   #resource(actor, item) {
     const s = item.system;
@@ -2364,6 +2415,8 @@ export class Dnd5eAdapter extends SystemAdapter {
       id: `${actor.id}.${item.id}.${activity.id}`, name: several && activity.name && activity.name !== item.name ? `${item.name}: ${activity.name}` : item.name,
       cost: 1, economy, itemId: item.id, traits: [], rank: item.type === "spell" ? item.system.level : undefined, concentration, ...this.#resource(actor, item),
       storyType: weaponLook(item),
+      // (Magical, adamantine, silvered: what its blow gets through, rules.applyIwr.)
+      ...(struckWith(item).length ? { materials: struckWith(item) } : {}),
       legendary,
       // (A feature's: a class's, a species', a creature's own. What "magic and specialties" means, with spells.)
       feature: item.type === "feat" || undefined
@@ -2394,7 +2447,9 @@ export class Dnd5eAdapter extends SystemAdapter {
         ...base, kind: item.type === "spell" ? "spell-attack" : "strike", weapon: item.type === "weapon", bonus, melee, thrown: !melee && !shoots,
         reach: melee ? reachOf() : undefined,
         range: melee ? null : { increment: rangeFeet ?? 30, max: longFeet || rangeFeet || 30 },
-        damage, effects: riders.length ? riders : undefined
+        damage, effects: riders.length ? riders : undefined,
+        // (The arrows or bolts it shoots, where a character carries them: the core's ammo.)
+        ...(shoots ? this.#ammoOf(actor, item) : {})
       };
       // Scorching Ray, Eldritch Blast at higher levels: one attack roll per ray, all with the one action.
       if ( projectiles > 1 ) attack.sequence = Array.from({ length: projectiles }, (_, i) => ({ ...attack, id: `${attack.id}.${i}` }));
@@ -2469,7 +2524,9 @@ export class Dnd5eAdapter extends SystemAdapter {
       const refs = (activity.effects ?? []).map(r => r.effect ?? item.effects?.get?.(r._id ?? r.id)).filter(Boolean);
       const outcome = lasting > 0 ? { fastHealing: lasting, rounds: durationRounds(item.system.duration) ?? 600, label: refs[0]?.name ?? item.name } : undefined;
       const effectRef = outcome && refs.length ? { uuid: item.uuid, ids: refs.map(e => e.id ?? e._id) } : undefined;
-      return { ...base, kind: "heal", heal, selfOnly: self, ...(self ? {} : reach), outcome, effectRef };
+      // (A potion may be given to a friend within 5 feet instead, as drinking it is: the core's administer, a Medic's.)
+      const potion = item.type === "consumable" && item.system.type?.value === "potion";
+      return { ...base, kind: "heal", heal, selfOnly: self, ...(self ? {} : reach), ...(potion ? { administer: true } : {}), outcome, effectRef };
     }
     return null;
   }

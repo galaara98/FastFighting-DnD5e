@@ -70,6 +70,9 @@ function net(adv, dis) {
 }
 
 /** Damage-type imagery for the story (5e's names for the core's families). */
+/** The damage types a trait's bypasses let through (dnd5e's physical ones). */
+const PHYSICAL = new Set(["bludgeoning", "piercing", "slashing"]);
+
 const STORY_TYPES = { lightning: "electricity", thunder: "sonic", necrotic: "void", radiant: "radiant", psychic: "mental" };
 
 /**
@@ -280,17 +283,33 @@ export const dnd5eRules = {
     return (parts ?? []).map(p => ({ ...p, dice: p.dice.map(d => ({ ...d, n: d.n * 2 })) }));
   },
 
-  /** Immunity ignores, resistance halves (rounded down), vulnerability doubles. */
-  applyIwr(iwr, byType) {
+  /**
+   * Immunities, resistances and vulnerabilities as dnd5e applies them (Actor5e#calculateDamage): so much off each type
+   * first (iwr.reduce: a damage modification), then none of it, half (rounded down) or double. Physical damage gets
+   * through a trait whose bypasses (iwr.bypass) name what deals it ("from nonmagical attacks that aren't silvered"):
+   * "mgc" magical damage (a spell's, a magic weapon's), "ada" and "sil" an adamantine or silvered weapon's (ctx: the
+   * core's iwrContext, its materials the item's own properties).
+   */
+  applyIwr(iwr, byType, target = null, ctx = {}) {
+    const struck = new Set(ctx?.materials ?? []);
+    if ( ctx?.magical ) struck.add("mgc");
+    const through = kind => (iwr?.bypass?.[kind] ?? []).some(p => struck.has(p));
     let total = 0;
     for ( const [type, amount] of Object.entries(byType) ) {
-      if ( amount <= 0 || iwr?.immune?.includes(type) ) continue;
-      let value = amount;
-      if ( iwr?.resist?.[type] ) value = Math.floor(value / 2);
-      if ( iwr?.weak?.[type] ) value *= 2;
+      if ( amount <= 0 ) continue;
+      const counts = kind => !(PHYSICAL.has(type) && through(kind));
+      if ( iwr?.immune?.includes(type) && counts("immune") ) continue;
+      let value = Math.max(0, amount + (counts("reduce") ? Number(iwr?.reduce?.[type]) || 0 : 0));
+      if ( iwr?.resist?.[type] && counts("resist") ) value = Math.floor(value / 2);
+      if ( iwr?.weak?.[type] && counts("weak") ) value *= 2;
       total += value;
     }
     return total;
+  },
+
+  /** A critical hit on one in adamantine armor is a normal hit (spec.critImmune). */
+  critImmune(target) {
+    return !!target?.spec?.critImmune;
   },
 
   /* Dying ----------------------------------------------------------------- */
