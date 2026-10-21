@@ -44,6 +44,9 @@ When new functionality can't be played "close enough" with what the core already
 | `edges.js` | Help, Insight before talking, the Study check. Pure. |
 | `holds.js` | Breaking grapples, restraints and bonds; escape words and DCs. Pure. |
 | `inside.js` | Swallowed and engulfed: a gullet's hold, being brought up, out of a corpse. Pure. |
+| `auras.js` | A passive save activity whose words say when it goes off (a ghast's Stench) into the core's `spec.auras`. Pure. |
+| `save-vs.js` | The sheet's save roll modes and a passive feature's "advantage on ... saving throws against ..." into the core's `spec.saveVs`; `damageTags`. Pure. |
+| `reading.js` | The reading files (`reading/<lang>.json`): loaded at startup, merged, `currentReading()`. |
 | `multiattack.js` | A Multiattack description into strike sequences. Pure. |
 | `traits.js` | Personality traits and flags; `isMindless`, and `isAnimalistic` (the core's `spec.animalistic`: a beast that doesn't speak, else Intelligence 11 or less with no language; never a mindless one or a character). Pure. |
 | `auto.js` | Playstyle hints, "Let this character decide" answers, biography, languages. Pure. |
@@ -70,7 +73,8 @@ It's written against dnd5e 6 on Foundry v14, and reads values defensively so old
 - `resources` (keys below), `resourceNames`, `riders`, `reactions`, `legendary: {pool}` (legendary actions' max), `standFirm: {pool: "legres", label}`.
 - `dying`, `stable`, `deathSaves` from `attributes.death`.
 - `regen`, `holdOn` (`#mending`), `fastHealing` (`#lastingHealing`), `burns`, `lingering`, `inside` (`#insideSpec`).
-- `magicResistance`, `evasion: "dex"`, `saveAura: {bonus, range}` (`#saveFeatures`).
+- `magicResistance`, `evasion: "dex"`, `saveAura: {bonus, range}`, `saveVs` (`#saveFeatures`: the sheet's save roll modes, then each passive feature's words, unless its own effect sets a roll mode). `auras` (`#auras`).
+- Each action's `traits` carry `damage:<type>` for the damage it deals (`damageTags`), for a `saveVs` against poison.
 - `conditions` (`sheetConditions`), `perception`, `senses: {lowlight, feel}`, `mods` (`#activeMods`: dice on attacks and saves, helpful statuses and a spell's words, for effects already on it).
 - `fateLabel`, `firstAid: {mod}` (characters and humanoids with Medicine), `theft` (Sleight of Hand: characters, or a non-beast with Intelligence above 3), `doorWork: {force, pick}`.
 - `rulesVersion`: `"modern"` or `"legacy"` from dnd5e's `rulesVersion` setting (modern when there's none). `escapeWork: {mod, ath, acr, str, dex}`, `escapeDC` (`#escapeDC`).
@@ -155,6 +159,10 @@ Everything is read from the item's English (`englishDescription`: what Babele ke
 | A reaction that answers damage (Hellish Rebuke and the like) | `#reactions` |
 | A summon commanded with a bonus action | `#summonFrom` |
 | Languages ("Common plus one other language"; "understands ... but can't speak") | `spokenLanguages`, `speaksAtAll` |
+
+### The reading files
+
+`reading/en.json` holds the English words `auras.js` and `save-vs.js` read by, as regular expressions (case-insensitive), in sections: `auras` (when it goes off, immunity, the sense it takes, a failure lasting to the next turn) and `saveVs` (the advantage, its saves, what's skipped, `abilities`, and `tags`: a pattern per engine tag, `magical`, `inflicts:<condition>`, `damage:<type>`). A translation is a copy named for its language (`es.json`); `mergeReading` merges it in all the way down, a word in both becoming either pattern. `toCombatantSpec` waits for them (`reading()`); tests get `reading/en.json` (`tests/setup.js`).
 
 ### Effects
 
@@ -248,6 +256,6 @@ npm run test:reworded
 
 `npm run test:watch` runs vitest in watch mode. The tests import FastFighting Core from a checkout beside this one (`../FastFighting`); set `FASTFIGHTING_CORE` to another core's `scripts/` folder to test against that. `vitest.config.js` aliases `../fast-fighting/scripts/` (and `../FastFighting/scripts/`) to it.
 
-`tests/setup.js` gives every test a `game.i18n` that reads this module's and the core's `languages/en.json` (`tests/foundry-i18n.js`). `test:reworded` (`--mode reworded`) rewords every string (accented, in ⟦brackets⟧, placeholders and markup kept), so no test may depend on wording. `tests/load.test.js` imports every script in Node, as Foundry would load it.
+`tests/setup.js` gives every test a `game.i18n` that reads this module's and the core's `languages/en.json` (`tests/foundry-i18n.js`), and the reading words of `reading/en.json`. `test:reworded` (`--mode reworded`) rewords every string (accented, in ⟦brackets⟧, placeholders and markup kept), so no test may depend on wording. `tests/load.test.js` imports every script in Node, as Foundry would load it.
 
-CI: `.github/workflows/test.yml` runs both modes on pushes to `main` and on pull requests, with the core checked out beside. `release.yml`, on a `v*` tag, tests, sets `version` and `download` in `module.json`, zips `module.json`, `scripts`, `languages`, `hardcoded-toEN.json`, `README.md` and `LICENSE`, and attaches `module.json` and `module.zip` to the release.
+CI: `.github/workflows/test.yml` runs both modes on pushes to `main` and on pull requests, with the core checked out beside. `release.yml`, on a `v*` tag, tests, sets `version` and `download` in `module.json`, zips `module.json`, `scripts`, `languages`, `reading`, `hardcoded-toEN.json`, `README.md` and `LICENSE`, and attaches `module.json` and `module.zip` to the release.

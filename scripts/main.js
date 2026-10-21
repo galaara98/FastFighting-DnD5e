@@ -5,6 +5,7 @@
  */
 import { Dnd5eAdapter } from "./adapter.js";
 import { registerLoreBoost } from "./lore.js";
+import { loadReading } from "./reading.js";
 
 export const MODULE_ID = "fast-fighting-dnd5e";
 
@@ -45,6 +46,8 @@ Hooks.once("fastFighting.init", api => {
   }
   if ( !KNOWN_API.includes(major) ) untested = major;
   api.registerAdapter("dnd5e", Dnd5eAdapter, { priority: 10, source: MODULE_ID });
+  // The words dnd5e's own text is read by, where its data says nothing (reading.js).
+  loadReading();
   api.adviseTranslation(MODULE_ID, game.system.title, KNOWN_TRANSLATIONS);
   // Words kept in English for now, while the system isn't translated (hardcoded-toEN.json).
   api.keepEnglish(MODULE_ID);

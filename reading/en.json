@@ -1,0 +1,48 @@
+{
+  "$comment": "How FastFighting D&D 5e reads dnd5e's own English text where an item's data says nothing, in both the 2014 (SRD 5.1) and 2024 (SRD 5.2) wordings. Patterns are regular expressions over the text, lower case. A translation is a copy of this file named for its language (es.json), read before this one. See CODING_README.md.",
+  "auras": {
+    "turnStart": { "pattern": "\\b(?:starts?|starting|begins?) (?:its|their|your) turn\\b" },
+    "enter": { "pattern": "\\b(?:enters?|entering) (?:the|that|its|an?)\\b[^.]*\\b(?:area|emanation|aura|range)\\b|\\bfor the first time on a turn\\b" },
+    "immune": { "pattern": "\\bimmune\\b" },
+    "immuneSuccess": { "pattern": "\\bsuccess|\\bsucceeds?\\b" },
+    "immuneAny": { "pattern": "\\bwhether (?:or not|it succeeds or fails)|\\bregardless\\b" },
+    "immuneAll": { "pattern": "\\bimmune to (?:the )?[^.]*? of (?:all|every|any)\\b" },
+    "sight": { "pattern": "\\bcan see\\b" },
+    "hearing": { "pattern": "\\bcan hear\\b" },
+    "nextTurn": { "pattern": "\\b(?:or be|fail(?:s|ed|ure)?)\\b[^.]*\\buntil the (?:start|end) of (?:its|their|the target's|the creature's) next turn\\b" }
+  },
+  "saveVs": {
+    "advantage": { "pattern": "\\b(?:has|have) advantage on\\b" },
+    "conditional": { "pattern": "\\b(?:while|whilst|as long as|provided|if|unless|when|until|during)\\b" },
+    "others": { "pattern": "\\b(?:all(?:y|ies)|friends?|friendly|each creature|creatures? of (?:your|its) choice|other creatures?)\\b" },
+    "clauseEnd": { "pattern": ",? (?:and|but) (?:you|it|they|its|their|the|can|magic|has|have|is|are)\\b|;" },
+    "skip": { "pattern": "\\bdeath saving throws?\\b|\\bconcentration\\b|\\b(?:cast|created|made) by\\b|\\bturns? undead\\b" },
+    "saves": { "pattern": "\\bsaving throws?\\b" },
+    "notSave": { "pattern": "\\b(?:checks?|rolls?)\\b" },
+    "abilities": {
+      "str": { "pattern": "\\bstrength\\b" },
+      "dex": { "pattern": "\\bdexterity\\b" },
+      "con": { "pattern": "\\bconstitution\\b" },
+      "int": { "pattern": "\\bintelligence\\b" },
+      "wis": { "pattern": "\\bwisdom\\b" },
+      "cha": { "pattern": "\\bcharisma\\b" }
+    },
+    "examples": { "pattern": "\\b(?:such as|like|including|for example)\\b" },
+    "any": { "pattern": "\\beffects? (?:that )?(?:you|it|they) can see\\b" },
+    "tags": {
+      "magical": { "pattern": "\\bspells?\\b|\\bmagic(?:al)?\\b" },
+      "inflicts:controlled": { "pattern": "\\bcharm(?:ed)?\\b" },
+      "inflicts:frightened": { "pattern": "\\bfrighten(?:ed)?\\b|\\bfear\\b" },
+      "inflicts:poisoned": { "pattern": "\\bpoison(?:ed)?\\b" },
+      "damage:poison": { "pattern": "\\bpoison\\b" },
+      "inflicts:prone": { "pattern": "\\bprone\\b" },
+      "inflicts:blinded": { "pattern": "\\bblind(?:ed)?\\b" },
+      "inflicts:deafened": { "pattern": "\\bdeaf(?:ened)?\\b" },
+      "inflicts:paralyzed": { "pattern": "\\bparaly[sz]ed\\b" },
+      "inflicts:stunned": { "pattern": "\\bstunned\\b" },
+      "inflicts:unconscious": { "pattern": "\\bunconscious\\b" },
+      "inflicts:restrained": { "pattern": "\\brestrained\\b" },
+      "inflicts:petrified": { "pattern": "\\bpetrified\\b" }
+    }
+  }
+}

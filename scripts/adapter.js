@@ -18,6 +18,9 @@ import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 import { edgeActions, studyCheck } from "./edges.js";
 import { loreBoost } from "./lore.js";
 import { escapeWords, grabEscapeDC } from "./holds.js";
+import { auraOf, isAuraActivity, PASSIVE_ACTIVATIONS } from "./auras.js";
+import { sheetSaveVs, saveVsFromWords, damageTags } from "./save-vs.js";
+import { reading } from "./reading.js";
 import { t, skillName, conditionName, statusName, coin, languageNames, inSentence, playersOf } from "./words.js";
 
 /*
@@ -993,6 +996,8 @@ export class Dnd5eAdapter extends SystemAdapter {
   async toCombatantSpec(tokenDoc) {
     const actor = tokenDoc.actor;
     if ( !this.canHandle(actor) ) return null;
+    // (What it reads of the items' words goes by the reading files: read once, at startup.)
+    await reading();
     const sys = actor.system;
     const level = actor.type === "character" ? (sys.details?.level ?? 1) : Math.max(0, Number(sys.details?.cr) || 0);
     const hp = sys.attributes?.hp ?? {};
@@ -1015,6 +1020,11 @@ export class Dnd5eAdapter extends SystemAdapter {
     const resources = { ...hits.pools };
     for ( const a of actions ) if ( a.resource && a.pool !== undefined ) resources[a.resource] = a.pool;
     for ( const a of actions ) delete a.pool;
+    // (The damage it deals, as a tag a save against it goes by: Dwarven Resilience's against poison.)
+    for ( const a of actions ) {
+      const tags = damageTags(a).filter(tag => !(a.traits ?? []).includes(tag));
+      if ( tags.length ) a.traits = [...(a.traits ?? []), ...tags];
+    }
     // (Heroic) Inspiration: a reroll, spent to keep someone from dying.
     if ( actor.type === "character" && sys.attributes?.inspiration ) resources.fate = 1;
     // Legendary Resistance: a failed save it simply makes, so many times a day; legendary actions, so many a round.
@@ -1066,6 +1076,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       lingering: this.#lingerings(actor),
       inside: this.#insideSpec(actor),
       ...this.#saveFeatures(actor, features, level),
+      auras: this.#auras(actor),
       conditions: this.#conditions(actor),
       perception: skillMod("prc") ?? 0,
       senses: this.#senses(sys),
@@ -1433,7 +1444,8 @@ export class Dnd5eAdapter extends SystemAdapter {
   /**
    * What helps its saves, by identifier or name: Magic Resistance (advantage against spells), Evasion (nothing from a
    * Dexterity save for half on a success, half on a failure), and a paladin's Aura of Protection (Charisma, at least +1,
-   * to its own and its friends' saves within 10 feet; 30 from 18th level).
+   * to its own and its friends' saves within 10 feet; 30 from 18th level). And its situational saves (save-vs.js): the
+   * sheet's save roll modes, and what its passive features' words give (Fey Ancestry, Brave, Gnome Cunning ...).
    */
   #saveFeatures(actor, features, level) {
     const out = {};
@@ -1443,7 +1455,39 @@ export class Dnd5eAdapter extends SystemAdapter {
       const cha = Number(actor.system.abilities?.cha?.mod) || 0;
       out.saveAura = { bonus: Math.max(1, cha), range: actor.type === "character" && level >= 18 ? 30 : 10 };
     }
+    const saveVs = sheetSaveVs(Object.fromEntries(ABILITIES.map(a => [a, actor.system.abilities?.[a]?.save?.roll?.mode])));
+    for ( const item of actor.items ) {
+      // (Not one used as an action, whose own effects say what it does (Rage); not one whose effect sets the sheet's roll
+      // modes, read above (2024's Danger Sense).)
+      if ( item.type !== "feat" || [...(item.system.activities ?? [])].some(a => !PASSIVE_ACTIVATIONS.has(String(a.activation?.type ?? ""))) ) continue;
+      if ( ownEffects(item).some(e => e.changes.some(c => /\.save\.roll\.mode$/.test(String(c.key)))) ) continue;
+      saveVs.push(...saveVsFromWords(plainText(englishDescription(item), actor, true)));
+    }
+    if ( saveVs.length ) out.saveVs = saveVs;
     return out;
+  }
+
+  /**
+   * Its auras that make foes save (auras.js): a passive feature's save activity reaching round it, whose words say when
+   * it goes off (a ghast's Stench, a gibbering mouther's Gibbering). What failing lays is the activity's effects, read as
+   * any save's are.
+   */
+  #auras(actor) {
+    const out = [];
+    for ( const item of actor.items ) {
+      if ( item.type !== "feat" ) continue;
+      for ( const activity of item.system.activities ?? [] ) {
+        if ( !isAuraActivity(activity) ) continue;
+        const save = { type: saveAbility(activity, "con"), dc: Number(activity.save?.dc?.value) };
+        const aura = auraOf({
+          id: `${item.id}.${activity.id}`, key: identOf(item) || item.id, name: item.name, activity, dc: save.dc,
+          text: plainText(`${activity.activation?.condition ?? ""} ${englishDescription(item)}`, actor, true),
+          failure: this.#outcome(this.#effects(item, activity, { words: true }), save), damage: this.#parts(activity)
+        });
+        if ( aura ) out.push({ ...aura, ...(item.system.properties?.has?.("mgc") ? { magical: true } : {}) });
+      }
+    }
+    return out.length ? out : undefined;
   }
 
   /**
