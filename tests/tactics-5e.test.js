@@ -9,7 +9,7 @@ import { Dnd5eAdapter } from "../scripts/adapter.js";
 import { listJoin } from "../scripts/core.js";
 import { text } from "./foundry-i18n.js";
 import { TACTIC_CHOICES } from "../../fast-fighting/scripts/engine/tactics.js";
-import { validMotive, withHints } from "../../fast-fighting/scripts/foundry/auto-config.js";
+import { withHints } from "../../fast-fighting/scripts/foundry/auto-config.js";
 
 /** The system's names for things, as CONFIG.DND5E has them in English. */
 const DND5E = {
@@ -340,14 +340,15 @@ describe("every answer is one of its question's choices, with a reason", () => {
       const out = dnd5eTactics(who);
       for ( const [k, { value, why }] of Object.entries(out) ) {
         expect([k, typeof why === "string" && why.length > 0]).toEqual([k, true]);
-        if ( k === "offer" || k === "expect" ) expect([k, value, validMotive(k, value)]).toEqual([k, value, true]);
-        else if ( k === "preferredAction" ) expect((who.attacks ?? []).map(a => a.id)).toContain(value);
+        if ( k === "offer" || k === "expect" ) continue; // (the core ignores these now)
+        if ( k === "preferredAction" ) expect((who.attacks ?? []).map(a => a.id)).toContain(value);
         else expect([k, TACTIC_CHOICES[k]]).toEqual([k, expect.arrayContaining([value])]);
       }
       // (The core takes each answer, with its reason: its signature attack among its own actions.)
       const { lets, why } = withHints({}, out, { actions: (who.attacks ?? []).map(a => ({ id: a.id })) });
-      expect(Object.keys(lets).sort()).toEqual(Object.keys(out).sort());
-      expect(Object.keys(why).sort()).toEqual(Object.keys(out).sort());
+      const kept = Object.keys(out).filter(k => k !== "offer" && k !== "expect").sort();
+      expect(Object.keys(lets).sort()).toEqual(kept);
+      expect(Object.keys(why).sort()).toEqual(kept);
     }
   });
 });
@@ -421,7 +422,7 @@ describe("the adapter reads the sheet", () => {
     expect(out.preferredAction).toEqual({ value: "ogre.multiattack", why: "Multiattack" });
     for ( const [k, { why }] of Object.entries(out) ) expect([k, typeof why === "string" && why.length > 0]).toEqual([k, true]);
     const kept = withHints({}, out, spec);
-    expect(Object.keys(kept.why).sort()).toEqual(Object.keys(out).sort());
+    expect(Object.keys(kept.why).sort()).toEqual(Object.keys(out).filter(k => k !== "offer" && k !== "expect").sort());
   });
 });
 
