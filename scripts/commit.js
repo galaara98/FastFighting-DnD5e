@@ -78,8 +78,39 @@ async function writeConditions(actor, conditions, final, set, undo) {
   } else if ( cleared.includes("exhaustion") ) set("system.attributes.exhaustion", 0);
 }
 
-/** The flag a creature knocked out under the 2024 rules carries while it lies Unconscious at 1 HP. */
-export const KNOCKED_OUT = "fast-fighting-dnd5e.knockedOut";
+/**
+ * A consumable after `used` of its pool (the adapter's: this one's charges left, then the rest of the stack's) as
+ * dnd5e's own consumption leaves it: its charges spent first (`uses.spent`); one run out, the next of the stack begun
+ * (quantity one less, none spent); the last run out, gone if it's autoDestroy, else kept with none left. One with no
+ * charges: its quantity, gone at none. Returns {quantity, spent (undefined: no charges), gone}.
+ */
+export function itemSpent(system, used) {
+  let quantity = Math.max(0, Number(system?.quantity ?? 1) || 0);
+  const max = Number(system?.uses?.max) || 0;
+  if ( !max ) {
+    quantity = Math.max(0, quantity - used);
+    return { quantity, spent: undefined, gone: quantity <= 0 };
+  }
+  let spent = Math.min(max, Math.max(0, Number(system.uses.spent) || 0));
+  let left = used;
+  while ( left > 0 && quantity > 0 ) {
+    const take = Math.min(left, max - spent);
+    spent += take;
+    left -= take;
+    if ( spent < max ) break;
+    if ( quantity === 1 ) return { quantity, spent, gone: !!system.uses.autoDestroy };
+    quantity -= 1;
+    spent = 0;
+  }
+  return { quantity, spent, gone: false };
+}
+
+/**
+ * The flag a creature knocked out under the 2024 rules carries while it lies Unconscious at 1 HP: FastFighting's own,
+ * so Rewind puts it back. (An older one, in this module's scope, is still read, and cleared with it.)
+ */
+export const KNOCKED_OUT = "fast-fighting.knockedOut";
+export const KNOCKED_OUT_BEFORE = "fast-fighting-dnd5e.knockedOut";
 
 /**
  * A live battle: one turn's changes (the core's engine/changes.js) written onto a token, and only those, so writing
@@ -97,14 +128,17 @@ export async function commitDnd5eChanges(tokenDoc, spec, changes, final, options
     const before = foundry.utils.getProperty(actor, path);
     if ( before === value ) return;
     update[path] = value;
-    undo.actorUpdate[path] = before ?? 0;
+    // (A flag it didn't have goes back to none.)
+    undo.actorUpdate[path] = before ?? (path.startsWith("flags.") ? null : 0);
   };
   // Knocked out under the 2024 rules: 1 HP and Unconscious, not 0 (the SRD 5.2's Knocking Out a Creature: rules.js
-  // knockOut), marked so the sheet still reads as out of the fight (readLiveState) until it wakes.
+  // knockOut), marked so the sheet still reads as out of the fight (readLiveState) until it wakes: unmarked once it's
+  // no longer down (up again, dead) or its Unconscious comes off.
   const knockedOut = spec.rulesVersion !== "legacy" && !!final.system?.knockedOut && final.status === STATUS.DOWN;
+  const woke = final.status !== STATUS.DOWN || (changes.conditions?.cleared ?? []).includes("unconscious");
   if ( changes.hp ) set("system.attributes.hp.value", knockedOut ? Math.max(1, Number(changes.hp.to) || 0) : changes.hp.to);
   if ( knockedOut ) set(`flags.${KNOCKED_OUT}`, true);
-  else if ( changes.revived && foundry.utils.getProperty(actor, `flags.${KNOCKED_OUT}`) ) set(`flags.${KNOCKED_OUT}`, false);
+  else if ( woke ) for ( const flag of [KNOCKED_OUT, KNOCKED_OUT_BEFORE] ) if ( foundry.utils.getProperty(actor, `flags.${flag}`) ) set(`flags.${flag}`, false);
   if ( changes.temp ) set("system.attributes.hp.temp", changes.temp.to ?? 0);
   // Death saves: where the turn left them (none for anyone standing or stable).
   // (A success changes nothing but the rules' own tallies: the change set's `system`, core API 24.)
@@ -129,16 +163,27 @@ export async function commitDnd5eChanges(tokenDoc, spec, changes, final, options
         undo.itemUpdates.push({ id: item.id, update: { "system.uses.spent": item.system.uses.spent ?? 0 } });
         await item.update({ "system.uses.spent": (item.system.uses.spent ?? 0) + used });
       } else if ( key.startsWith("item:") ) {
-        const quantity = Math.max(0, (item.system.quantity ?? 1) - used);
-        if ( quantity <= 0 ) {
+        const { quantity, spent, gone } = itemSpent(item.system, used);
+        if ( gone ) {
           undo.deletedItems.push(item.toObject());
           await item.delete();
         } else {
-          undo.itemUpdates.push({ id: item.id, update: { "system.quantity": item.system.quantity } });
-          await item.update({ "system.quantity": quantity });
+          const was = { "system.quantity": item.system.quantity ?? 1 };
+          const update = { "system.quantity": quantity };
+          if ( spent !== undefined ) {
+            was["system.uses.spent"] = item.system.uses?.spent ?? 0;
+            update["system.uses.spent"] = spent;
+          }
+          undo.itemUpdates.push({ id: item.id, update: was });
+          await item.update(update);
         }
       }
     }
+  }
+  // Legendary actions: what's left of this round's (rules.capture), written as spent.
+  const legact = actor.system.resources?.legact;
+  if ( changes.system && Number(legact?.max) > 0 && Number.isFinite(final.system?.legendaryLeft) ) {
+    set("system.resources.legact.spent", Math.max(0, Math.min(Number(legact.max), Number(legact.max) - final.system.legendaryLeft)));
   }
   for ( const [id, c] of Object.entries(changes.uses ?? {}) ) {
     const action = spec.actions.find(a => a.id === id);

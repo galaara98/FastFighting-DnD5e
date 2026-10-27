@@ -17,7 +17,8 @@ export function proficiency(level) {
 }
 
 /** Conditions that let attackers strike with advantage. */
-const HELPLESS = ["paralyzed", "stunned", "unconscious", "incapacitated", "restrained", "blinded", "petrified"];
+/** (Not Incapacitated alone, in either SRD: Hypnotic Pattern's and Confusion's targets are only that.) */
+const HELPLESS = ["paralyzed", "stunned", "unconscious", "restrained", "blinded", "petrified"];
 /** Cover from the walls (the core's: some of the target hidden, most of it): half cover +2, three-quarters +5. */
 const coverBonus = cover => (cover === "some" ? 2 : cover === "most" ? 5 : 0);
 /** Conditions that give the creature disadvantage on its own attacks. */
@@ -27,8 +28,13 @@ const HAMPERED = ["poisoned", "frightened", "restrained", "blinded", "prone"];
 const INSIDE_MEANS = Object.freeze({ blinded: ["swallowed"], restrained: ["swallowed", "engulfed"] });
 const has = (u, key) => (u?.conds?.[key] ?? 0) > 0 || !!INSIDE_MEANS[key]?.some(k => (u?.conds?.[k] ?? 0) > 0);
 const exhaustion = u => u?.conds?.exhaustion ?? 0;
-/** d20 tests take -2 per level of exhaustion (2024 rules); 0 when fresh. */
-const tired = u => (exhaustion(u) ? -2 * exhaustion(u) : 0);
+/** d20 tests take -2 per level of exhaustion (2024 rules); 0 when fresh, and under the 2014 rules (tiredDis instead). */
+const tired = u => (exhaustion(u) && u?.spec?.rulesVersion !== "legacy" ? -2 * exhaustion(u) : 0);
+/**
+ * Exhaustion under the 2014 rules (the SRD 5.1's): Disadvantage on ability checks from level 1 (`kind` "check"), on
+ * attack rolls and saving throws from level 3.
+ */
+const tiredDis = (u, kind) => u?.spec?.rulesVersion === "legacy" && exhaustion(u) >= (kind === "check" ? 1 : 3);
 
 /** An affliction on it, taken hold, that weakens saves of this ability (Contagion's: adapter.js tallied). */
 const weakened = (u, type) => (u?.afflictions ?? []).some(a => a.spec?.weakSave === type && a.stage > 0 && !(a.onsetLeft > 0));
@@ -484,7 +490,7 @@ export const dnd5eRules = {
     attack({ attacker, target, action, distance, positioning, alliesAdjacent, attackerEngaged }) {
       // (Hidden from the one it's at: unseen by it, unless that one found it with a Search since: the core's hiddenFrom.)
       let adv = HELPLESS.some(k => has(target, k)) || hiddenFrom(target, attacker);
-      let dis = HAMPERED.some(k => has(attacker, k)) || !!attacker.prone || hiddenFrom(attacker, target);
+      let dis = HAMPERED.some(k => has(attacker, k)) || !!attacker.prone || hiddenFrom(attacker, target) || tiredDis(attacker, "attack");
       if ( target.prone ) {
         if ( action?.melee && (distance ?? 5) <= 5 ) adv = true;
         else dis = true;
@@ -496,15 +502,15 @@ export const dnd5eRules = {
       return { bonus: tired(attacker), advantage: net(adv, dis) };
     },
     save({ unit, type, cover }) {
-      // Paralyzed, stunned or unconscious creatures automatically fail Strength and Dexterity saves.
-      const helpless = ["paralyzed", "stunned", "unconscious", "incapacitated", "petrified"].some(k => has(unit, k));
+      // Paralyzed, stunned, unconscious or petrified creatures automatically fail Strength and Dexterity saves.
+      const helpless = ["paralyzed", "stunned", "unconscious", "petrified"].some(k => has(unit, k));
       if ( helpless && (type === "str" || type === "dex") ) return { bonus: -99, advantage: 0 };
       // (Contagion's Poisoned: Disadvantage on the saves of the ability its caster chose, its weakSave.)
-      const dis = (type === "dex" && has(unit, "restrained")) || weakened(unit, type);
+      const dis = (type === "dex" && has(unit, "restrained")) || weakened(unit, type) || tiredDis(unit, "save");
       return { bonus: tired(unit) + (type === "dex" ? coverBonus(cover) : 0), advantage: dis ? -1 : 0 };
     },
     check({ unit }) {
-      const dis = has(unit, "poisoned") || has(unit, "frightened");
+      const dis = has(unit, "poisoned") || has(unit, "frightened") || tiredDis(unit, "check");
       return { bonus: tired(unit), advantage: dis ? -1 : 0 };
     },
     steal() {
@@ -615,9 +621,13 @@ export const dnd5eRules = {
     u.deathFailures = 0;
   },
 
-  /** Death saves, and a knock-out, for a live battle to write onto the sheet and the planner to show. */
+  /** Death saves, a knock-out and legendary actions left, for a live battle to write onto the sheet and the planner to show. */
   capture(u) {
-    return { deathSuccesses: u.deathSuccesses ?? 0, deathFailures: u.deathFailures ?? 0, ...(u.knockedOut ? { knockedOut: true } : {}) };
+    return {
+      deathSuccesses: u.deathSuccesses ?? 0, deathFailures: u.deathFailures ?? 0, ...(u.knockedOut ? { knockedOut: true } : {}),
+      // (Its legendary actions left this round, for the sheet's: commit.js.)
+      ...(u.spec?.legendary?.pool && Number.isFinite(u.legendaryLeft) ? { legendaryLeft: u.legendaryLeft } : {})
+    };
   },
 
   storyDamageType(type) {

@@ -23,7 +23,7 @@ The core's API version is `major.bug`: `api.version` is `"35.0"`, `api.major` 35
 - **27, 30:** food and corpses (`food.js`): `appetite` by creature type (constructs, elementals, undead and the mindless eat nothing; a beast, monstrosity or dragon with a bite, jaws, fangs, beak or mandibles by identifier eats meat), `meatFor` (a Fresh Corpse, dnd5e's food consumable, portions tiny 1 to gargantuan 32, weight by size; a Rotten Corpse for undead, Scrap for constructs, both loot; none for elementals, oozes, plants, swarms or Incorporeal Movement), `isFood` (a fresh corpse's portions, dnd5e's `food` consumables), `pileContents`.
 - **28:** `settingDefaults`: Max rounds 4 to 12, default 10; Lore-Collector advantage default 2.5 in this module's words (`FFDND5E.Settings.loreBoost`). The old `lore.js` setting is gone, and `sizeUp` carries no `boost` (a fight carries the core's).
 - **29:** `partyMembers`: the members of dnd5e's `group` actors of type `party`. Compatible only (5e has no such rule): a save rider's `traits` and `slay`, `spec.alert` and `rules.surprise`'s `caught` and `outcome` (neither SRD's Alert prevents surprise), an undo record's `systemOptions`, `fumble: "all"`, `armedBy`/`armedFrom`, `provokes`; trap bonuses (`saveVs` with `from: trap`): no SRD feature names traps alone.
-- **31:** `pullsBlow` as before (any melee attack); no `pullPenalty` (knocking out costs nothing). Under the 2024 rules a knock-out is 1 HP and Unconscious (`rules.capture`'s `knockedOut`; `commit.js` writes 1 HP and the flag `fast-fighting-dnd5e.knockedOut`, which `readLiveState` reads as down and stable while Unconscious).
+- **31:** `pullsBlow` as before (any melee attack); no `pullPenalty` (knocking out costs nothing). Under the 2024 rules a knock-out is 1 HP and Unconscious (`rules.capture`'s `knockedOut`; `commit.js` writes 1 HP and the flag `fast-fighting.knockedOut`, the core's scope so Rewind puts it back, which `readLiveState` reads as down and stable while Unconscious; cleared once it's up, dead or its Unconscious comes off; the older `fast-fighting-dnd5e.knockedOut` is still read and cleared).
 - **32:** `hearDC` on the SRD's typical DCs (easy 10 for a fight, medium 15 for talk, +5 a step past 30, 60 and 120 feet and for each wall; talk not through a wall; past 30, null); `minionCommand` from `spec.flags.command` (below); areas: a sphere, cylinder or circle placed away is a `burst` with `center: "free"` (API 35), a cube placed away a `square`, and `selective` from dnd5e's `target.affects.choice`, `reading/en.json` `areas.selective` or Sculpt Spells on an evocation spell. Not `talkFeet` (the core's 30 feet).
 - **33:** `rules.ready` `{cost: {action: 1}, most: 1}` (the SRD's Ready; a readied Attack is one attack). No `rules.delay`: neither SRD has it (SRD 5.2 suggests Ready instead); only the homebrew setting gives it.
 - **34:** compatible only: `delay.reasons` and `waitFor`, `duelResult`, a notice check's `sense`.
@@ -85,7 +85,7 @@ It's written against dnd5e 6 on Foundry v14, and reads values defensively so old
 - `level`: character level, or challenge rating. `kind`: `pc` or `npc`. `diesAtZero`: every NPC.
 - `defenses.ac`, a save per ability (`abilities.<a>.save.value`, else the modifier). `shield: null`: a 5e shield is in the AC.
 - `initiative: {mod, stealth}`. `speeds` in feet (`FEET`: m × 10/3, mi, km; 30 walking when it has none).
-- `resources` (keys below), `resourceNames`, `riders`, `reactions`, `legendary: {pool}` (legendary actions' max), `standFirm: {pool: "legres", label}`.
+- `resources` (keys below), `resourceNames`, `riders`, `reactions`, `legendary: {pool}` (legendary actions' max; `rules.capture`'s `legendaryLeft` goes back to the sheet as `system.resources.legact.spent`), `standFirm: {pool: "legres", label}`.
 - `dying`, `stable`, `deathSaves` from `attributes.death`.
 - `regen`, `holdOn` (`#mending`), `fastHealing` (`#lastingHealing`), `burns`, `lingering`, `inside` (`#insideSpec`).
 - `magicResistance`, `evasion: "dex"`, `saveAura: {bonus, range}`, `saveVs` (`#saveFeatures`: the sheet's save roll modes, then each passive feature's words, unless its own effect sets a roll mode). `auras` (`#auras`).
@@ -104,7 +104,7 @@ It's written against dnd5e 6 on Foundry v14, and reads values defensively so old
 
 ### Resource keys
 
-`slots:<level>`, `pact`, `fate` ((Heroic) Inspiration), `legres` (Legendary Resistance), `feature:<itemId>` (a feature's uses: Focus or ki, superiority dice, Relentless Endurance), `item:<itemId>` (a consumable: quantity × uses left). An action's own limited `uses` may carry `recharge: {on, die: 6}` (`rechargeOf`).
+`slots:<level>`, `pact`, `fate` ((Heroic) Inspiration), `legres` (Legendary Resistance), `feature:<itemId>` (a feature's uses: Focus or ki, superiority dice, Relentless Endurance), `item:<itemId>` (a consumable: its charges left, then the rest of the stack full, `consumableLeft`; spent charges first, `commit.js itemSpent`, as dnd5e does, honouring autoDestroy). An action's own limited `uses` may carry `recharge: {on, die: 6}` (`rechargeOf`).
 
 ### Actions
 
@@ -207,7 +207,7 @@ Everything is read from the item's English (`englishDescription`: what Babele ke
 | `initUnit`, `onDropped`, `adjustRoll`, `onHealed`, `recoveryCheck`, `recoveryRead`, `firstAidDC`, `firstAid`, `knockOut`, `capture` | death saves (a player's told from its card: `recoveryRead` null); Relentless Endurance as a save that spends its pool; DC 10 Medicine |
 | `persistentFlatCheck` | even odds (a d20 against 11, shown in a live battle) |
 | `typical` | AC 12 + prof, save prof + 1, skill prof + 2, DC 10 + prof |
-| `modifiers.{exposed, defense, attack, save, check, steal, actionsLost}` | advantage, disadvantage (hidden from the one it's at, the core's `hiddenFrom`: both ways), cover, exhaustion (−2 a level), auto-failed Strength and Dexterity saves, Contagion's `weakSave` |
+| `modifiers.{exposed, defense, attack, save, check, steal, actionsLost}` | advantage, disadvantage (hidden from the one it's at, the core's `hiddenFrom`: both ways), cover, exhaustion (2024: −2 a level; 2014: Disadvantage on checks from level 1, on attacks and saves from 3), auto-failed Strength and Dexterity saves (not for Incapacitated alone, nor advantage at it), Contagion's `weakSave` |
 | `isImmune`, `conditionWishes`, `conditionWeight`, `conditionMods` | immune to every condition an action lays (aliases: incapacitated → unconscious, immobilized → restrained, controlled → charmed), and size limits; Frightened: `avoid` its source at 60; hidden and prone mods |
 | `ready`, `hearDC`, `minionCommand`; `delay` (homebrew only: `dnd5eRulesWith`) | Ready an attack for a foe coming into reach (an action, the reaction); the SRD's typical DCs for hearing; a command from `spec.flags.command`; back at the round's end |
 | `usable`, `afterRoll`, `pullsBlow`, `storyDamageType` | no Hide beside a foe, `grappledOnly` (with the core's `requires: {holding: true}` beside it); hidden ends on an attack, after its roll; any melee blow can knock out; lightning → electricity, thunder → sonic, necrotic → void, psychic → mental |

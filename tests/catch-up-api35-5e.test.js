@@ -175,7 +175,7 @@ describe("the rules (core APIs 31 to 35)", () => {
     globalThis.game = { ...was.game, combat: null };
     const final = { status: "down", stable: true, system: { knockedOut: true } };
     await commitDnd5eChanges({ uuid: "Token.g", actor }, { actions: [], rulesVersion: "modern" }, { hp: { from: 7, to: 0 } }, final, {});
-    expect(updates.at(-1)).toMatchObject({ "system.attributes.hp.value": 1, "flags.fast-fighting-dnd5e.knockedOut": true });
+    expect(updates.at(-1)).toMatchObject({ "system.attributes.hp.value": 1, "flags.fast-fighting.knockedOut": true });
     updates.length = 0;
     await commitDnd5eChanges({ uuid: "Token.g", actor }, { actions: [], rulesVersion: "legacy" }, { hp: { from: 7, to: 0 } }, final, {});
     expect(updates.at(-1)).toMatchObject({ "system.attributes.hp.value": 0 });

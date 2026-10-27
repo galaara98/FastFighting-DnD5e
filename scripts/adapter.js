@@ -11,7 +11,7 @@ import { deriveDnd5eTraits, isMindless, isAnimalistic, aptitudesOf } from "./tra
 import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, speaksAtAll, talksWithAnyone } from "./auto.js";
 import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
-import { commitDnd5eChanges, describeDnd5eOutcome, applyDnd5eDamageCard } from "./commit.js";
+import { commitDnd5eChanges, describeDnd5eOutcome, applyDnd5eDamageCard, KNOCKED_OUT, KNOCKED_OUT_BEFORE } from "./commit.js";
 import { takeDnd5eGoods, putDnd5eGoods, dnd5eGoodsOf, dnd5ePileContents, dnd5eSkillsOf, dnd5eGiveables, commitDnd5eConcession, copperValue, denominations, PHYSICAL } from "./goods.js";
 import { dnd5eAppetite, dnd5eMeatFor, dnd5eIsFood } from "./food.js";
 import { homebrewDelay } from "./settings.js";
@@ -81,6 +81,17 @@ const neverUsed = (item, activity) => {
   const name = String(activity?.name ?? "").toLowerCase().trim();
   return never.includes(id) || never.includes(name);
 };
+
+/**
+ * Uses left in a consumable: its charges left, then the rest of the stack's, full (commit.js itemSpent spends them so);
+ * one with no charges, its quantity.
+ */
+export function consumableLeft(system) {
+  const quantity = Math.max(0, Number(system?.quantity ?? 1) || 0);
+  const max = Number(system?.uses?.max) || 0;
+  if ( !max || !quantity ) return quantity;
+  return Math.max(0, max - (Number(system.uses.spent) || 0)) + (quantity - 1) * max;
+}
 
 /** What a legendary action costs from the pool: its activation's value, else "(Costs 2 Actions)" in its name. */
 export function legendaryCost(activity, item) {
@@ -2415,7 +2426,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       return { resource: `slots:${lvl}`, pool: actor.system.spells?.[`spell${lvl}`]?.value ?? 0 };
     }
     const max = Number(s.uses?.max) || 0;
-    if ( item.type === "consumable" ) return { resource: `item:${item.id}`, pool: Math.max(0, Number(s.quantity ?? 1)) * Math.max(1, max ? max - (s.uses?.spent ?? 0) : 1) };
+    if ( item.type === "consumable" ) return { resource: `item:${item.id}`, pool: consumableLeft(s) };
     if ( max ) return { uses: Math.max(0, max - (s.uses?.spent ?? 0)), ...rechargeOf(s.uses) };
     return {};
   }
@@ -2986,7 +2997,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     const death = sys.attributes?.death ?? {};
     const dead = !!actor.statuses?.has?.("dead") || (value <= 0 && !!spec.diesAtZero);
     // (Knocked out under the 2024 rules, at 1 HP and Unconscious: down and stable, until it wakes.)
-    const out = value > 0 && !!actor.flags?.["fast-fighting-dnd5e"]?.knockedOut && !!actor.statuses?.has?.("unconscious");
+    const out = value > 0 && [KNOCKED_OUT, KNOCKED_OUT_BEFORE].some(f => f.split(".").reduce((o, k) => o?.[k], actor.flags)) && !!actor.statuses?.has?.("unconscious");
     const resources = {};
     for ( const key of Object.keys(spec.resources ?? {}) ) {
       const now = this.#resourceNow(actor, key);
@@ -3023,9 +3034,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     }
     if ( kind === "item" ) {
       const item = actor.items.get(rest);
-      if ( !item ) return 0;
-      const max = Number(item.system.uses?.max) || 0;
-      return Math.max(0, Number(item.system.quantity ?? 1)) * Math.max(1, max ? left(item.system.uses) : 1);
+      return item ? consumableLeft(item.system) : 0;
     }
     if ( kind === "ammo" ) {
       const stacks = actor.items.filter(i => i.type === "consumable" && i.system.type?.value === "ammo" && (rest === "any" || i.system.type?.subtype === rest));
