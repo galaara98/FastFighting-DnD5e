@@ -4,7 +4,7 @@
  * core's public API.
  */
 import { Dnd5eAdapter } from "./adapter.js";
-import { registerLoreBoost } from "./lore.js";
+import { registerSettings, moveLoreBoost } from "./settings.js";
 import { loadReading } from "./reading.js";
 import { hideApply, hideApplyMenu } from "./cards.js";
 
@@ -15,7 +15,7 @@ export const MODULE_ID = "fast-fighting-dnd5e";
  * helper. Older than the oldest, it doesn't run (it uses what came since); any other it doesn't know, it runs, and the
  * GM is told it hasn't been tried with that core yet. Add a major once this helper has been tried with it.
  */
-const KNOWN_API = Object.freeze([24, 25]);
+const KNOWN_API = Object.freeze([35]);
 
 /** The core's API major, when it's one this helper doesn't know: the GM is told when the world is ready. */
 let untested = null;
@@ -29,8 +29,8 @@ const KNOWN_TRANSLATIONS = {
 };
 
 Hooks.once("init", () => {
-  // How much a Lore-Collector's sizing a foe up pays off (lore.js).
-  registerLoreBoost();
+  // The homebrew Delay (settings.js).
+  registerSettings();
 });
 
 Hooks.once("fastFighting.init", api => {
@@ -60,6 +60,7 @@ Hooks.once("fastFighting.init", api => {
 });
 
 Hooks.once("ready", () => {
+  moveLoreBoost();
   if ( untested !== null && game.user.isGM ) ui.notifications.warn(game.i18n.format("FFDND5E.CoreUntested", { major: untested }));
   if ( !game.modules.get("fast-fighting")?.active && game.user.isGM ) {
     ui.notifications.warn(game.i18n.localize("FFDND5E.NeedsCore"));

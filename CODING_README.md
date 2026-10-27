@@ -6,19 +6,29 @@ How this helper teaches FastFighting Core the dnd5e system. For what it does at 
 
 `scripts/main.js`:
 
-- On `init`: registers the **Lore-Collector advantage** world setting (`lore.js`: `loreBoost`, 1.25 to 3, step 0.05, default 2.5).
+- On `init`: registers this module's own world setting, **Homebrew: Delay** (`settings.js`: `homebrewDelay`, off).
 - On `fastFighting.init`: does nothing outside a `dnd5e` world (module.json's `relationships.systems` already limits it; this is a guard). Then it checks the core's API version (below) and, unless the core is too old:
   - `api.registerAdapter("dnd5e", Dnd5eAdapter, { priority: 10, source: "fast-fighting-dnd5e" })`;
   - `api.adviseTranslation(MODULE_ID, game.system.title, KNOWN_TRANSLATIONS)`: in another language, the settings name the last translation we knew of (`es`: translate-dnd5e-sdr2-es);
   - `api.keepEnglish(MODULE_ID)`: the keys in `hardcoded-toEN.json` stay English.
-- On `ready`: warns a GM when FastFighting Core isn't active (`FFDND5E.NeedsCore`).
+- On `ready`: moves a value a GM set on this module's old `loreBoost` setting to the core's, once (`settings.js` `moveLoreBoost`; temporary, as PF2e's was), and warns a GM when FastFighting Core isn't active (`FFDND5E.NeedsCore`).
 
 ### The core's API version
 
-The core's API version is `major.bug`: `api.version` is `"25.0"`, `api.major` 25, `api.bug` 0. The helper decides whether it works with a core; the core never refuses it. `KNOWN_API` in `main.js` lists the API majors this helper is known to work with, now `[24, 25]`. What it takes up of the APIs since 19:
+The core's API version is `major.bug`: `api.version` is `"35.0"`, `api.major` 35, `api.bug` 0. The helper decides whether it works with a core; the core never refuses it. `KNOWN_API` in `main.js` lists the API majors this helper is known to work with, now `[35]`: older cores lack the Delay and minion pieces it gives (API 35's `delay.toEnd` and a command's `once`, which an older core would read as a cost it can't pay), so `module.json` requires core 0.14.0, the release that brings API 35. A major listed means tried and working, not that every addition is used. What it takes up of the APIs since 19:
 
 - **22:** `workerRules()` gives the planner's background workers `rules.js` and its `dnd5eRules`, no data: the rules and what they import (`holds.js`, `inside.js`, `words.js`) touch nothing of Foundry's, and which rules the world plays travels on each spec (`rulesVersion`). `tests/workers-5e.test.js` plays batches on real threads (`tests/fixtures/batch-thread.js`).
 - **23:** `spec.aptitudes` from the ability modifiers (`traits.js` `aptitudesOf`: −3 or lower 0, −2 to −1 1, +0 to +2 2, +3 to +4 3, +5 or higher 4; the mindless smart 0). A player's death save is told from its card (`read-turn.js` `deathSaveOf`: a `save` message of type `death`, its `outcome` revive, stable or death; a `recovery` event with the tally the sheet has now for its words), never from the sheet alone (`rules.recoveryRead` null: the sheet keeps successes and failures apart, and the core's dying value is the failures).
+- **26:** deals (`goods.js`): `takeGoods`, `putGoods`, `goodsOf` (coins in `system.currency`, change made with the core's `payFrom`; only what's carried unequipped, never a container, changes hands, unless a fallen foe is robbed: `how: "loot"`), `skillsOf`, `giveables`, `mainCoin` (gold); `commitConcession` takes counts; a deal's check by purpose (`PURPOSE_SKILLS`: `bribe` Persuasion, `extort` and `scare` Intimidation, 2024's Influence). Not `dropValuables`: dnd5e has no loot pile of its own (the core uses Item Piles, else hands goods over). Not `rules.wordlessIntimidation`: the SRD has no threat without words.
+- **27, 30:** food and corpses (`food.js`): `appetite` by creature type (constructs, elementals, undead and the mindless eat nothing; a beast, monstrosity or dragon with a bite, jaws, fangs, beak or mandibles by identifier eats meat), `meatFor` (a Fresh Corpse, dnd5e's food consumable, portions tiny 1 to gargantuan 32, weight by size; a Rotten Corpse for undead, Scrap for constructs, both loot; none for elementals, oozes, plants, swarms or Incorporeal Movement), `isFood` (a fresh corpse's portions, dnd5e's `food` consumables), `pileContents`.
+- **28:** `settingDefaults`: Max rounds 4 to 12, default 10; Lore-Collector advantage default 2.5 in this module's words (`FFDND5E.Settings.loreBoost`). The old `lore.js` setting is gone, and `sizeUp` carries no `boost` (a fight carries the core's).
+- **29:** `partyMembers`: the members of dnd5e's `group` actors of type `party`. Compatible only (5e has no such rule): a save rider's `traits` and `slay`, `spec.alert` and `rules.surprise`'s `caught` and `outcome` (neither SRD's Alert prevents surprise), an undo record's `systemOptions`, `fumble: "all"`, `armedBy`/`armedFrom`, `provokes`; trap bonuses (`saveVs` with `from: trap`): no SRD feature names traps alone.
+- **31:** `pullsBlow` as before (any melee attack); no `pullPenalty` (knocking out costs nothing). Under the 2024 rules a knock-out is 1 HP and Unconscious (`rules.capture`'s `knockedOut`; `commit.js` writes 1 HP and the flag `fast-fighting-dnd5e.knockedOut`, which `readLiveState` reads as down and stable while Unconscious).
+- **32:** `hearDC` on the SRD's typical DCs (easy 10 for a fight, medium 15 for talk, +5 a step past 30, 60 and 120 feet and for each wall; talk not through a wall; past 30, null); `minionCommand` from `spec.flags.command` (below); areas: a sphere, cylinder or circle placed away is a `burst` with `center: "free"` (API 35), a cube placed away a `square`, and `selective` from dnd5e's `target.affects.choice`, `reading/en.json` `areas.selective` or Sculpt Spells on an evocation spell. Not `talkFeet` (the core's 30 feet).
+- **33:** `rules.ready` `{cost: {action: 1}, most: 1}` (the SRD's Ready; a readied Attack is one attack). No `rules.delay`: neither SRD has it (SRD 5.2 suggests Ready instead); only the homebrew setting gives it.
+- **34:** compatible only: `delay.reasons` and `waitFor`, `duelResult`, a notice check's `sense`.
+- **35:** `rules.delay` `{toEnd: true}` where the homebrew Delay is on (`dnd5eRulesWith`, also the workers' rules: `workerRules` sends `{homebrewDelay}`); a command cost's `once`; bursts placed freely.
+- End-of-turn effects (PF2e's `thisTurn`): an effect whose words say it lasts to the end of your turn (`reading/en.json` `durations.thisTurn`) and Action Surge carry `thisTurn`.
 - **24:** the engine's advantage on dnd5e's own saves and checks (`rollDnd5eSave`, `rollDnd5eCheck`: `advantage: true` or `disadvantage: true`, `edgeOf`), as `rollDnd5eStrike` already took it.
 - **20:** hidden from one creature at a time (core-api `hiddenFrom`: one that found it with a Search sees it, `modifiers.attack`); a Search is a Perception check (`PURPOSE_SKILLS.seek`). The dice the rules roll themselves are table rolls a live battle shows (the core's recording rng, `rng.mark` and `rng.record`, or its `rollCheck`): a death save (a save against 10), persistent damage's end (DC 11), a hider's Stealth (against the best passive Perception + 1), putting out a fire under the 2014 rules (a Dexterity check, dnd5e's own where it makes checks: purpose `douse`), an escape, the holder's save to keep down what it swallowed (dnd5e's own where it makes saves).
 
@@ -36,6 +46,9 @@ When new functionality can't be played "close enough" with what the core already
 | File | What it does |
 | --- | --- |
 | `main.js` | Registration (above). |
+| `settings.js` | This module's world setting (the homebrew Delay) and the Lore-Collector setting's move. |
+| `goods.js` | Deals: goods off and onto sheets, a pile's contents, skills, what a character could give; a concession handed over. |
+| `food.js` | What creatures eat, the corpse a body leaves, what counts as food. |
 | `core.js` | The core API, re-exported. |
 | `adapter.js` | `Dnd5eAdapter`: actors into `CombatantSpec`s, actions, reactions, riders, summons, traits, tactics, live-battle entry points. |
 | `rules.js` | `dnd5eRules`, the rules object, and `proficiency(level)`. Pure. |
@@ -57,12 +70,11 @@ When new functionality can't be played "close enough" with what the core already
 | `conditions.js` | dnd5e statuses and the core's conditions, both ways. |
 | `commit.js` | Writing a live turn onto a sheet, the fight's summary lines, handing things over. |
 | `read-turn.js` | A player's turn from dnd5e's chat cards. |
-| `lore.js` | The Lore-Collector setting. |
 | `words.js` | Words for the table: the system's own names first, then this module's (`FFDND5E`). |
 
 ## The adapter
 
-`Dnd5eAdapter` (`systemId = "dnd5e"`) overrides: `label`, `rules`, `canHandle` (actor types `character` and `npc`), `toCombatantSpec`, `deriveTraits`, `playstyleHints`, `tacticHints`, `biography`, `detectLeaders`, `itemCatalog`, `describeRegionBehavior` (`dnd5e.difficultTerrain` → `{difficult: true}`), `term` (`DND5E.AC`, `DND5E.HP`), `resourceLabel`, `supportsLive` (true), `placeSummons`, `commitChanges`, `sheetCarries`, `conditionLabel`, `conditionChoices`, `readTurn`, `damageCard`, `applyDamageCard`, `leaveToTable`, `showTableRoll`, `readLiveState`, `appliesPlayerDamage`, `rollStrike`, `rollSave`, `rollCheck`, `useAction`, `rollDamage`, `reactionsOf`, `rerollResource`, `describeOutcome`, `commitConcession`. It leaves `supportsLoot` false, so the core hides its loot and corpse settings.
+`Dnd5eAdapter` (`systemId = "dnd5e"`) overrides: `label`, `rules`, `canHandle` (actor types `character` and `npc`), `toCombatantSpec`, `deriveTraits`, `playstyleHints`, `tacticHints`, `biography`, `detectLeaders`, `itemCatalog`, `describeRegionBehavior` (`dnd5e.difficultTerrain` → `{difficult: true}`), `term` (`DND5E.AC`, `DND5E.HP`), `resourceLabel`, `supportsLive` (true), `placeSummons`, `commitChanges`, `sheetCarries`, `conditionLabel`, `conditionChoices`, `readTurn`, `damageCard`, `applyDamageCard`, `leaveToTable`, `showTableRoll`, `readLiveState`, `appliesPlayerDamage`, `rollStrike`, `rollSave`, `rollCheck`, `useAction`, `rollDamage`, `reactionsOf`, `rerollResource`, `describeOutcome`, `commitConcession`, and the deal and food hooks (`takeGoods`, `putGoods`, `goodsOf`, `mainCoin`, `skillsOf`, `giveables`, `settingDefaults`, `partyMembers`, `appetite`, `meatFor`, `isFood`, `pileContents`). It leaves `supportsLoot` false, so the core hides its loot and corpse settings, and gives no `dropValuables`.
 
 It's written against dnd5e 6 on Foundry v14, and reads values defensively so older data still works (`s.method ?? s.preparation?.mode` and the like).
 
@@ -87,6 +99,8 @@ It's written against dnd5e 6 on Foundry v14, and reads values defensively so old
 - `social`: `pitches` (persuade, intimidate, deceive), `resist` (passive Insight against all three, passive Perception against `steal`), `resolve` (Wisdom save − (proficiency + 1)), `languages`, `anyLanguage` (`talksWithAnyone`: `ALL`, every standard and exotic language, or telepathy), `mindless`.
 - `valuables`: money in copper, `denominations` (pp, gp, sp, cp), `stowed` and `wielded` items with `category`, `material` (`ada`, `sil`) and `rarity`.
 - `leadership` (none for Intelligence 3 or less).
+- `flags.masterActorId`: the actor whose item summoned it (dnd5e's `flags.dnd5e.summon.origin`); with `flags.command` `{bonus: 1, once: "<master>.<item>"}` when that item is Animate Dead or Create Undead (`COMMANDED`).
+- An area's `selective` (`#selective`) and `center: "free"` (`areaOf`).
 
 ### Resource keys
 
@@ -195,6 +209,7 @@ Everything is read from the item's English (`englishDescription`: what Babele ke
 | `typical` | AC 12 + prof, save prof + 1, skill prof + 2, DC 10 + prof |
 | `modifiers.{exposed, defense, attack, save, check, steal, actionsLost}` | advantage, disadvantage (hidden from the one it's at, the core's `hiddenFrom`: both ways), cover, exhaustion (−2 a level), auto-failed Strength and Dexterity saves, Contagion's `weakSave` |
 | `isImmune`, `conditionWishes`, `conditionWeight`, `conditionMods` | immune to every condition an action lays (aliases: incapacitated → unconscious, immobilized → restrained, controlled → charmed), and size limits; Frightened: `avoid` its source at 60; hidden and prone mods |
+| `ready`, `hearDC`, `minionCommand`; `delay` (homebrew only: `dnd5eRulesWith`) | Ready an attack for a foe coming into reach (an action, the reaction); the SRD's typical DCs for hearing; a command from `spec.flags.command`; back at the round's end |
 | `usable`, `afterRoll`, `pullsBlow`, `storyDamageType` | no Hide beside a foe, `grappledOnly` (with the core's `requires: {holding: true}` beside it); hidden ends on an attack, after its roll; any melee blow can knock out; lightning → electricity, thunder → sonic, necrotic → void, psychic → mental |
 
 `holds.js`: a grapple is the better of Athletics and Acrobatics against the grappler's `escapeDC` (its words', else 2024's 8 + Strength + proficiency, or 2014's passive Athletics); with no known grabber, the hardest `escapeDC` among standing foes within their reach, else `typical.dc`. Webs and nets use the checks `escapeWords` read. Rope (`ROPE`): 2024 escape 15 or burst 20; 2014 burst 17; a friend unties with no roll.
@@ -214,7 +229,7 @@ Everything is read from the item's English (`englishDescription`: what Babele ke
 - spell effects laid with `layEffect` from the action's `effectRef`, for the rounds left, flagged `fast-fighting.laid: {key, sourceId}` so `liftEffect` takes them off.
 - who got which effect from whom (`tellGiven`, core API 21: `options.tokenOf`, `effectSource`, `audience`): a card from the giver for each effect in `effects.added` and `laid`, and in `left` (the table's to apply: `GivenWaits`), where no roll of dnd5e's names the target (a buff, a debuff with no save; not a potion its user drank), its effect linked to drag; whispered to the GMs where the core says, a secret name the GMs' alone.
 
-`commitDnd5eConcession` pays coins with the core's `payFrom` (`COINS`; the receiver gets gp, sp and cp) and hands items over with `handOverItem`, unequipped and out of any container. `describeDnd5eOutcome` gives the planner's summary lines. `placeSummons` uses dnd5e's own `Actor5e.fetchExisting`, `activity.getChanges` and `getTokenData` (no rolled NPC HP), and falls back to the core's way. `readDnd5eTurn` reads dnd5e 6 cards (`system` data) and older ones (`flags.dnd5e`): attacks (hit against the target's AC, `sure` when the AC is known), damage onto the last hit, healing, and Persuasion, Intimidation or Deception checks (never `sure`). `reactionsOf` lists a reaction spell once, whatever its slot, and never a passive or free one.
+`commitDnd5eConcession` (`goods.js`) takes the goods off the giver (`takeDnd5eGoods`: coins with the core's `payFrom`, `COINS`; things unequipped and out of any container) and puts them on the receiver (`putDnd5eGoods`: gp, sp and cp). `describeDnd5eOutcome` gives the planner's summary lines. `placeSummons` uses dnd5e's own `Actor5e.fetchExisting`, `activity.getChanges` and `getTokenData` (no rolled NPC HP), and falls back to the core's way. `readDnd5eTurn` reads dnd5e 6 cards (`system` data) and older ones (`flags.dnd5e`): attacks (hit against the target's AC, `sure` when the AC is known), damage onto the last hit, healing, and Persuasion, Intimidation or Deception checks (never `sure`). `reactionsOf` lists a reaction spell once, whatever its slot, and never a passive or free one.
 
 Players' damage (API 19): `damageCard` is `damageCardOf` (`read-turn.js`: the damage rolls' total, healing for a `healing` card or one of healing types only, targets by `system.targets[].token`, `save` for an `onSave` of `half` or `none`); `applyDamageCard` is `applyDnd5eDamageCard` (`commit.js`: `actor.applyDamage` with the tray's damages and `{multiplier, isDelta, originatingMessage, origin}`, as dnd5e's damage tray calls it; undo: stored HP, temp and tempmax, death saves at 0, items and effects made or removed, `statusesBefore`); `appliesPlayerDamage` is null (dnd5e's `allowPlayerDamageTray` and `autoApplyDowned` don't apply players' damage; Midi-QOL isn't asked).
 

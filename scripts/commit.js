@@ -7,7 +7,7 @@
  *     createdEffects: [id], deletedEffects: [data], tokenUpdate, createdActors, createdTokens, deletedTokens,
  *     statuses: [{id, active}], combatant }
  */
-import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, toggleStatus, undoRecord, payFrom, handOverItem, escapeHtml, inertHtml } from "./core.js";
+import { MODULE_ID, STATUS, commonOutcome, outcomeLine, stillLine, toggleStatus, undoRecord, escapeHtml, inertHtml } from "./core.js";
 import { t, conditionName, playersOf } from "./words.js";
 import { modeledChange } from "./effects.js";
 import { damagesOf } from "./read-turn.js";
@@ -78,6 +78,9 @@ async function writeConditions(actor, conditions, final, set, undo) {
   } else if ( cleared.includes("exhaustion") ) set("system.attributes.exhaustion", 0);
 }
 
+/** The flag a creature knocked out under the 2024 rules carries while it lies Unconscious at 1 HP. */
+export const KNOCKED_OUT = "fast-fighting-dnd5e.knockedOut";
+
 /**
  * A live battle: one turn's changes (the core's engine/changes.js) written onto a token, and only those, so writing
  * them twice changes nothing more. Hit points; death saves where the turn left them; slots, Inspiration, Legendary
@@ -96,7 +99,12 @@ export async function commitDnd5eChanges(tokenDoc, spec, changes, final, options
     update[path] = value;
     undo.actorUpdate[path] = before ?? 0;
   };
-  if ( changes.hp ) set("system.attributes.hp.value", changes.hp.to);
+  // Knocked out under the 2024 rules: 1 HP and Unconscious, not 0 (the SRD 5.2's Knocking Out a Creature: rules.js
+  // knockOut), marked so the sheet still reads as out of the fight (readLiveState) until it wakes.
+  const knockedOut = spec.rulesVersion !== "legacy" && !!final.system?.knockedOut && final.status === STATUS.DOWN;
+  if ( changes.hp ) set("system.attributes.hp.value", knockedOut ? Math.max(1, Number(changes.hp.to) || 0) : changes.hp.to);
+  if ( knockedOut ) set(`flags.${KNOCKED_OUT}`, true);
+  else if ( changes.revived && foundry.utils.getProperty(actor, `flags.${KNOCKED_OUT}`) ) set(`flags.${KNOCKED_OUT}`, false);
   if ( changes.temp ) set("system.attributes.hp.temp", changes.temp.to ?? 0);
   // Death saves: where the turn left them (none for anyone standing or stable).
   // (A success changes nothing but the rules' own tallies: the change set's `system`, core API 24.)
@@ -344,47 +352,4 @@ export async function applyDnd5eDamageCard(message, tokenDoc, { multiplier = 1, 
     for ( const [id, d] of had[i] ) if ( !now.has(id) && typeof d?.toObject === "function" ) undo[deleted].push(d.toObject());
   });
   return [undo];
-}
-
-/* -------------------------------------------- */
-/*  Giving something up                         */
-/* -------------------------------------------- */
-
-/** dnd5e's coins, each with its worth in copper, smallest first (the core's payFrom). */
-export const COINS = Object.freeze([["cp", 1], ["sp", 10], ["ep", 50], ["gp", 100], ["pp", 1000]]);
-
-/** Copper as coins a pocket would hold: gold, silver, copper. */
-function coinsFor(copper) {
-  return { gp: Math.floor(copper / 100), sp: Math.floor((copper % 100) / 10), cp: copper % 10 };
-}
-
-/** An item handed over, the dnd5e way (the core's handOverItem): not equipped, and out of any container it was in. */
-function looseItem(data) {
-  data.system.equipped = false;
-  delete data.system.container;
-}
-
-/** Hand over what a creature was talked out of (or had stolen): coins, or one item. Returns undo records. */
-export async function commitDnd5eConcession(giverDoc, receiverDoc, concession) {
-  const giver = giverDoc?.actor;
-  if ( !giver ) return [];
-  if ( concession.kind !== "money" ) return handOverItem(giverDoc, receiverDoc, concession.item?.id, { prepare: looseItem });
-  const receiver = receiverDoc?.actor ?? null;
-  const records = [];
-  const before = { ...giver.system.currency };
-  const paid = payFrom(before, concession.amount, COINS);
-  if ( !paid ) return [];
-  const giverUndo = undoRecord(giverDoc, giver);
-  giverUndo.actorUpdate["system.currency"] = before;
-  await giver.update({ "system.currency": paid });
-  records.push(giverUndo);
-  if ( receiver ) {
-    const got = { ...receiver.system.currency };
-    const add = coinsFor(concession.amount);
-    const receiverUndo = undoRecord(receiverDoc, receiver);
-    receiverUndo.actorUpdate["system.currency"] = got;
-    await receiver.update({ "system.currency": { ...got, gp: (got.gp ?? 0) + add.gp, sp: (got.sp ?? 0) + add.sp, cp: (got.cp ?? 0) + add.cp } });
-    records.push(receiverUndo);
-  }
-  return records;
 }

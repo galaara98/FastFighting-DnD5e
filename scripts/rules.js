@@ -75,6 +75,11 @@ const PHYSICAL = new Set(["bludgeoning", "piercing", "slashing"]);
 
 const STORY_TYPES = { lightning: "electricity", thunder: "sonic", necrotic: "void", radiant: "radiant", psychic: "mental" };
 
+/** The SRD's typical Difficulty Classes (5.1 and 5.2 alike): easy, medium, hard, very hard, nearly impossible. */
+const TYPICAL_DC = Object.freeze({ easy: 10, medium: 15, hard: 20, veryHard: 25, nearlyImpossible: 30 });
+/** One step harder on that scale. */
+const DC_STEP = 5;
+
 /**
  * Surprise as 5e has it (the planner's Follow System): those trying not to be seen as it starts (hidden tokens) each
  * roll Stealth, and anyone against them that notices none of them (its passive Perception, 10 + its Perception, under
@@ -564,23 +569,72 @@ export const dnd5eRules = {
   afterRoll(run, u, roll, ctx) {
     if ( ctx?.kind === "attack" && u?.conds?.hidden ) dropCondition(u, "hidden");
   },
-  /** Knocking a foe out: any melee attack that drops it can (one who spares the fallen does). */
+  /**
+   * Knocking a foe out: any melee attack that drops it can (one who spares the fallen does), the SRD 5.1's and 5.2's
+   * alike, at no cost to the roll (no pullPenalty).
+   */
   pullsBlow(u, action) {
     return !!action?.melee;
   },
 
-  /** Knocked out rather than killed: stable at 0 HP, no death saves to make. */
+  /**
+   * Ready (core API 33), the SRD 5.1's and 5.2's: an action to ready an action for a trigger (a foe coming within its
+   * reach), taken with its reaction; an Attack readied is a single attack (no Extra Attack off its own turn). Delay
+   * isn't in either SRD (the 2024 rules suggest Ready instead): only as the GM's homebrew (dnd5eRulesWith).
+   */
+  ready: Object.freeze({ cost: Object.freeze({ action: 1 }), most: 1 }),
+
+  /**
+   * A minion its master commands (core API 32; spec.flags.command, adapter.js): the creatures Animate Dead or Create
+   * Undead made, one bonus action on the master's turn for all those of one spell (API 35's `once`); they do nothing
+   * else (the SRD 5.1: only defend themselves; the SRD 5.2: Dodge, and move only to avoid harm). Any other acts on its
+   * own: a familiar, a steed, a summoned creature obeying words that cost no action.
+   */
+  minionCommand(u) {
+    return u?.spec?.flags?.command ?? null;
+  },
+
+  /**
+   * Hearing a fight, or only talk (core API 32), on the SRD's typical DCs: the din of a fight easy (10), raised voices
+   * medium (15); a step harder past 30 feet, two past 60, three past 120, and one more for each wall between; talk
+   * doesn't carry through a wall, and nothing past nearly impossible (30) is heard. A Wisdom (Perception) check.
+   */
+  hearDC({ feet, walls = 0, talk = false }) {
+    if ( talk && walls > 0 ) return null;
+    const far = feet <= 30 ? 0 : feet <= 60 ? 1 : feet <= 120 ? 2 : 3;
+    const dc = (talk ? TYPICAL_DC.medium : TYPICAL_DC.easy) + (far + walls) * DC_STEP;
+    return dc > TYPICAL_DC.nearlyImpossible ? null : dc;
+  },
+
+  /**
+   * Knocked out rather than killed: stable at 0 HP, no death saves to make; under the 2024 rules at 1 HP and Unconscious
+   * instead (the SRD 5.2's Knocking Out a Creature: commit.js writes it so), out of the fight either way.
+   */
   knockOut(u) {
     u.deathSuccesses = 0;
     u.deathFailures = 0;
   },
 
-  /** Death saves, for a live battle to write onto the sheet and the planner to show. */
+  /** Death saves, and a knock-out, for a live battle to write onto the sheet and the planner to show. */
   capture(u) {
-    return { deathSuccesses: u.deathSuccesses ?? 0, deathFailures: u.deathFailures ?? 0 };
+    return { deathSuccesses: u.deathSuccesses ?? 0, deathFailures: u.deathFailures ?? 0, ...(u.knockedOut ? { knockedOut: true } : {}) };
   },
 
   storyDamageType(type) {
     return STORY_TYPES[type] ?? type;
   }
 };
+
+/** The homebrew Delay (the GM's setting, main.js): a creature may Delay, back at the end of the round (core API 35). */
+const HOMEBREW_DELAY = Object.freeze({ toEnd: true });
+const withDelay = Object.freeze({ ...dnd5eRules, delay: HOMEBREW_DELAY });
+
+/**
+ * The rules as this world plays them (and the planner's background workers, adapter.js workerRules: `data` the
+ * settings): with the homebrew Delay where the GM has it on, a creature that would waste its turn delays and comes
+ * back at the round's end, its initiative last from then on; reactions as usual while it waits.
+ * @param {{homebrewDelay?: boolean}} [data]
+ */
+export function dnd5eRulesWith(data = null) {
+  return data?.homebrewDelay ? withDelay : dnd5eRules;
+}

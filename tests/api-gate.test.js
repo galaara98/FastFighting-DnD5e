@@ -29,20 +29,20 @@ async function start(major) {
 
 describe("the core's API major, as this helper sees it", () => {
   test("older than it knows: it stays out, and says the core is too old", async () => {
-    const { registered, said } = await start(23);
+    const { registered, said } = await start(34);
     expect(registered).toHaveLength(0);
     expect(said.error).toEqual([game.i18n.localize("FFDND5E.CoreTooOld")]);
   });
 
-  test.each([24, 25])("one it knows (%i): it registers, and says nothing", async major => {
+  test.each([35])("one it knows (%i): it registers, and says nothing", async major => {
     const { registered, said } = await start(major);
     expect(registered).toHaveLength(1);
     expect([...said.error, ...said.warn]).toEqual([]);
   });
 
   test("a newer one: it registers, and the GM is told it hasn't been tried with that core", async () => {
-    const { registered, said } = await start(26);
+    const { registered, said } = await start(36);
     expect(registered).toHaveLength(1);
-    expect(said.warn).toEqual([game.i18n.format("FFDND5E.CoreUntested", { major: 26 })]);
+    expect(said.warn).toEqual([game.i18n.format("FFDND5E.CoreUntested", { major: 36 })]);
   });
 });

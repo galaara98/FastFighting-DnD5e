@@ -69,17 +69,17 @@ describe("dnd5e's templates as the core's areas (areaOf)", () => {
     expect(areaOf(ft("line", 200, { width: 10 }), { units: "ft", distance: 500 })).toBeNull();
   });
 
-  test("a cube or a square: against the user (Thunderwave); put down farther off (Web, Grease), a burst half its side", () => {
+  test("a cube or a square: against the user (Thunderwave); put down farther off (Web, Grease), a square round its point", () => {
     expect(areaOf(ft("cube", 15), self)).toEqual({ shape: "cube", feet: 15 });
-    expect(areaOf(ft("cube", 20), { units: "ft", distance: 60 })).toEqual({ shape: "burst", feet: 10 });
-    expect(areaOf(ft("square", 10), { units: "ft", distance: 60 })).toEqual({ shape: "burst", feet: 5 });
+    expect(areaOf(ft("cube", 20), { units: "ft", distance: 60 })).toEqual({ shape: "square", feet: 20 });
+    expect(areaOf(ft("square", 10), { units: "ft", distance: 60 })).toEqual({ shape: "square", feet: 10 });
   });
 
   test("a sphere, a cylinder or a circle: a burst round its point; round the user at range self", () => {
-    expect(areaOf(ft("sphere", 20), { units: "ft", distance: 150 })).toEqual({ shape: "burst", feet: 20 });
-    expect(areaOf(ft("cylinder", 5, { height: 40 }), { units: "ft", distance: 120 })).toEqual({ shape: "burst", feet: 5 });
-    expect(areaOf(ft("circle", 100), { units: "ft", distance: 500 })).toEqual({ shape: "burst", feet: 100 });
-    expect(areaOf(ft("sphere", 60), { units: "touch" })).toEqual({ shape: "burst", feet: 60 });
+    expect(areaOf(ft("sphere", 20), { units: "ft", distance: 150 })).toEqual({ shape: "burst", feet: 20, center: "free" });
+    expect(areaOf(ft("cylinder", 5, { height: 40 }), { units: "ft", distance: 120 })).toEqual({ shape: "burst", feet: 5, center: "free" });
+    expect(areaOf(ft("circle", 100), { units: "ft", distance: 500 })).toEqual({ shape: "burst", feet: 100, center: "free" });
+    expect(areaOf(ft("sphere", 60), { units: "touch" })).toEqual({ shape: "burst", feet: 60, center: "free" });
     // (2014's Antimagic Field.)
     expect(areaOf(ft("sphere", 10), self)).toEqual({ shape: "emanation", feet: 10 });
   });
@@ -89,19 +89,19 @@ describe("dnd5e's templates as the core's areas (areaOf)", () => {
     expect(areaOf(ft("radius", 10))).toEqual({ shape: "emanation", feet: 10 });
     expect(areaOf(ft("radius", 5), { units: "ft", distance: 5 })).toEqual({ shape: "emanation", feet: 5 });
     // (Ice Knife; 2014's Spike Growth.)
-    expect(areaOf(ft("radius", 5), { units: "ft", distance: 60 })).toEqual({ shape: "burst", feet: 5 });
-    expect(areaOf(ft("radius", 20), { units: "ft", distance: 150 })).toEqual({ shape: "burst", feet: 20 });
+    expect(areaOf(ft("radius", 5), { units: "ft", distance: 60 })).toEqual({ shape: "burst", feet: 5, center: "free" });
+    expect(areaOf(ft("radius", 20), { units: "ft", distance: 150 })).toEqual({ shape: "burst", feet: 20, center: "free" });
     // (At a touch, or anywhere: round that point. Hallow; 2014's Storm of Vengeance.)
-    expect(areaOf(ft("radius", 60), { units: "touch" })).toEqual({ shape: "burst", feet: 60 });
-    expect(areaOf(ft("radius", 360), { units: "spec" })).toEqual({ shape: "burst", feet: 360 });
+    expect(areaOf(ft("radius", 60), { units: "touch" })).toEqual({ shape: "burst", feet: 60, center: "free" });
+    expect(areaOf(ft("radius", 360), { units: "spec" })).toEqual({ shape: "burst", feet: 360, center: "free" });
   });
 
   test("in feet, whatever its units; several at once, one as big as them all; a wall, a ring or nothing, none", () => {
-    expect(areaOf({ type: "sphere", size: 6, units: "m" }, { units: "m", distance: 150 })).toEqual({ shape: "burst", feet: 20 });
+    expect(areaOf({ type: "sphere", size: 6, units: "m" }, { units: "m", distance: 150 })).toEqual({ shape: "burst", feet: 20, center: "free" });
     expect(areaOf({ type: "line", size: 30, width: 1.5, units: "m" }, self)).toEqual({ shape: "line", feet: 100, width: 5 });
     // (Meteor Swarm's four spheres; Fire Storm's ten cubes.)
-    expect(areaOf(ft("sphere", 40, { count: 4 }), { units: "mi", distance: 5280 })).toEqual({ shape: "burst", feet: 80 });
-    expect(areaOf(ft("cube", 10, { count: 10 }), { units: "ft", distance: 150 }).feet).toBeCloseTo(5 * Math.sqrt(10));
+    expect(areaOf(ft("sphere", 40, { count: 4 }), { units: "mi", distance: 5280 })).toEqual({ shape: "burst", feet: 80, center: "free" });
+    expect(areaOf(ft("cube", 10, { count: 10 }), { units: "ft", distance: 150 }).feet).toBeCloseTo(10 * Math.sqrt(10));
     expect(areaOf(ft("wall", 60, { width: 1 }), { units: "ft", distance: 120 })).toBeNull();
     expect(areaOf(ft("ring", 10), self)).toBeNull();
     expect(areaOf({})).toBeNull();
@@ -126,7 +126,7 @@ describe("on the actions the adapter makes", () => {
     expect(a.fireball).toMatchObject({ kind: "save", area: { targets: 4, shape: "burst", feet: 20 }, range: { max: 150 } });
     expect(a.thunderwave).toMatchObject({ area: { targets: 3, shape: "cube", feet: 15 }, range: { max: 15 } });
     // (Several at once count as more, too.)
-    expect(a["fire-storm"].area).toMatchObject({ targets: 4, shape: "burst" });
+    expect(a["fire-storm"].area).toMatchObject({ targets: 4, shape: "square" });
     expect(a["searing-sphere"]).toMatchObject({ kind: "auto", area: { targets: 3, shape: "burst", feet: 10 }, range: { max: 120 } });
   });
 
@@ -159,8 +159,29 @@ describe("in the engine", () => {
     // (31 degrees off is outside 5e's cone, 53 degrees wide; inside the core's own quarter turn.)
     expect(caught(a["fire-breath"])).toEqual(["beside", "ahead"]);
     expect(inArea(run, by("mage"), by("near"), by("slant"), { shape: "cone", feet: 30 })).toBe(true);
-    expect(caught(a.fireball)).toEqual(["beside", "slant", "ahead"]);
+    // (Its point wherever its maker chooses, as the SRD has it, not only a corner of the foe's space: far too.)
+    expect(caught(a.fireball)).toEqual(["beside", "slant", "ahead", "far"]);
     expect(caught(a.thunderwave)).toEqual(["beside"]);
     expect(caught(a["fire-aura"])).toEqual(["behind"]);
+  });
+});
+
+describe("areas that spare whom their maker chooses (the core's selective, API 32)", () => {
+  const choosing = activityOf({ template: ft("cube", 40) });
+  choosing.target = { ...choosing.target, affects: { choice: true } };
+
+  test("dnd5e's own choice of targets, words that say so, an evoker's Sculpt Spells; else friends are caught too", async () => {
+    const slow = spellOf("slow", 3, feetAway(120), ft("cube", 40), choosing);
+    const weird = spellOf("weird", 9, feetAway(120), ft("sphere", 30));
+    weird.system.description.value = "<p>Each creature of your choice in a 30-foot-radius Sphere centered on a point within range makes a Wisdom saving throw.</p>";
+    const a = await actionsOf([slow, weird, spellOf("fireball", 3, feetAway(150), ft("sphere", 20))]);
+    expect(a.slow.area.selective).toBe(true);
+    expect(a.weird.area.selective).toBe(true);
+    expect(a.fireball.area.selective).toBeUndefined();
+    const fireball = spellOf("fireball", 3, feetAway(150), ft("sphere", 20));
+    fireball.system.school = "evo";
+    const sculpt = { id: "sculpt", type: "feat", name: "Sculpt Spells", identifier: "sculpt-spells", flags: {}, effects: [], system: { identifier: "sculpt-spells", activities: [], description: { value: "" }, uses: {} } };
+    const evoker = await actionsOf([fireball, sculpt]);
+    expect(evoker.fireball.area.selective).toBe(true);
   });
 });

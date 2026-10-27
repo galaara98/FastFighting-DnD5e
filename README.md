@@ -51,14 +51,21 @@ FastFighting reads each item by what it does (its activities and effects), then 
 - Resistances and immunities keep dnd5e's exceptions: a magical, adamantine or silvered blow gets through "nonmagical attacks that aren't ...", a spell's damage counts as magical. Adamantine armor turns a critical hit into a normal one.
 - A character's bows and crossbows shoot its arrows and bolts, counted by kind; a Loading weapon fires once an action, Extra Attack or not (unless a Crossbow Expert). A potion can be given to a friend beside it.
 - Summons (Spiritual Weapon, Conjure Animals ...) are the core's summons: the creatures dnd5e would call, with the caster's attack and DC where the spell says, and only what its players could call themselves. A spiritual weapon or a flaming sphere can't be attacked, and acts only on the caster's bonus action.
+- A creature dnd5e summoned before the fight serves whoever summoned it. Undead from Animate Dead or Create Undead act only when their master spends a bonus action, one for all that spell made; a familiar or steed acts on its own.
 
 ### The turn
 
 A 5e turn is the core's turn with an action, a bonus action and movement, plus one spell slot, which plays 5e's rule on bonus-action spells: Healing Word and Guiding Bolt can't share a turn, Healing Word and a cantrip can. Dash spends the action on a second move; standing up costs half your movement. Slowed (the Slow spell): an action but no bonus action, and no reaction.
 
+A creature with nothing better to do with its action Readies an attack instead, made with its reaction at the first foe that comes within its reach. Neither SRD has Delay; the **Homebrew: Delay** setting adds it (below).
+
 ### Rolls
 
 5e's d20 tests are the core's rolls with two results, since 5e has nothing beyond meeting the DC. Attacks crit on a natural 20 (dice doubled) and miss on a 1. A successful save halves the damage, or stops it where the spell says so. Advantage and disadvantage cancel out. They come from the conditions (a restrained target, a poisoned attacker), prone (up close or from afar), hiding, Pack Tactics, and ranged attacks in melee or at long range. Cover adds +2 (half) or +5 (three-quarters) to AC and Dexterity saves; exhaustion is −2 a level to d20 tests.
+
+### Areas
+
+A cone or a line spreads from its caster. A sphere or cylinder goes off at any point its caster chooses, as the SRD says, not just a grid corner: FastFighting picks the point that catches the most foes and fewest friends. A cube against its caster spreads from it; one placed farther off is a square round its target. An area catches everyone in it, friends and caster too, unless its maker chooses whom (dnd5e's own choice of targets, "creatures of your choice in" an area, or an evoker's Sculpt Spells).
 
 ### Conditions
 
@@ -131,9 +138,9 @@ One-roll edges are the core's, each spent by the roll it helps: Help (advantage 
 | Doors | AC 15, 18 HP; locked against DC 15 Athletics or thieves' tools. Opening is free; forcing or picking takes an action. |
 | Free hands | Tied up, a creature can still bite, kick, or cast a verbal-only spell. A weapon (two-handed: two), a potion, a net, a grapple and a spell with a somatic or material component each take a hand. |
 
-### Talking and stealing
+### Talking, deals and stealing
 
-Persuasion, Intimidation and Deception are the core's persuading, threatening and bluffing, against passive Insight. Sleight of Hand steals against passive Perception, for anyone with the wits (not a beast, nor Intelligence 3 or less). A creature speaks its sheet's languages, custom ones too; one that can't speak has none. A side's leader has the best Persuasion or Intimidation for its level, more with a feature like Leadership. In a standoff, a character can ask for something by dnd5e's item type, material (silvered) or rarity.
+Persuasion, Intimidation and Deception are the core's persuading, threatening and bluffing, against passive Insight. Words carry only to those in earshot. In a deal, a bribe rolls Persuasion and a demand or threat Intimidation; gold is the team's coin, and only what a creature carries unequipped changes hands. Sleight of Hand steals against passive Perception, for anyone with the wits (not a beast, nor Intelligence 3 or less). A creature speaks its sheet's languages, custom ones too; one that can't speak has none. A side's leader has the best Persuasion or Intimidation for its level, more with a feature like Leadership. In a standoff, a character can ask for something by dnd5e's item type, material (silvered) or rarity.
 
 ### Personality
 
@@ -148,14 +155,14 @@ Every perk a playstyle or tactics answer switches on does something here. These 
 | Hard to spot (Chicken, Fragile, Wallflower) | Hides readily; foes' attention slides off it. |
 | Spoiling (Instigator most; Cruel, Wants to Lead, Wallflower, Puzzle-Maniac) | Shove, Grapple, and spells that lay a condition, over a plain blow. |
 | Helping (Enabler, People-Pleaser, Moralist, Martyr, Redeem-Seeker, Tank) | Help; healing and buff spells. |
-| In a hurry (Impatient, Speed-Runner) | No Disengage, Dodge or Hide; Dash when it has to. |
+| In a hurry (Impatient) | No Disengage, Dodge or Hide; Dash when it has to. |
 | Acting first (Instigator) | Its initiative. |
 | Lore-Collector | The Study action. |
 | Weak spots (Puzzle-Maniac) | Damage vulnerabilities. |
 | Thief | Sleight of Hand. |
 | Trap avoiders | A token the GM marks as a hazard (5e has no hazard actors). |
 | Finishing the fallen (Cruel) | A blow on the downed is a failed death save. |
-| Sparing the fallen (Moralist, Peacekeeper, a Diplomat now and then) | Knocks a foe out with the melee blow that would kill it. |
+| Sparing the fallen (Moralist, Peacekeeper, a Diplomat now and then) | Knocks a foe out with the melee blow that would kill it, at no cost to the roll: at 0 HP and stable under the 2014 rules, at 1 HP and Unconscious under the 2024 rules. |
 | Locked doors | Athletics or thieves' tools. |
 
 The Shield or defending answer says how readily a creature Dodges. Magic and specialties means spells, features (Second Wind, a breath weapon), Reckless Attack and Action Surge.
@@ -166,15 +173,21 @@ When FastFighting first sets a character up by itself, 5e suggests playstyles fr
 
 **Let this character decide** answers the tactics questions from 5e's data where it says something, and names what decided each: a Multiattack made only one way is the signature attack; a paladin protects its friends; a pack hunter runs when the pack is losing; a full caster saves its slots, while short-rest resources go freely; a true dragon wants tribute, ten gold for each challenge rating.
 
-## Do it For Real Now
+## Live battles
 
-In a live battle, each turn goes onto the dnd5e sheets as it's played: HP, death saves and death; conditions as dnd5e's own (read back each turn, the GM's changes too); slots, Inspiration, Legendary Resistance, uses and consumables spent; and a spell's buff or debuff as the spell's own effect, for its rounds. Fleeing NPCs are hidden (unless the **Do it For Real Now: fled combatants** setting leaves them), the surrendered get an effect, and coins or items change hands. Summons appear the way dnd5e summons them. A player's turn is read from its dnd5e cards (attacks, damage, healing, and talking checks), and the GM confirms what FastFighting isn't sure of. A player's damage card at a creature FastFighting runs goes through dnd5e's own damage application (resistances, immunities, temporary hit points), applied at once or by the GM from the Battle Vantage. A reaction's strike, such as an opportunity attack, is rolled with dnd5e's own attack and damage rolls, a character's on its player's screen.
+In a live battle, each turn goes onto the dnd5e sheets as it's played: HP, death saves and death; conditions as dnd5e's own (read back each turn, the GM's changes too); slots, Inspiration, Legendary Resistance, uses and consumables spent; and a spell's buff or debuff as the spell's own effect, for its rounds. Fleeing NPCs are hidden (unless the **Tokens that fled** setting leaves them), the surrendered get an effect, and coins or items change hands. Summons appear the way dnd5e summons them. A player's turn is read from its dnd5e cards (attacks, damage, healing, and talking checks), and the GM confirms what FastFighting isn't sure of. A player's damage card at a creature FastFighting runs goes through dnd5e's own damage application (resistances, immunities, temporary hit points), applied at once or by the GM from the Battle Vantage. A reaction's strike, such as an opportunity attack, is rolled with dnd5e's own attack and damage rolls, a character's on its player's screen.
 
 The engine's own dice (a save it rolled, its damage, a death save) show as dnd5e's own cards. FastFighting's cards have no damage tray, Apply entries, Resist or Break Concentration: it applies and decides them itself, so nothing happens twice. A card naming who got a buff or debuff follows where no roll names the target. Death saves rolled at the table between FastFighting's turns are kept, and Rewind gives back the arrows dnd5e spent.
 
+A creature that dies leaves a corpse: a **Fresh corpse** (dnd5e food, 1 to 32 portions by size) that hungry creatures may eat, a **Rotten corpse** for undead, or **Scrap** for constructs. Elementals, oozes, plants, swarms and incorporeal creatures leave none. Beasts, monstrosities and dragons that bite eat meat; constructs, elementals, undead and the mindless eat nothing. Hearing a fight uses the SRD's typical DCs: easy for the din of battle, medium for talk, harder with distance and walls. Characters in a dnd5e party group start on the Friendly Team.
+
 ## Settings
 
-**Lore-Collector advantage** (1.25× to 3×, default 2.5×): how much likelier a Lore-Collector's rolls against a foe are to succeed through its next turn, after a successful Study. Study costs the turn and works a little over half the time, so the default is high. Above about 1.75×, only long-shot rolls gain much.
+**Lore-Collector advantage** (FastFighting's own setting, default 2.5× in D&D 5e): how much likelier a Lore-Collector's rolls against a foe are to succeed through its next turn, after a successful Study. Study costs the turn and works a little over half the time, so the default is high. A value set in this module's old setting moves to FastFighting's once.
+
+**Max rounds** starts at 10 in D&D 5e (4 to 12), since 5e fights are short.
+
+**Homebrew: Delay** (off by default): a house rule, not in either SRD. A creature that would waste its turn may delay and act at the end of the round, its initiative last from then on.
 
 ## Other languages
 
@@ -194,7 +207,11 @@ In a language other than English, the settings recommend the system's translatio
 - An effect's changes beyond attack, damage, saves, AC, speed, temporary hit points, resistances, immunities and a weapon's magic bonus, unless its words say what they do.
 - A reaction whose words give a choice, a teleport, a reroll or a roll on a table; one only sometimes ("on a miss, ...").
 - An aura that goes off at the end of its bearer's turn, or only for some kinds of creature ("any humanoid").
-- Loot and corpses: this module leaves no loot piles and takes no corpses away, so the core's loot and corpse settings don't show in a D&D 5e world.
+- Loot piles: dnd5e has none of its own. Goods dropped in a deal lie in an Item Piles pile when that module is on; otherwise they're handed over directly. The core's loot and corpse settings don't show in a D&D 5e world.
+- Delay, except as the homebrew setting. A readied action is only a single melee attack at a foe that comes within reach, not a spell or a move.
+- Threats without words: 5e has no rule for them, so a deal needs a shared language.
+- Being immune to surprise: neither SRD's Alert gives it.
+- Effects that last until the end of the turn are read from their words, and only for "your" turn (Steady Aim, Action Surge).
 
 ## License
 

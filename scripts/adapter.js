@@ -6,12 +6,15 @@
 import {
   SystemAdapter, parseFormula, part, meanPart, simpleAffliction, localize, listItems, plainText as sheetText, englishName, englishDescription, formulaNumber, plainDice,
   undoRecord } from "./core.js";
-import { dnd5eRules, proficiency } from "./rules.js";
+import { dnd5eRulesWith, proficiency } from "./rules.js";
 import { deriveDnd5eTraits, isMindless, isAnimalistic, aptitudesOf } from "./traits.js";
 import { dnd5eHints, dnd5eTactics, alignmentKey, biographyOf, spokenLanguages, speaksAtAll, talksWithAnyone } from "./auto.js";
 import { parseMultiattackOptions } from "./multiattack.js";
 import { rankLeaders } from "./leadership.js";
-import { commitDnd5eChanges, describeDnd5eOutcome, commitDnd5eConcession, applyDnd5eDamageCard } from "./commit.js";
+import { commitDnd5eChanges, describeDnd5eOutcome, applyDnd5eDamageCard } from "./commit.js";
+import { takeDnd5eGoods, putDnd5eGoods, dnd5eGoodsOf, dnd5ePileContents, dnd5eSkillsOf, dnd5eGiveables, commitDnd5eConcession, copperValue, denominations, PHYSICAL } from "./goods.js";
+import { dnd5eAppetite, dnd5eMeatFor, dnd5eIsFood } from "./food.js";
+import { homebrewDelay } from "./settings.js";
 import { SHEET_STATUSES, sheetCarries, sheetConditions, sheetConditionChoices } from "./conditions.js";
 import { readDnd5eTurn, damageCardOf, damagesOf } from "./read-turn.js";
 import { rolledFlags, unmarkRolled } from "./cards.js";
@@ -19,7 +22,6 @@ import { showDnd5eTableRoll } from "./table-cards.js";
 import { modsFromChanges, fromWords, effectLabel, durationRounds, helps, changeMode } from "./effects.js";
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
 import { edgeActions, studyCheck } from "./edges.js";
-import { loreBoost } from "./lore.js";
 import { escapeWords, grabEscapeDC } from "./holds.js";
 import { auraOf, isAuraActivity, PASSIVE_ACTIVATIONS } from "./auras.js";
 import { sheetSaveVs, saveVsFromWords, damageTags } from "./save-vs.js";
@@ -36,7 +38,6 @@ import { t, skillName, conditionName, statusName, coin, languageNames, inSentenc
 
 const ABILITIES = ["str", "dex", "con", "int", "wis", "cha"];
 const MODES = ["walk", "fly", "swim", "climb", "burrow"];
-const PHYSICAL = new Set(["weapon", "equipment", "consumable", "tool", "loot"]);
 /** The item properties that say what a thing is made of (adamantine, silvered). */
 const MATERIALS = ["ada", "sil"];
 /** What a blow from an item is, for what its target's traits let through (rules.applyIwr): magical, adamantine, silvered. */
@@ -410,11 +411,11 @@ const numberOf = v => {
   return Number.isFinite(n) ? n : null;
 };
 
-/** Copper value of an item's price (dnd5e prices are {value, denomination}). */
-function copperValue(price) {
-  const per = { pp: 1000, gp: 100, ep: 50, sp: 10, cp: 1 };
-  return Math.round((Number(price?.value) || 0) * (per[price?.denomination ?? "gp"] ?? 100));
-}
+/**
+ * Does it last only to the end of the turn it's used in: "until the end of your turn", "on the current turn" (not "your
+ * next turn")? reading/<lang>.json `durations.thisTurn`.
+ */
+export const thisTurnIn = text => !!wordPattern(currentReading().durations?.thisTurn)?.test(String(text ?? ""));
 
 /** Several areas at once (Meteor Swarm's four spheres, Fire Storm's ten cubes) as one as big as them all: how much wider. */
 const severalOf = template => Math.sqrt(Math.max(1, Number(template?.count) || 1));
@@ -442,9 +443,12 @@ const FROM_USER = new Set(["cone", "line", "cube", "emanation"]);
  * and how far it reaches in feet. Put down away from the user (at a touch, anywhere, or farther off than its size), it's
  * round a point:
  *  - cone, line: from the user (put down away, none: Earthquake's fissures);
- *  - cube, square: from the user, one face against it; put down away (Web, Hypnotic Pattern), a burst half its side;
- *  - sphere, cylinder, circle: a burst round its point; round the user at range self (2014's Antimagic Field);
- *  - radius (dnd5e's emanation): round the user; put down away, a burst (Ice Knife, 2014's Spike Growth).
+ *  - cube, square: from the user, one face against it; put down away (Web, Hypnotic Pattern), a square round where
+ *    it's aimed (the core's: its point of origin on a face, anywhere);
+ *  - sphere, cylinder, circle: a burst round its point, which may be any point its maker chooses (the core's center
+ *    "free", API 35: not only a grid corner); round the user at range self (2014's Antimagic Field);
+ *  - radius (dnd5e's emanation): round the user; put down away, a burst, its point as freely chosen (Ice Knife, 2014's
+ *    Spike Growth).
  * Several bursts at once (Meteor Swarm, Fire Storm): one as big as them all.
  */
 export function areaOf(template, { units = "", distance = 0 } = {}) {
@@ -452,10 +456,10 @@ export function areaOf(template, { units = "", distance = 0 } = {}) {
   const feet = inFeet(template?.size, template?.units || "ft");
   if ( !type || !(feet > 0) ) return null;
   const away = ["touch", "spec", "any"].includes(units) || (units !== "self" && distance > feet);
-  const burst = radius => ({ shape: "burst", feet: radius * severalOf(template) });
+  const burst = radius => ({ shape: "burst", feet: radius * severalOf(template), center: "free" });
   if ( type === "cone" ) return away ? null : { shape: "cone", feet, angle: CONE_ANGLE };
   if ( type === "line" ) return away ? null : { shape: "line", feet, width: inFeet(template.width, template.units || "ft") || 5 };
-  if ( type === "cube" || type === "square" ) return away ? burst(feet / 2) : { shape: "cube", feet };
+  if ( type === "cube" || type === "square" ) return away ? { shape: "square", feet: feet * severalOf(template) } : { shape: "cube", feet };
   if ( ["sphere", "cylinder", "circle"].includes(type) ) return units === "self" ? { shape: "emanation", feet } : burst(feet);
   if ( type === "radius" ) return away ? burst(feet) : { shape: "emanation", feet };
   return null;
@@ -538,6 +542,8 @@ const advantageVariant = name => !!wordPattern(currentReading().names?.atAdvanta
 const IDLE_CONSUMABLES = new Set(["trinket", "food"]);
 
 /** Things a summoning calls that aren't creatures at all: nobody attacks them, and they don't hold the field alone. */
+/** Spells whose creatures act only when commanded, a bonus action for all one spell made (the SRD's). */
+const COMMANDED = new Set(["animate-dead", "create-undead"]);
 const NOT_CREATURES = new Set(["spiritual-weapon", "flaming-sphere", "arcane-sword", "mordenkainens-sword", "bigbys-hand", "arcane-hand"]);
 const CREATURE_CACHE = new Map();
 
@@ -756,9 +762,10 @@ const TALK_SKILLS = Object.freeze({ persuade: "per", intimidate: "itm", deceive:
 const OWN_CHECKS = Object.freeze({ hide: "ste", insight: "ins" });
 /**
  * Checks whose purpose alone says the skill: a theft, Sleight of Hand; first aid, Medicine; an escape, Athletics or
- * Acrobatics (its better); a Search for one hidden (the core's seek), Perception.
+ * Acrobatics (its better); a Search for one hidden (the core's seek), Perception; a deal (core API 26), the 2024 Influence
+ * action's skills: a bribe Persuasion, a demand or a threat Intimidation.
  */
-const PURPOSE_SKILLS = Object.freeze({ theft: ["slt"], firstAid: ["med"], escape: ["ath", "acr"], seek: ["prc"] });
+const PURPOSE_SKILLS = Object.freeze({ theft: ["slt"], firstAid: ["med"], escape: ["ath", "acr"], seek: ["prc"], bribe: ["per"], extort: ["itm"], scare: ["itm"] });
 
 /**
  * What a check the engine asks for is made with, as dnd5e keys it: {skill} or {ability}, or null where it can't tell.
@@ -818,7 +825,7 @@ function graded(rolls, dc, kind) {
   if ( !roll || !Number.isFinite(total) ) return null;
   const d20 = Number(roll.d20?.total ?? roll.dice?.find?.(d => d.faces === 20)?.total ?? NaN);
   const natural = Number.isFinite(d20) ? d20 : null;
-  return { degree: dnd5eRules.degreeOfSuccess(natural, total, dc, kind), natural, total };
+  return { degree: dnd5eRulesWith().degreeOfSuccess(natural, total, dc, kind), natural, total };
 }
 
 /**
@@ -1027,17 +1034,18 @@ export class Dnd5eAdapter extends SystemAdapter {
     return t("Label");
   }
 
+  /** The rules as this world plays them: with the GM's homebrew Delay where it's on (settings.js). */
   get rules() {
-    return dnd5eRules;
+    return dnd5eRulesWith({ homebrewDelay: homebrewDelay() });
   }
 
   /**
    * The same rules for the planner's background workers (the core's API 22): rules.js and what it imports (holds.js,
-   * inside.js, words.js) touch nothing of Foundry's, and read no setting as they play (which rules the world plays
-   * travels on each spec: rulesVersion), so there's no data to give them.
+   * inside.js, words.js) touch nothing of Foundry's; which rules the world plays travels on each spec (rulesVersion),
+   * and the one setting they read, the homebrew Delay, as their data (dnd5eRulesWith).
    */
   workerRules() {
-    return { url: new URL("./rules.js", import.meta.url).href, exportName: "dnd5eRules" };
+    return { url: new URL("./rules.js", import.meta.url).href, exportName: "dnd5eRulesWith", data: { homebrewDelay: homebrewDelay() } };
   }
 
   canHandle(actor) {
@@ -1069,6 +1077,8 @@ export class Dnd5eAdapter extends SystemAdapter {
 
     const hits = { riders: [], pools: {}, names: {} };
     const actions = await this.#actions(actor, level, features, hits);
+    // An area catches everyone in it, its maker's friends too, unless its maker chooses whom (core API 32: selective).
+    for ( const a of actions ) if ( a.area?.shape && this.#selective(actor, a, features) ) a.area = { ...a.area, selective: true };
     const mending = this.#mending(actor, hits);
     const resources = { ...hits.pools };
     for ( const a of actions ) if ( a.resource && a.pool !== undefined ) resources[a.resource] = a.pool;
@@ -1127,7 +1137,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       standFirm: Number(legres.max) > 0 ? { pool: "legres", label: legendaryLabel() } : undefined,
       traits: Object.fromEntries(Object.entries(derived.traits).map(([k, v]) => [k, { base: v, fudge: 0 }])),
       traitReasons: derived.reasons,
-      flags: { ...derived.flags },
+      flags: { ...derived.flags, ...this.#master(actor) },
       diesAtZero: actor.type !== "character",
       dying: sys.attributes?.death?.failure ?? 0,
       // At 0 HP a 5e creature is dying until it has three successes (or is stabilized).
@@ -1167,7 +1177,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       escapeDC: this.#escapeDC(actor, level, modern, passive),
       // Sizing a foe up (a Lore-Collector): the Study action, with its best knowledge skill (2024: Arcana, History,
       // Investigation, Nature, Religion).
-      sizeUp: isMindless(sys.abilities?.int?.value, creature) ? undefined : studyCheck(sys, loreBoost()),
+      sizeUp: isMindless(sys.abilities?.int?.value, creature) ? undefined : studyCheck(sys),
       creatureTraits: [creature],
       // (Whether it fights as an animal does: the core's behavior/animal.js. Never a character.)
       animalistic: actor.type !== "character" && isAnimalistic(sys.abilities?.int?.value, creature, speaksAtAll(sys.traits?.languages, languageNames())),
@@ -1324,6 +1334,39 @@ export class Dnd5eAdapter extends SystemAdapter {
     return iwr;
   }
 
+  /**
+   * Does an area spare whom its maker chooses (the core's area.selective)? dnd5e's own choice of targets
+   * (target.affects.choice), words that say so (reading/<lang>.json areas.selective: "each creature of your choice in a
+   * 30-foot-radius Sphere"), or an evoker's Sculpt Spells on an evocation spell (the SRD 5.1's and 5.2's evoker).
+   */
+  #selective(actor, action, features) {
+    const item = action.itemId ? actor.items.get(action.itemId) : null;
+    if ( !item ) return false;
+    const id = String(action.id ?? "").split(".")[2];
+    const activity = item.system.activities?.get?.(id) ?? Array.from(item.system.activities ?? []).find(a => a?.id === id);
+    if ( activity?.target?.affects?.choice ) return true;
+    if ( item.type === "spell" && item.system.school === "evo" && hasFeature(features, "sculpt-spells", "sculpt spells") ) return true;
+    return !!wordPattern(currentReading().areas?.selective)?.test(plainText(englishDescription(item), actor, true));
+  }
+
+  /**
+   * Whom it serves (the core's masterActorId: a minion, core API 32), as dnd5e records it: the actor whose item summoned
+   * it (flags.dnd5e.summon.origin, the spell's or feature's uuid). Made by Animate Dead or Create Undead (the item's
+   * identifier), it acts only when its master commands it: a bonus action for all that one spell made (core API 35's
+   * `once`: rules.js minionCommand). {masterActorId, command}, or nothing.
+   */
+  #master(actor) {
+    const origin = actor.getFlag?.("dnd5e", "summon.origin") ?? actor.flags?.dnd5e?.summon?.origin;
+    if ( typeof origin !== "string" ) return {};
+    const parts = origin.split(".");
+    const at = parts.lastIndexOf("Actor");
+    const masterActorId = at >= 0 ? parts[at + 1] ?? null : null;
+    if ( !masterActorId ) return {};
+    const itemId = parts[parts.lastIndexOf("Item") + 1];
+    const identifier = globalThis.game?.actors?.get(masterActorId)?.items?.get(itemId)?.system?.identifier ?? "";
+    return { masterActorId, ...(COMMANDED.has(identifier) ? { command: { bonus: 1, once: `${masterActorId}.${itemId}` } } : {}) };
+  }
+
   /** Its conditions as its sheet has them: its statuses and its exhaustion (conditions.js), read again each live turn. */
   #conditions(actor) {
     return sheetConditions(actor);
@@ -1340,7 +1383,7 @@ export class Dnd5eAdapter extends SystemAdapter {
       const props = item.system.properties;
       const has = p => (props instanceof Set ? props.has(p) : Array.isArray(props) ? props.includes(p) : !!props?.[p]);
       const entry = {
-        id: item.id, name: item.name, value: copperValue(item.system.price),
+        id: item.id, name: item.name, value: copperValue(item.system.price), quantity: Number(item.system.quantity ?? 1) || 1,
         category: item.type, material: MATERIALS.find(has) ?? "", rarity: item.system.rarity ?? ""
       };
       if ( !item.system.equipped ) stowed.push(entry);
@@ -1348,7 +1391,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     }
     return {
       money,
-      denominations: [{ label: coin("pp"), value: 1000 }, { label: coin("gp"), value: 100 }, { label: coin("sp"), value: 10 }, { label: coin("cp"), value: 1 }],
+      denominations: denominations(),
       stowed,
       wielded
     };
@@ -1441,7 +1484,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     // Action Surge (fighters): one more action, this turn, once a rest.
     const surge = featureItem(actor, "action-surge", "action surge");
     if ( surge ) out.push({ id: `${actor.id}.action-surge`, name: surge.name, kind: "buff", targets: "self", economy: "free", oncePerTurn: true, traits: [], itemId: surge.id, tell: "surge", special: true,
-      ...this.#resource(actor, surge), outcome: { actionsNow: 1, rounds: 1, label: t("Surging") } });
+      ...this.#resource(actor, surge), outcome: { actionsNow: 1, rounds: 1, thisTurn: true, label: t("Surging") } });
     const creatureType = String(actor.system.details?.type?.value ?? "").toLowerCase();
     if ( actor.type === "character" || creatureType === "humanoid" ) {
       // Shove and Grapple (the SRD 5.2's Unarmed Strike options; the core's maneuvers, maneuvers.js, with 5e's own
@@ -2274,10 +2317,12 @@ export class Dnd5eAdapter extends SystemAdapter {
     // What restrains it (webs, grasping plants, a net) says how it's broken: an action and a check (holds.js).
     const escape = conditions.restrained
       ? escapeWords(englishDescription(item), { dc: Number(activity.save?.dc?.value) || Number(item.actor?.system?.attributes?.spell?.dc) || null }) : null;
+    // (Lasting only to the end of this turn, where nothing else says how long: Steady Aim's "on the current turn".)
+    const thisTurn = !rounds && !said?.rounds && !durationRounds(item.system.duration) && thisTurnIn(plainText(englishDescription(item)));
     return {
       conditions: Object.keys(conditions).length ? conditions : null, mods: hasMods ? mods : null, tempHp, grab, names, iwr, refs, escape,
       // The effect's own duration first; the words only when it has none ("the next attack roll it makes").
-      rounds: rounds || said?.rounds || durationRounds(item.system.duration) || 10, label, words: said
+      rounds: thisTurn ? 1 : rounds || said?.rounds || durationRounds(item.system.duration) || 10, thisTurn, label, words: said
     };
   }
 
@@ -2287,6 +2332,8 @@ export class Dnd5eAdapter extends SystemAdapter {
     return {
       iwr: fx.iwr ?? undefined,
       conditions: fx.conditions ?? undefined, mods: fx.mods ?? undefined, tempHp: fx.tempHp || undefined, rounds: fx.rounds, label: fx.label,
+      // (Only to the end of this turn: worth only what's left of it, the core's thisTurn.)
+      thisTurn: fx.thisTurn || undefined,
       // Good for one roll (Guidance, Bardic Inspiration), against whoever it's set on (True Strike).
       uses: fx.words?.uses || undefined, vsFocus: fx.words?.vsFocus || undefined,
       repeatSave: fx.words?.repeatSave && save ? { type: save.type, dc: save.dc } : undefined,
@@ -2938,6 +2985,8 @@ export class Dnd5eAdapter extends SystemAdapter {
     const value = Number(hp.value) || 0;
     const death = sys.attributes?.death ?? {};
     const dead = !!actor.statuses?.has?.("dead") || (value <= 0 && !!spec.diesAtZero);
+    // (Knocked out under the 2024 rules, at 1 HP and Unconscious: down and stable, until it wakes.)
+    const out = value > 0 && !!actor.flags?.["fast-fighting-dnd5e"]?.knockedOut && !!actor.statuses?.has?.("unconscious");
     const resources = {};
     for ( const key of Object.keys(spec.resources ?? {}) ) {
       const now = this.#resourceNow(actor, key);
@@ -2945,9 +2994,9 @@ export class Dnd5eAdapter extends SystemAdapter {
     }
     return {
       hp: value, temp: Number(hp.temp) || 0, maxHp: Number(hp.max) || spec.hp?.max || 1, dying: Number(death.failure) || 0,
-      status: dead ? "dead" : value > 0 ? "standing" : "down", conditions: { ...this.#conditions(actor) }, resources,
-      // (At 0 HP, stable once it has three successes; its tallies for the rules.)
-      ...(value <= 0 ? { stable: (Number(death.success) || 0) >= 3 } : {}),
+      status: dead ? "dead" : value > 0 && !out ? "standing" : "down", conditions: { ...this.#conditions(actor) }, resources,
+      // (At 0 HP, stable once it has three successes; its tallies for the rules. Knocked out: stable.)
+      ...(value <= 0 ? { stable: (Number(death.success) || 0) >= 3 } : out ? { stable: true } : {}),
       deathSaves: { success: Number(death.success) || 0, failure: Number(death.failure) || 0 }
     };
   }
@@ -3065,5 +3114,81 @@ export class Dnd5eAdapter extends SystemAdapter {
 
   async commitConcession(giverDoc, receiverDoc, concession) {
     return commitDnd5eConcession(giverDoc, receiverDoc, concession);
+  }
+
+  /* -------------------------------------------- */
+  /*  Deals (API 26: goods.js)                    */
+  /* -------------------------------------------- */
+
+  /** Money and things off a sheet, as many as asked: {goods, records}. */
+  async takeGoods(tokenDoc, goods) {
+    return takeDnd5eGoods(tokenDoc, goods);
+  }
+
+  /** Goods onto a sheet (a creature's, a pile's): undo records. dnd5e has no loot pile of its own (no dropValuables). */
+  async putGoods(tokenDoc, goods) {
+    return putDnd5eGoods(tokenDoc, goods);
+  }
+
+  /** Everything a pile holds. */
+  async goodsOf(tokenDoc) {
+    return dnd5eGoodsOf(tokenDoc);
+  }
+
+  /** dnd5e's main coin, the one prices are said in: gold (a team's purse in the planner). */
+  mainCoin() {
+    return { key: "gp", label: coin("gp"), value: 100 };
+  }
+
+  /** Its skills, for a player's deal. */
+  skillsOf(actor) {
+    return dnd5eSkillsOf(actor);
+  }
+
+  /** What a character could hand over in a deal. */
+  giveables(actor) {
+    return dnd5eGiveables(actor);
+  }
+
+  /**
+   * The core's settings as 5e has them (API 28): a fight still going after 4 to 12 rounds is a stalemate (10 at first:
+   * 5e's fights are short); and the Lore-Collector's advantage after a Study, 2.5× at first, since Study takes the
+   * whole action and works only a little over half the time, in this module's words for it.
+   */
+  settingDefaults() {
+    return {
+      maxRounds: { min: 4, max: 12, default: 10 },
+      loreBoost: { default: 2.5, name: "FFDND5E.Settings.loreBoost.Name", hint: "FFDND5E.Settings.loreBoost.Hint" }
+    };
+  }
+
+  /** dnd5e's own parties (its group actors of the party kind): their members on the Friendly Team (core API 29). */
+  partyMembers() {
+    const parties = globalThis.game?.actors?.filter?.(a => a.type === "group" && a.system?.type?.value === "party") ?? [];
+    return parties.flatMap(p => [...(p.system?.members ?? [])].map(m => m?.actor?.id ?? m?.id)).filter(Boolean);
+  }
+
+  /* -------------------------------------------- */
+  /*  Food (API 27, corpses API 30: food.js)      */
+  /* -------------------------------------------- */
+
+  /** What it eats, and how likely it comes to a fight hungry. */
+  appetite(actor) {
+    return dnd5eAppetite(actor);
+  }
+
+  /** What its body leaves when it dies. */
+  meatFor(actor) {
+    return dnd5eMeatFor(actor);
+  }
+
+  /** Whether a thing can be eaten. */
+  isFood(item) {
+    return dnd5eIsFood(item);
+  }
+
+  /** What a pile holds, for the engine: its money and things, each with its worth. */
+  pileContents(tokenDoc) {
+    return dnd5ePileContents(tokenDoc);
   }
 }

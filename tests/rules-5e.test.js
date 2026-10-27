@@ -4,7 +4,7 @@ import { parseMultiattackOptions } from "../scripts/multiattack.js";
 
 /** The first (most likely) way to make a Multiattack. */
 const parseMultiattack = (description, strikes) => parseMultiattackOptions(description, strikes)[0] ?? null;
-import { COINS } from "../scripts/commit.js";
+import { COINS } from "../scripts/goods.js";
 import { deriveDnd5eTraits } from "../scripts/traits.js";
 import { degreeDistribution, payFrom, sideAfter } from "../scripts/core.js";
 

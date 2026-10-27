@@ -17,8 +17,18 @@
       "loreBoost": {
         "Name": "Lore-Collector advantage",
         "Hint": "How much likelier a Lore-Collector's rolls against a foe are after a successful Study. Default 2.5×."
+      },
+      "homebrewDelay": {
+        "Name": "Homebrew: Delay",
+        "Hint": "House rule, not in the SRD. A creature may delay its turn and act at the end of the round instead; its initiative stays last from then on."
       }
     },
+    "FreshCorpse": "Fresh corpse",
+    "FreshCorpseHint": "A body left by a FastFighting battle. Some creatures will eat it.",
+    "RottenCorpse": "Rotten corpse",
+    "RottenCorpseHint": "What an undead creature leaves behind. Nothing will eat it.",
+    "ScrapCorpse": "Scrap",
+    "ScrapCorpseHint": "What a construct leaves behind: broken parts.",
     "Passive": "passive {skill}",
     "Dodge": "Dodge",
     "Dodging": "dodging",

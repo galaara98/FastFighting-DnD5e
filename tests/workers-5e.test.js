@@ -73,9 +73,11 @@ function dnd5eFeatures() {
 }
 
 describe("this helper's rules for the planner's workers", () => {
-  test("workerRules: rules.js beside the adapter, its dnd5eRules, no settings to send (rulesVersion travels on the spec)", async () => {
-    expect(RULES).toEqual({ url: new URL("../scripts/rules.js", import.meta.url).href, exportName: "dnd5eRules" });
-    expect((await import(RULES.url))[RULES.exportName]).toBe(dnd5eRules);
+  test("workerRules: rules.js beside the adapter, its dnd5eRulesWith and the homebrew Delay setting (rulesVersion travels on the spec)", async () => {
+    expect(RULES).toEqual({ url: new URL("../scripts/rules.js", import.meta.url).href, exportName: "dnd5eRulesWith", data: { homebrewDelay: false } });
+    const made = (await import(RULES.url))[RULES.exportName];
+    expect(made(RULES.data)).toBe(dnd5eRules);
+    expect(made({ homebrewDelay: true }).delay).toEqual({ toEnd: true });
   });
 
   test("rules.js imports nothing of the Foundry side (no sheets, cards or chat)", () => {
