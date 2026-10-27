@@ -29,8 +29,8 @@
         "type": "module",
         "manifest": "https://github.com/galaara98/FastFighting/releases/latest/download/module.json",
         "compatibility": {
-          "minimum": "0.14.0",
-          "verified": "0.7.0"
+          "minimum": "0.13.0",
+          "verified": "0.13.0"
         }
       }
     ]
