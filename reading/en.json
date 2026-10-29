@@ -29,6 +29,9 @@
   "durations": {
     "thisTurn": { "pattern": "\\buntil the end of (?:your|the current) turn\\b|\\b(?:during|on|for) (?:this|the current) turn\\b" }
   },
+  "summons": {
+    "withSummoner": { "pattern": "\\bshares? your initiative count\\b" }
+  },
   "areas": {
     "selective": { "pattern": "\\b(?:each|any|the) creatures? of your choice (?:that you can see )?(?:in|within) (?:a|an|the|that)\\b|\\bcreatures of your choice in (?:a|an|the|that)\\b|\\b(?:each|every) (?:enemy|hostile creature) (?:in|within)\\b" }
   },

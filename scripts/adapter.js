@@ -428,6 +428,12 @@ const numberOf = v => {
  */
 export const thisTurnIn = text => !!wordPattern(currentReading().durations?.thisTurn)?.test(String(text ?? ""));
 
+/**
+ * Does a summoning's creature act in its summoner's turn, with no turn of its own (the SRD 5.2's "shares your
+ * Initiative count")? reading/<lang>.json `summons.withSummoner`. The SRD 5.1's roll their own initiative.
+ */
+export const withSummonerIn = text => !!wordPattern(currentReading().summons?.withSummoner)?.test(String(text ?? ""));
+
 /** Several areas at once (Meteor Swarm's four spheres, Fire Storm's ten cubes) as one as big as them all: how much wider. */
 const severalOf = template => Math.sqrt(Math.max(1, Number(template?.count) || 1));
 
@@ -1944,7 +1950,9 @@ export class Dnd5eAdapter extends SystemAdapter {
         // (How far off they appear: the spell's range; the core's, where it has none in feet.)
         ...(summonRange(item, activity) ? { range: { increment: summonRange(item, activity), max: summonRange(item, activity), noPenalty: true } } : {}),
         rounds: durationRounds(item.system.duration) ?? 10,
-        sustain: told ? { bonus: 1 } : undefined
+        sustain: told ? { bonus: 1 } : undefined,
+        // (Acting right after its summoner, in its turn: the core's withSummoner.)
+        withSummoner: withSummonerIn(text) || undefined
       };
     }
     return null;

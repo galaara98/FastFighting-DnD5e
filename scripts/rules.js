@@ -519,6 +519,14 @@ export const dnd5eRules = {
     /** Paralyzed, stunned, unconscious, petrified: no actions at all. */
     actionsLost(u) {
       return ["paralyzed", "stunned", "unconscious", "petrified"].some(k => has(u, k)) ? 99 : 0;
+    },
+    /**
+     * Haste's additional action (the engine's mods.actions): only an Attack of one weapon attack, or a Dash (the core's
+     * limited actions). Not played: Disengage, Hide and Use an Object (Utilize) with it, which the core has no kind for.
+     */
+    limitedActions(u) {
+      const n = Number(u?.mods?.actions) || 0;
+      return n > 0 ? { n, for: ["strike", "stride"] } : null;
     }
   },
 
