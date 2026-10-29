@@ -1489,7 +1489,7 @@ export class Dnd5eAdapter extends SystemAdapter {
     const stealth = Number(actor.system.skills?.ste?.total ?? actor.system.skills?.ste?.mod);
     if ( Number.isFinite(stealth) && !isMindless(actor.system.abilities?.int?.value, String(actor.system.details?.type?.value ?? "").toLowerCase()) ) {
       const cunning = featureItem(actor, "cunning-action", "cunning action");
-      out.push({ id: `${actor.id}.hide`, name: t("Hide"), kind: "buff", targets: "self", cost: 1, economy: cunning ? "bonus" : undefined, traits: [], hide: true, setup: true, leans: ["lowProfile"],
+      out.push({ id: `${actor.id}.hide`, name: t("Hide"), kind: "buff", targets: "self", cost: 1, economy: cunning ? "bonus" : undefined, traits: [], hide: true, limitedAs: "hide", setup: true, leans: ["lowProfile"],
         check: { mod: stealth, dc: 15, label: skillName("ste") }, onDegree: [null, null, { conditions: { hidden: 1 }, rounds: 10, label: conditionName("invisible") }, { conditions: { hidden: 1 }, rounds: 10, label: conditionName("invisible") }] });
     }
     // Help, and Insight before talking (edges.js).

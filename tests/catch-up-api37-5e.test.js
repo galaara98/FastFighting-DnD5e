@@ -1,9 +1,9 @@
 /**
  * What this helper takes up of the core's API 37: Haste's additional action as the core's limited actions (one weapon
- * attack or a Dash), and the SRD 5.2's summons acting in their summoner's turn (withSummoner).
+ * attack, a Dash, a Disengage or a Hide), and the SRD 5.2's summons acting in their summoner's turn (withSummoner).
  */
 import { describe, expect, test } from "vitest";
-import { Turn } from "../../FastFighting/scripts/engine/turn.js";
+import { Turn, DISENGAGE } from "../../FastFighting/scripts/engine/turn.js";
 import { withSummonerIn } from "../scripts/adapter.js";
 import { dnd5eRules } from "../scripts/rules.js";
 
@@ -15,9 +15,23 @@ const bolt = { id: "fire-bolt", kind: "spell-attack", cost: 1 };
 const turnOf = u => new Turn(dnd5eRules, u, dnd5eRules.modifiers.actionsLost(u) - (u.mods?.actions ?? 0));
 
 describe("Haste's additional action (the core's limited actions)", () => {
-  test("only for one weapon attack or a Dash", () => {
-    expect(dnd5eRules.modifiers.limitedActions(unit({ actions: 1 }))).toEqual({ n: 1, for: ["strike", "stride"] });
+  test("only for one weapon attack, a Dash, a Disengage or a Hide", () => {
+    expect(dnd5eRules.modifiers.limitedActions(unit({ actions: 1 }))).toEqual({ n: 1, for: ["strike", "stride", "disengage", "hide"] });
     expect(dnd5eRules.modifiers.limitedActions(unit())).toBeNull();
+  });
+
+  test("a Hide, a Disengage or a Dash with it, the other action left for a spell; never a Dodge", () => {
+    const hide = { id: "hide", kind: "buff", cost: 1, hide: true, limitedAs: "hide" };
+    const dodge = { id: "dodge", kind: "buff", cost: 1 };
+    for ( const use of [t => t.spend(dnd5eRules.costOf(hide), hide), t => t.spend({ action: 1 }, DISENGAGE), t => { t.usedMove(30); t.payForMove(30); }] ) {
+      const turn = turnOf(unit({ actions: 1 }));
+      use(turn);
+      expect(turn.canAfford(dnd5eRules.costOf(bolt), bolt)).toBe(true);
+    }
+    const turn = turnOf(unit({ actions: 1 }));
+    turn.spend(dnd5eRules.costOf(bolt), bolt);
+    expect(turn.canAfford(dnd5eRules.costOf(dodge), dodge)).toBe(false);
+    expect(turn.canAfford(dnd5eRules.costOf(hide), hide)).toBe(true);
   });
 
   test("the Attack action with Extra Attack, or a spell, once; a single weapon attack with the other", () => {

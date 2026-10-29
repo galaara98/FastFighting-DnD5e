@@ -521,12 +521,13 @@ export const dnd5eRules = {
       return ["paralyzed", "stunned", "unconscious", "petrified"].some(k => has(u, k)) ? 99 : 0;
     },
     /**
-     * Haste's additional action (the engine's mods.actions): only an Attack of one weapon attack, or a Dash (the core's
-     * limited actions). Not played: Disengage, Hide and Use an Object (Utilize) with it, which the core has no kind for.
+     * Haste's additional action (the engine's mods.actions): only an Attack of one weapon attack, a Dash, a Disengage or
+     * a Hide (the adapter's Hide action, `limitedAs`): the core's limited actions. Not played: Use an Object (Utilize),
+     * which no action here is (a potion or a magic item is magic, not an object's use).
      */
     limitedActions(u) {
       const n = Number(u?.mods?.actions) || 0;
-      return n > 0 ? { n, for: ["strike", "stride"] } : null;
+      return n > 0 ? { n, for: ["strike", "stride", "disengage", "hide"] } : null;
     }
   },
 
