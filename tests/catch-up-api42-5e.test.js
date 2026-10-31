@@ -1,6 +1,6 @@
 /**
- * What this helper takes up of the core's API 38 to 41: a grapple that ends once the grappled creature is out of the
- * grappler's reach (rules.grabEndsOnMove "reach", API 41), and dnd5e's own turn and recharge cards taken with their
+ * What this helper takes up of the core's API 38 to 42: a grapple that ends once the grappled creature is out of the
+ * grappler's reach (rules.grabEndsOnMove "reach", API 42), and dnd5e's own turn and recharge cards taken with their
  * creature's turn for Rewind (systemTurnCard, API 40).
  */
 import { describe, expect, test } from "vitest";
