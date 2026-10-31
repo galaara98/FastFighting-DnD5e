@@ -56,6 +56,14 @@ export function hideApply(message, html) {
   if ( rolledHere(message) ) for ( const button of html?.querySelectorAll?.(SAVE_BUTTONS) ?? [] ) button.remove();
 }
 
+/**
+ * The cards dnd5e posts by itself as turns go (core API 40's systemTurnCard), so a turn's Rewind takes them with it:
+ * its turn card (type `turn`: uses recovered at a turn's start or end or the round's, what can be used now) and an
+ * NPC's recharge roll (type `recharge`, with the world's Auto Recharge on). Anything else is a card of someone's.
+ */
+export const SYSTEM_TURN_CARDS = Object.freeze(["turn", "recharge"]);
+export const systemTurnCard = message => SYSTEM_TURN_CARDS.includes(message?.type);
+
 /** The chat's menu (getChatMessageContextOptions): dnd5e's Apply entries not on a card of FastFighting's. */
 export function hideApplyMenu(app, options) {
   for ( const entry of Array.isArray(options) ? options : [] ) {

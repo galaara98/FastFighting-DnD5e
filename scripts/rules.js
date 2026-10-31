@@ -222,6 +222,11 @@ export const dnd5eRules = {
   untieCost() {
     return { ...HOLD_COST };
   },
+  /**
+   * A grapple ends once the grappled creature is out of the grappler's reach (both SRDs): the grappler walking off, or
+   * either one pushed away (core API 41). The engine doesn't drag. (On a core of API 38 to 40, any move ends it.)
+   */
+  grabEndsOnMove: "reach",
 
   /* Harm that lasts ------------------------------------------------------- */
   /**

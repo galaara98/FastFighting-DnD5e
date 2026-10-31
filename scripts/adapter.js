@@ -17,7 +17,7 @@ import { dnd5eAppetite, dnd5eMeatFor, dnd5eIsFood } from "./food.js";
 import { homebrewDelay } from "./settings.js";
 import { SHEET_STATUSES, sheetCarries, sheetConditions, sheetConditionChoices } from "./conditions.js";
 import { readDnd5eTurn, damageCardOf, damagesOf } from "./read-turn.js";
-import { rolledFlags, unmarkRolled } from "./cards.js";
+import { rolledFlags, unmarkRolled, systemTurnCard } from "./cards.js";
 import { showDnd5eTableRoll } from "./table-cards.js";
 import { modsFromChanges, fromWords, effectLabel, durationRounds, helps, changeMode } from "./effects.js";
 import { ON_HIT, HIT_WORDS, ridersFrom, namesFiends } from "./riders.js";
@@ -3078,6 +3078,11 @@ export class Dnd5eAdapter extends SystemAdapter {
    */
   appliesPlayerDamage() {
     return null;
+  }
+
+  /** API 40: dnd5e's own turn and recharge cards, taken with their creature's turn for Rewind (cards.js). */
+  systemTurnCard(message) {
+    return systemTurnCard(message);
   }
 
   /** API 19: a strike rolled with dnd5e's own attack and damage rolls, at its target (rollDnd5eStrike). */
