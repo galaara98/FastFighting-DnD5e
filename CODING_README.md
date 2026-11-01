@@ -273,7 +273,7 @@ Item data is a player's to write, and the GM's client acts on it:
 
 The code holds keys, never English (`tests/i18n.test.js` checks). `t(key)` reads `FFDND5E.<key>`. `words.js` prefers the system's own names (skills, conditions, coins, abilities, alignments, creature types, languages) and uses this module's where the system has none or isn't translated into the reader's language.
 
-`hardcoded-toEN.json` lists words that stay English, whatever the reader's language: keys of `languages/en.json`, or a group (`"FFDND5E.Skill"`), whose translation would contradict an untranslated game system. It holds `lastUpdated` (a date) and `keys` (now `FFDND5E.Skill`, `FFDND5E.Cond`, `FFDND5E.Coin`), and is edited like the language files. Translators copy `languages/en.json` (see **Translating** in the [core README](https://github.com/galaara98/FastFighting/blob/main/README.md)).
+`hardcoded-toEN.json` lists words that stay English, whatever the reader's language: keys of `languages/en.json`, or a group (`"FFDND5E.Skill"`), whose translation would contradict an untranslated game system. It holds `lastUpdated` (a date) and `keys` (now `FFDND5E.Skill`, `FFDND5E.Cond`, `FFDND5E.Coin`), and is edited like the language files. Translators copy `languages/en.json` (see **Translating** in the [core guide](https://github.com/galaara98/FastFighting/blob/main/docs/guide.md#translating)).
 
 ## Development
 
