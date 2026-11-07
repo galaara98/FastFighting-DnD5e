@@ -10,6 +10,6 @@
     "coverage": "node tools/coverage.mjs --out docs/coverage.md --private private/coverage.md"
   },
   "devDependencies": {
-    "vitest": "5.0.5"
+    "vitest": "5.1.0"
   }
 }
